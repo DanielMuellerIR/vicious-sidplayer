@@ -1,0 +1,11 @@
+.DS_Store
+.build/
+.swiftpm/
+xcuserdata/
+DerivedData/
+Vicious SID Player.app/
+SidPlayer.app/
+build/
+vicious-sid-player.html
+sidplayer.html
+audio/*.sid

@@ -1,0 +1,458 @@
+/*
+ * Stylesheet für den Standalone C64 SID Music Player (macOS / Apple Aesthetic).
+ * Unterstützt automatische Erkennung und manuelles Umschalten von Dark/Light Modes.
+ */
+
+:root {
+  /* macOS Light Mode Standardfarben */
+  --bg-primary: #ececec;       /* Fester hellgrauer Fensterhintergrund */
+  --bg-secondary: #ffffff;     /* Hintergrund für Widgets, Sidebar und Textfelder */
+  --bg-panel: #fcfcfc;         /* Oszilloskop-Canvas Hintergrund */
+  --text-primary: #1d1d1f;     /* Apple-typischer dunkler Text */
+  --text-secondary: #68686d;   /* Muterter grauer Text für Labels */
+  --accent: #007aff;           /* Apple Classic Blue Accent */
+  --border: #d3d3d3;           /* Feine Linien */
+  --shadow: rgba(0, 0, 0, 0.08);
+  --radius: 10px;
+  --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Automatische System-Erkennung von Dark Mode */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-primary: #1e1e1e;
+    --bg-secondary: #2d2d2d;
+    --bg-panel: #07080c;
+    --text-primary: #ffffff;
+    --text-secondary: #a5a5a5;
+    --accent: #0a84ff;
+    --border: #3c3c3e;
+    --shadow: rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* Manuelles Erzwingen von Dark Mode */
+.player.theme-dark {
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #2d2d2d;
+  --bg-panel: #07080c;
+  --text-primary: #ffffff;
+  --text-secondary: #a5a5a5;
+  --accent: #0a84ff;
+  --border: #3c3c3e;
+  --shadow: rgba(0, 0, 0, 0.4);
+}
+
+/* Manuelles Erzwingen von Light Mode */
+.player.theme-light {
+  --bg-primary: #ececec;
+  --bg-secondary: #ffffff;
+  --bg-panel: #fcfcfc;
+  --text-primary: #1d1d1f;
+  --text-secondary: #68686d;
+  --accent: #007aff;
+  --border: #d3d3d3;
+  --shadow: rgba(0, 0, 0, 0.08);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg-secondary);
+  font-family: var(--font-main);
+  color: var(--text-primary);
+  transition: background 0.3s, color 0.3s;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg-secondary);
+}
+
+/* ─── Player Window Wrapper ────────────────────────────────── */
+.player {
+  width: 100%;
+  max-width: 900px;
+  height: 580px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 36px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-size: 13px;
+  user-select: none;
+  position: relative;
+}
+
+/* ─── Drag & Drop Overlay ──────────────────────────────────── */
+.drop-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  color: var(--accent);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  z-index: 100;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius);
+  pointer-events: none;
+}
+.player.drag-over .drop-overlay { display: flex; }
+
+/* ─── macOS Titlebar ───────────────────────────────────────── */
+.titlebar {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 38px;
+  padding: 0 16px;
+  user-select: none;
+}
+.mac-lights {
+  display: flex;
+  gap: 8px;
+  width: 60px;
+}
+.mac-light {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+.mac-light.close { background: #ff5f56; border: 0.5px solid #e0443e; }
+.mac-light.minimize { background: #ffbd2e; border: 0.5px solid #dea123; }
+.mac-light.zoom { background: #27c93f; border: 0.5px solid #1aab29; }
+.mac-lights-spacer {
+  width: 60px;
+}
+.titlebar .name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: center;
+  flex: 1;
+}
+
+/* ─── Controls Header ──────────────────────────────────────── */
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+.controls .group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+button, .file-btn, select {
+  font-family: var(--font-main);
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+  outline: none;
+  transition: background 0.1s, border-color 0.1s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+}
+button:hover:not(:disabled), .file-btn:hover {
+  background: var(--bg-primary);
+  border-color: var(--text-secondary);
+}
+button:active:not(:disabled), .file-btn:active {
+  background: var(--border);
+}
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+select {
+  padding: 3px 20px 3px 8px;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='6' fill='none'%3E%3Cpath stroke='%23666' stroke-width='1.5' d='m1 1.5 3 3 3-3'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  cursor: pointer;
+}
+
+.file-btn input { display: none; }
+
+#playlist-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
+}
+#playlist-label input {
+  margin: 0;
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+
+/* ─── Timeline / Scrubber ──────────────────────────────────── */
+.timeline-container {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+.timeline-container .scrub-lbl {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+#position-scrubber {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border);
+  height: 4px;
+  border-radius: 2px;
+  outline: none;
+}
+#position-scrubber:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+#position-scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+#position-scrubber::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+#position-scrubber::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  border: none;
+  transition: transform 0.1s;
+}
+#position-scrubber::-moz-range-thumb:hover {
+  transform: scale(1.15);
+}
+
+#volume-slider {
+  accent-color: var(--accent);
+  height: 4px;
+}
+
+/* ─── Main Content Layout ──────────────────────────────────── */
+.main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  background: var(--bg-primary);
+  min-height: 0;
+}
+
+/* Sidebar / Track List */
+.sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sidebar h3 {
+  margin: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+.track-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--bg-secondary);
+}
+.track-row {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  margin-bottom: 2px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-primary);
+  transition: background 0.1s;
+}
+.track-row:hover {
+  background: var(--bg-primary);
+}
+.track-row.active {
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+}
+.track-row.empty {
+  color: var(--text-secondary);
+  font-style: italic;
+  cursor: default;
+}
+.track-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+/* Metadata panel */
+.status {
+  padding: 12px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+}
+.status .line {
+  display: flex;
+  justify-content: space-between;
+}
+.status .line span:first-child {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.status .line span:last-child {
+  color: var(--text-primary);
+  font-weight: 500;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.error-msg {
+  color: #ff3b30;
+  font-weight: 600;
+  font-size: 12px;
+  margin-top: 6px;
+  text-align: center;
+}
+
+/* Visualizer Container */
+.visualizer-container {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-panel);
+  position: relative;
+  overflow: hidden;
+}
+#oscilloscope {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ─── Footer ────────────────────────────────────────────────── */
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.footer div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#theme-btn {
+  height: 20px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+/* ─── Responsive Layout ─────────────────────────────────────── */
+@media (max-width: 768px) {
+  body { padding: 8px; }
+  .player {
+    height: calc(100vh - 16px);
+    max-height: none;
+    border-radius: 8px;
+  }
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px;
+  }
+  .controls .group {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  select { height: 28px; width: 100%; }
+  .main {
+    flex-direction: column;
+  }
+  .visualizer-container {
+    height: 220px;
+    flex: none;
+  }
+  .sidebar {
+    width: 100%;
+    height: auto;
+    flex: 1;
+    border-right: none;
+    border-top: 1px solid var(--border);
+  }
+  .track-list {
+    height: 140px;
+  }
+}

@@ -1,0 +1,84 @@
+<div class="player" id="player">
+  <div class="drop-overlay">DROP .SID FILE</div>
+
+  <!-- ─── Titlebar (macOS Style) ─────────────────────────────────── -->
+  <div class="titlebar">
+    <div class="mac-lights">
+      <div class="mac-light close"></div>
+      <div class="mac-light minimize"></div>
+      <div class="mac-light zoom"></div>
+    </div>
+    <span class="name" id="titlebar-name">Vicious SID Player</span>
+    <div class="mac-lights-spacer"></div>
+  </div>
+
+  <!-- ─── Controls ───────────────────────────────────────────── -->
+  <div class="controls">
+    <div class="group">
+      <span>TUNE:</span>
+      <select id="track-select">
+        <!-- Playlist option entries -->
+      </select>
+      <label class="file-btn">
+        LOAD .SID
+        <input type="file" id="file-input" accept=".sid" multiple>
+      </label>
+      <label class="file-btn" id="folder-label">
+        FOLDER
+        <input type="file" id="folder-input" multiple>
+      </label>
+      <label id="playlist-label">
+        <input type="checkbox" id="auto-next" checked>
+        <span>AUTO NEXT</span>
+      </label>
+    </div>
+    <div class="group">
+      <div id="subtune-controls" style="display: none; align-items: center; gap: 6px; margin-right: 8px;">
+        <button id="prev-subtune">◀</button>
+        <span id="subtune-label" style="font-size: 12px; color: var(--text-primary);">SUBTUNE: 1/1</span>
+        <button id="next-subtune">▶</button>
+      </div>
+      <button id="play-btn" disabled>▶ PLAY</button>
+    </div>
+  </div>
+
+  <!-- ─── Timeline / Scrubber ─────────────────────────────────── -->
+  <div class="timeline-container">
+    <span class="scrub-lbl" id="time-current">0:00</span>
+    <input type="range" id="position-scrubber" min="0" max="360" value="0" disabled>
+    <span class="scrub-lbl" id="time-total">6:00</span>
+    <span class="scrub-lbl" style="margin-left: 8px;">VOL:</span>
+    <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="0.3" style="width: 70px;">
+  </div>
+
+  <!-- ─── Main Content Area ───────────────────────────────────── -->
+  <div class="main">
+    <!-- Sidebar / Playlist -->
+    <div class="sidebar">
+      <h3>PLAYLIST</h3>
+      <div class="track-list" id="track-list">
+        <!-- Javascript renders track rows here -->
+      </div>
+      <div class="status">
+        <div class="line"><span>TITLE:</span><span id="meta-title">---</span></div>
+        <div class="line"><span>COMPOSER:</span><span id="meta-author">---</span></div>
+        <div class="line"><span>INFO:</span><span id="meta-info">---</span></div>
+        <div id="error-display" class="error-msg" style="display: none;"></div>
+      </div>
+    </div>
+
+    <!-- Visualizer Container -->
+    <div class="visualizer-container" id="visualizer-container">
+      <canvas id="oscilloscope"></canvas>
+    </div>
+  </div>
+
+  <!-- ─── Footer ─────────────────────────────────────────────── -->
+  <div class="footer">
+    <div>
+      <button id="theme-btn">DARK</button>
+      <span>VICIOUS SID PLAYER // VERSION {{VERSION}}</span>
+    </div>
+    <div id="footer-state">■ IDLE</div>
+  </div>
+</div>
