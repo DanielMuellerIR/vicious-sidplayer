@@ -1,4 +1,12 @@
-# Vicious SID Player
+<p align="center">
+  <img src="src/AppIcon.png" width="128" alt="Vicious SID Player Icon">
+</p>
+
+<h1 align="center">Vicious SID Player</h1>
+
+<p align="center">
+  <strong>Commodore-64-SID-Chiptune-Player als Single-File-HTML5-Version und native SwiftUI-macOS-App.</strong>
+</p>
 
 Ein eigenständiger Commodore-64-SID-Musikplayer in zwei Varianten:
 

@@ -3,7 +3,7 @@
 Universelle Referenz und Dokumentation für alle Coding-Agents und KI-Modelle.
 
 > **Projektname:** Vicious SID Player (Anspielung auf Sid Vicious)
-> **Status:** v1.0.2 — HTML5 + native macOS SwiftUI App, komplett umbenannt.
+> **Status:** v1.0.3 — HTML5 + native macOS SwiftUI App, komplett umbenannt.
 
 ---
 
@@ -119,3 +119,5 @@ swift test
 
 - [x] **Todo 1**: Release-Builds fuer macOS absichern: App und DMG per Developer ID signieren, DMG notarisieren/stapeln, Publish-Script gegen Audio-/Release-Artefakte haerten und README aktualisieren.
 - [x] **Todo 2**: README klarstellen, dass GitHub-Release-DMGs notarisierte Builds sind.
+
+- [x] **Todo 3**: GitHub-Auftritt mit README-Icon und Social-Preview-Bild aus dem App-Icon aufwerten.
