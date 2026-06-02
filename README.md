@@ -67,13 +67,25 @@ bash build_app.sh                 # → "Vicious SID Player.app"
 
 Die App sucht beim Start nach einem `audio/`-Verzeichnis neben der Anwendung und lädt dort gefundene `.sid`-Dateien automatisch in die Playlist.
 
+Für Release-Builds signiert `build_app.sh` automatisch mit der Developer-ID
+`Developer ID Application: Daniel Mueller (9QSWKSR4NQ)`, sofern sie im
+Schlüsselbund verfügbar ist. Lokale unsignierte Builds sind mit
+`SIGN_APP=0 bash build_app.sh` möglich.
+
 ### DMG (für Releases)
 
 ```bash
 bash build_dmg.sh                 # → build/Vicious SID Player.dmg
+bash build_dmg.sh --notarize      # DMG signieren, notarisieren und stapeln
 ```
 
 Das DMG enthält ein Retina-kompatibles Hintergrundbild (1x/2x TIFF via `tiffutil`).
+Für die Notarisierung wird ein Keychain-Profil erwartet, standardmäßig
+`SavageProtrackerNotary`. Es kann einmalig interaktiv angelegt werden:
+
+```bash
+xcrun notarytool store-credentials SavageProtrackerNotary
+```
 
 ### Tests
 
@@ -82,6 +94,18 @@ swift test
 ```
 
 ---
+
+## GitHub-Veröffentlichung
+
+```bash
+bash publish_github.sh --dry-run --release
+bash publish_github.sh --release
+```
+
+Das Veröffentlichungsskript setzt `origin` auf
+`https://github.com/DanielMuellerIR/vicious-sidplayer.git`, blockt versehentlich
+getrackte Audio- und Release-Artefakte und erzeugt bei `--release` den passenden
+GitHub-Release-Eintrag mit DMG-Asset.
 
 ## Herkunft
 

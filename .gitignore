@@ -9,3 +9,14 @@ build/
 vicious-sid-player.html
 sidplayer.html
 audio/*.sid
+*.sid
+*.wav
+*.aiff
+*.aif
+*.mp3
+*.flac
+*.dmg
+*.zip
+*.tar
+*.tar.gz
+audio/

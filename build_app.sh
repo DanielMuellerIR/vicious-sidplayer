@@ -1,14 +1,17 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 echo "=== Building Vicious SID Player App in Release Mode ==="
 swift build -c release
+APP_VERSION="$(cat VERSION)"
 
 echo "=== Creating macOS App Bundle structure ==="
 APP_DIR="Vicious SID Player.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
+CODESIGN_IDENTITY="${CODESIGN_IDENTITY:-Developer ID Application: Daniel Mueller (9QSWKSR4NQ)}"
+SIGN_APP="${SIGN_APP:-auto}"
 
 # Recreate the folders
 rm -rf "$APP_DIR"
@@ -54,9 +57,9 @@ cat <<EOF > "$CONTENTS_DIR/Info.plist"
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>$APP_VERSION</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>$APP_VERSION</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>NSHighResolutionCapable</key>
@@ -64,6 +67,23 @@ cat <<EOF > "$CONTENTS_DIR/Info.plist"
 </dict>
 </plist>
 EOF
+
+if [[ "$SIGN_APP" != "0" ]]; then
+    echo "=== Checking code signing identity ==="
+    if security find-identity -v -p codesigning | grep -Fq "$CODESIGN_IDENTITY"; then
+        echo "=== Signing App Bundle ==="
+        # Hardened Runtime ist Pflicht fuer spaetere Notarisierung.
+        codesign --force --deep --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$APP_DIR"
+        codesign --verify --deep --strict --verbose=2 "$APP_DIR"
+    elif [[ "$SIGN_APP" == "1" || "${REQUIRE_CODESIGN:-0}" == "1" ]]; then
+        echo "ABBRUCH: Codesign-Identity nicht gefunden: $CODESIGN_IDENTITY" >&2
+        echo "Tipp: SIGN_APP=0 bash build_app.sh baut lokal ohne Signatur." >&2
+        exit 1
+    else
+        echo "WARNUNG: Codesign-Identity nicht sichtbar. App bleibt unsigniert."
+        echo "Tipp: REQUIRE_CODESIGN=1 bash build_app.sh erzwingt Signatur fuer Releases."
+    fi
+fi
 
 echo "=== App Bundle Created Successfully: $APP_DIR ==="
 echo "You can now double-click '$APP_DIR' in Finder to launch the player!"

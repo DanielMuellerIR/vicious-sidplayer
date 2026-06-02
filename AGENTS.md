@@ -3,7 +3,7 @@
 Universelle Referenz und Dokumentation für alle Coding-Agents und KI-Modelle.
 
 > **Projektname:** Vicious SID Player (Anspielung auf Sid Vicious)
-> **Status:** v1.0 — HTML5 + native macOS SwiftUI App, komplett umbenannt.
+> **Status:** v1.0.1 — HTML5 + native macOS SwiftUI App, komplett umbenannt.
 
 ---
 
@@ -83,6 +83,7 @@ bash build_app.sh                 # → "Vicious SID Player.app"
 
 # DMG (Retina-TIFF-Background)
 bash build_dmg.sh                 # → build/Vicious SID Player.dmg
+bash build_dmg.sh --notarize      # DMG signieren, notarisieren und stapeln
 
 # Tests
 swift test
@@ -111,3 +112,9 @@ swift test
 
 - **jsSID 0.9.1** — Hermit (Mihály Horváth), WTFPL
 - **Dieses Projekt** — WTFPL
+
+---
+
+## Aktuelle Todos
+
+- [x] **Todo 1**: Release-Builds fuer macOS absichern: App und DMG per Developer ID signieren, DMG notarisieren/stapeln, Publish-Script gegen Audio-/Release-Artefakte haerten und README aktualisieren.
