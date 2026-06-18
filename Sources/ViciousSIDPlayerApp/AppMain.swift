@@ -1,7 +1,26 @@
 import SwiftUI
+import AppKit
+
+// Empfaengt Dateien, die per Doppelklick / "Oeffnen mit" aus dem Finder kommen.
+// SwiftUI allein liefert solche File-Open-Events nicht an die View — dafuer
+// braucht es einen klassischen NSApplicationDelegate mit application(_:open:).
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    // Puffer: Bei Kaltstart (App war zu) feuert application(_:open:), BEVOR
+    // MainView.onAppear seinen Observer registriert. Deshalb hier zwischenlagern
+    // und beim Erscheinen der View nachziehen. (Alles Main-Thread -> static ok.)
+    @MainActor static var pendingURLs: [URL] = []
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        AppDelegate.pendingURLs.append(contentsOf: urls)
+        // Warmstart (App lief schon): View hoert mit und zieht den Puffer sofort.
+        NotificationCenter.default.post(name: NSNotification.Name("openSIDFiles"), object: nil)
+    }
+}
 
 @main
 struct ViciousSIDPlayerApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     var body: some Scene {
         WindowGroup {
             MainView()

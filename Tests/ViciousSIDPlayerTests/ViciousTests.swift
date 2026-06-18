@@ -59,4 +59,29 @@ final class ViciousTests: XCTestCase {
         let sampleSubtune1 = processor.play()
         print("Sample subtune 1: \(sampleSubtune1)")
     }
+
+    // Regression: Drag & Drop einer .sid-Datei aus dem Finder tat nichts, weil der
+    // gelieferte "public.file-url"-Data-Eintrag (eine file://-URL) faelschlich an
+    // URL(fileURLWithPath:) ging und so ans cwd gehaengt wurde. Erwartet: der
+    // urspruengliche Pfad wird korrekt rekonstruiert.
+    func testDropURLDecodeFromData() throws {
+        let path = "/Users/test/Music/C64Music/GAMES/A-F/Asteroids.sid"
+        // So liefert NSItemProvider den Finder-Drop aus: die file://-URL als Data.
+        let data = URL(fileURLWithPath: path).dataRepresentation
+
+        let decoded = DropURLDecoder.url(fromItem: data)
+        XCTAssertEqual(decoded?.path, path, "Data-Eintrag muss zum Originalpfad zurueckfuehren")
+    }
+
+    func testDropURLDecodeFromURLAndString() throws {
+        let path = "/Users/test/Music/Cybernoid.sid"
+        let url = URL(fileURLWithPath: path)
+
+        // Eintrag kommt direkt als URL
+        XCTAssertEqual(DropURLDecoder.url(fromItem: url)?.path, path)
+        // Eintrag kommt als URL-String (file://...) — muss per URL(string:) geparst werden
+        XCTAssertEqual(DropURLDecoder.url(fromItem: url.absoluteString)?.path, path)
+        // Unbekannter Typ -> nil
+        XCTAssertNil(DropURLDecoder.url(fromItem: 42))
+    }
 }

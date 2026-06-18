@@ -1,6 +1,12 @@
 import SwiftUI
 import ViciousSIDPlayerCore
 import UniformTypeIdentifiers
+import os
+
+// Unified Logging (Konsole.app / `log stream`). Subsystem = Bundle-ID, damit
+// sich der Lade-Pfad gezielt mitlesen laesst:
+//   log stream --predicate 'subsystem == "com.viben.ViciousSIDPlayer"'
+let loadLog = Logger(subsystem: "com.viben.ViciousSIDPlayer", category: "load")
 
 struct Track: Identifiable, Equatable, Sendable {
     let id: String
@@ -25,7 +31,7 @@ final class DropURLsContainer: @unchecked Sendable {
 public struct MainView: View {
     @StateObject private var coordinator = ViciousCoordinator()
     @State private var theme: PlayerTheme = .dark
-    @State private var volume: Float = 0.3
+    @State private var volume: Float = 1.0
     @State private var autoNext = true
     
     // Track lists
@@ -299,35 +305,26 @@ public struct MainView: View {
             }
         }
         .onDrop(of: ["public.file-url"], isTargeted: $dragOver) { providers in
+            loadLog.info("onDrop: \(providers.count, privacy: .public) provider(s)")
             let container = DropURLsContainer()
             let dispatchGroup = DispatchGroup()
-            
+
             for provider in providers {
                 dispatchGroup.enter()
                 provider.loadItem(forTypeIdentifier: "public.file-url", options: nil) { item, error in
-                    if let data = item as? Data {
-                        if let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) {
-                            if let path = plist as? String {
-                                container.append(URL(fileURLWithPath: path))
-                            } else if let array = plist as? [String] {
-                                for path in array {
-                                    container.append(URL(fileURLWithPath: path))
-                                }
-                            }
-                        } else if let path = String(data: data, encoding: .utf8) {
-                            container.append(URL(fileURLWithPath: path))
-                        }
-                    } else if let url = item as? URL {
+                    // Decoding-Logik liegt testbar in DropURLDecoder (siehe dort).
+                    if let url = DropURLDecoder.url(fromItem: item) {
                         container.append(url)
-                    } else if let string = item as? String {
-                        container.append(URL(fileURLWithPath: string))
+                    } else {
+                        loadLog.error("onDrop: konnte Item nicht zu URL decodieren (error=\(String(describing: error), privacy: .public))")
                     }
                     dispatchGroup.leave()
                 }
             }
-            
+
             dispatchGroup.notify(queue: .main) {
                 let urls = container.urls
+                loadLog.info("onDrop: \(urls.count, privacy: .public) URL(s) decodiert")
                 if !urls.isEmpty {
                     handleDroppedURLs(urls)
                 }
@@ -339,6 +336,9 @@ public struct MainView: View {
             loadLocalAudioFolder()
             coordinator.setVolume(volume)
             setupMenuNotificationHandlers()
+            // Dateien, die per Doppelklick/"Oeffnen mit" die App gestartet haben,
+            // liegen schon im Puffer des AppDelegate -> jetzt nachziehen (Kaltstart).
+            drainPendingOpenURLs()
         }
         .onChange(of: coordinator.elapsedSeconds) { elapsed in
             if autoNext && elapsed >= Double(SCRUB_MAX) {
@@ -393,15 +393,18 @@ public struct MainView: View {
             let sidFile = try SidParser.parse(data: data)
             coordinator.setSid(sidFile)
             coordinator.setVolume(volume)
+            loadLog.info("loadTrack[\(index, privacy: .public)] geparst: \(fileURL.lastPathComponent, privacy: .public), autoplay=\(autoplay, privacy: .public)")
             if autoplay {
                 coordinator.play()
             }
         } catch {
+            loadLog.error("loadTrack[\(index, privacy: .public)] Parser-Fehler: \(error.localizedDescription, privacy: .public)")
             self.errorMessage = "Parser-Fehler: \(error.localizedDescription)"
         }
     }
 
     private func handleDroppedURLs(_ urls: [URL]) {
+        loadLog.info("handleDroppedURLs: \(urls.count, privacy: .public) Eingabe-URL(s)")
         self.errorMessage = nil
         var sidFiles: [URL] = []
         let fm = FileManager.default
@@ -433,9 +436,11 @@ public struct MainView: View {
         }
 
         guard !sidFiles.isEmpty else {
+            loadLog.error("handleDroppedURLs: keine .sid Dateien in der Eingabe gefunden")
             self.errorMessage = "Keine .sid Dateien gefunden."
             return
         }
+        loadLog.info("handleDroppedURLs: \(sidFiles.count, privacy: .public) .sid Datei(en) gefunden")
 
         sidFiles.sort(by: { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending })
 
@@ -571,6 +576,27 @@ public struct MainView: View {
             Task { @MainActor in
                 theme = theme == .light ? .dark : .light
             }
+        }
+        // Doppelklick / "Oeffnen mit" bei bereits laufender App (Warmstart).
+        NotificationCenter.default.addObserver(forName: NSNotification.Name("openSIDFiles"), object: nil, queue: .main) { _ in
+            Task { @MainActor in
+                drainPendingOpenURLs()
+            }
+        }
+    }
+
+    // Zieht die vom AppDelegate gepufferten Open-URLs und laedt sie wie ein Drop.
+    private func drainPendingOpenURLs() {
+        let urls = AppDelegate.pendingURLs
+        AppDelegate.pendingURLs = []
+        loadLog.info("drainPendingOpenURLs: \(urls.count, privacy: .public) URL(s)")
+        if !urls.isEmpty {
+            // Ein per Doppelklick/"Oeffnen mit" geoeffnetes File hat Vorrang: den
+            // Transition-Debounce zuruecksetzen, sonst weist loadTrack die Auswahl
+            // beim Kaltstart ab (loadLocalAudioFolder hat ihn gerade gesetzt) und
+            // die Datei landet zwar in der Liste, wird aber nicht ausgewaehlt.
+            isTransitioning = false
+            handleDroppedURLs(urls)
         }
     }
 }
