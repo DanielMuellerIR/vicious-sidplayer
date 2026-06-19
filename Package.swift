@@ -21,6 +21,13 @@ let package = Package(
             dependencies: ["ViciousSIDPlayerCore"],
             path: "Sources/ViciousSIDPlayerApp"
         ),
+        // Headless-Crash-Checker (siehe Tools/sidcheck/main.swift) — findet harte
+        // Traps in der Emulation, ohne die GUI zu starten.
+        .executableTarget(
+            name: "sidcheck",
+            dependencies: ["ViciousSIDPlayerCore"],
+            path: "Tools/sidcheck"
+        ),
         .testTarget(
             name: "ViciousSIDPlayerTests",
             dependencies: ["ViciousSIDPlayerCore"],

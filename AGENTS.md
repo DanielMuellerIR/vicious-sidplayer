@@ -121,3 +121,9 @@ swift test
 - [x] **Todo 2**: README klarstellen, dass GitHub-Release-DMGs notarisierte Builds sind.
 
 - [x] **Todo 3**: GitHub-Auftritt mit README-Icon und Social-Preview-Bild aus dem App-Icon aufwerten.
+
+- [ ] **Todo 4**: Player-Konkurrenzanalyse. Von <https://hvsc.de/players> alle verlinkten
+  SID-Player durchgehen; bei denen mit einsehbarem Quellcode (GitHub o. Ae.) pruefen,
+  welche Features sie bieten, die diesem Player fehlen (z. B. 6581/8580-Modellwahl,
+  exakte Songlength-DB statt fixem Scrub-Limit, Mehrfach-SID/Stereo, STIL-Infos,
+  Audio-Export). Ergebnis als Feature-Gap-Liste festhalten.
