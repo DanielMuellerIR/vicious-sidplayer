@@ -8,6 +8,10 @@
   <strong>Commodore-64-SID-Chiptune-Player als Single-File-HTML5-Version und native SwiftUI-macOS-App.</strong>
 </p>
 
+<p align="center">
+  <img src="src/Screenshot.png" width="760" alt="Vicious SID Player – native macOS-App mit Echtzeit-Oszilloskop, hier mit „Cybernoid II“ von Jeroen Tel">
+</p>
+
 Ein eigenständiger Commodore-64-SID-Musikplayer in zwei Varianten:
 
 1. **HTML5 (`vicious-sid-player.html`)** — Eine einzelne HTML-Datei (~50 KB), die ohne Webserver direkt per Doppelklick aus dem Dateisystem funktioniert.
