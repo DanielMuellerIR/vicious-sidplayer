@@ -190,7 +190,22 @@ public struct MainView: View {
                         Toggle("AUTO NEXT", isOn: $autoNext)
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(textCol)
-                        
+
+                        // SID-Chip-Modell: Auto folgt der Datei-Praeferenz, 6581/8580
+                        // erzwingen das jeweilige Modell (viele Tunes klingen nur auf
+                        // dem richtigen Chip korrekt). Wirkt live auf den laufenden Song.
+                        Picker("", selection: Binding(
+                            get: { coordinator.modelOverride ?? 0 },   // 0 = Auto
+                            set: { coordinator.setModelOverride($0 == 0 ? nil : $0) }
+                        )) {
+                            Text("SID: Auto").tag(0)
+                            Text("6581").tag(6581)
+                            Text("8580").tag(8580)
+                        }
+                        .pickerStyle(DefaultPickerStyle())
+                        .frame(width: 110)
+                        .help("SID-Chip-Modell — Auto folgt der Datei")
+
                         Spacer()
                         
                         if coordinator.subtunesCount > 1 {

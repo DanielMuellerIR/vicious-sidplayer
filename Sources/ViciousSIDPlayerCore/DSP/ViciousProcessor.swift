@@ -73,6 +73,10 @@ public final class ViciousProcessor: Sendable {
     nonisolated(unsafe) private var subtune_amount: Int = 1
     nonisolated(unsafe) private var timermode = [UInt8](repeating: 0, count: 32)
     nonisolated(unsafe) private var preferred_SID_model: [Double] = [8580.0, 8580.0, 8580.0]
+    // Das in der SID-Datei bevorzugte Modell + optionaler Nutzer-Override
+    // (nil = Auto = der Datei-Praeferenz folgen).
+    nonisolated(unsafe) private var filePreferredModel: Double = 8580.0
+    nonisolated(unsafe) private var modelOverride: Double? = nil
     nonisolated(unsafe) private var SID_model: Double = 8580.0
     nonisolated(unsafe) private var SID_address: [UInt32] = [0xD400, 0, 0]
 
@@ -981,9 +985,8 @@ public final class ViciousProcessor: Sendable {
             }
         }
 
-        preferred_SID_model[0] = Double(sidFile.prefModel)
-        preferred_SID_model[1] = Double(sidFile.prefModel)
-        preferred_SID_model[2] = Double(sidFile.prefModel)
+        filePreferredModel = Double(sidFile.prefModel)
+        applyCurrentModel()
 
         SID_address[1] = sidFile.secondSidAddress
         SID_address[2] = sidFile.thirdSidAddress
@@ -1004,6 +1007,23 @@ public final class ViciousProcessor: Sendable {
         lock.lock()
         defer { lock.unlock() }
         self.volume = vol
+    }
+
+    // Aktuelles SID-Modell anwenden: Override hat Vorrang, sonst Datei-Praeferenz.
+    private func applyCurrentModel() {
+        let m = modelOverride ?? filePreferredModel
+        preferred_SID_model[0] = m
+        preferred_SID_model[1] = m
+        preferred_SID_model[2] = m
+    }
+
+    // Nutzer-Override fuer das SID-Modell (nil = Auto = der Datei folgen). Wirkt
+    // live — der naechste synthetisierte Sample nutzt das gewaehlte Modell.
+    public func setModelOverride(_ model: Double?) {
+        lock.lock()
+        defer { lock.unlock() }
+        modelOverride = model
+        applyCurrentModel()
     }
 
     private func runFrameCPU() {

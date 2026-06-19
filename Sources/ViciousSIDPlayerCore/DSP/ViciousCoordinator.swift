@@ -58,6 +58,8 @@ public final class ViciousCoordinator: ObservableObject {
     @Published public var subtunesCount = 1
     @Published public var elapsedSeconds: Double = 0.0
     @Published public var prefModel: Int = 8580
+    // Nutzer-Override des SID-Modells: nil = Auto (Datei-Praeferenz), 6581 oder 8580.
+    @Published public var modelOverride: Int? = nil
 
     // Live visual data bound to the UI
     @Published public var envelopes: [Float] = [0.0, 0.0, 0.0]
@@ -108,6 +110,7 @@ public final class ViciousCoordinator: ObservableObject {
         // Initialize processor
         let processor = ViciousProcessor(sampleRate: sampleRate)
         _ = processor.loadSID(sidFile: sid)
+        processor.setModelOverride(modelOverride.map { Double($0) })
         processor.initSubtune(sub: currentSubtune)
         processor.setVolume(vol: Double(currentVolume))
         self.engineProcessor = processor
@@ -200,6 +203,14 @@ public final class ViciousCoordinator: ObservableObject {
         audioEngine.mainMixerNode.outputVolume = vol * vol
         if let processor = engineProcessor {
             processor.setVolume(vol: Double(vol))
+        }
+    }
+
+    // SID-Modell-Override setzen (nil = Auto). Wirkt live auf den laufenden Song.
+    public func setModelOverride(_ model: Int?) {
+        self.modelOverride = model
+        if let processor = engineProcessor {
+            processor.setModelOverride(model.map { Double($0) })
         }
     }
 
