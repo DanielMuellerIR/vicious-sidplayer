@@ -42,6 +42,9 @@ public struct MainView: View {
     @State private var dragOver = false
     @State private var errorMessage: String? = nil
     @State private var isTransitioning = false
+    // onAppear kann mehrfach feuern (Fenster erscheint erneut, z.B. beim Datei-Open
+    // der laufenden App). Einmalige Initialisierung darf sich dann nicht wiederholen.
+    @State private var didInitialize = false
     private let SCRUB_MAX = 360.0
     
     private var allTracks: [Track] {
@@ -332,12 +335,18 @@ public struct MainView: View {
             return true
         }
         .onAppear {
-            // Scan local audio directory for testing
-            loadLocalAudioFolder()
-            coordinator.setVolume(volume)
-            setupMenuNotificationHandlers()
+            // Einmalige Initialisierung — NICHT bei jedem erneuten onAppear, sonst
+            // doppelte Observer und ein erneutes (storendes) Laden des audio/-Ordners.
+            if !didInitialize {
+                didInitialize = true
+                coordinator.setVolume(volume)
+                setupMenuNotificationHandlers()
+                // Lokalen audio/-Ordner als Start-Playlist laden (Test-/Komfort).
+                loadLocalAudioFolder()
+            }
             // Dateien, die per Doppelklick/"Oeffnen mit" die App gestartet haben,
-            // liegen schon im Puffer des AppDelegate -> jetzt nachziehen (Kaltstart).
+            // liegen schon im Puffer des AppDelegate -> jetzt nachziehen (Kaltstart;
+            // Warmstart laeuft zusaetzlich ueber die "openSIDFiles"-Notification).
             drainPendingOpenURLs()
         }
         .onChange(of: coordinator.elapsedSeconds) { elapsed in

@@ -15,6 +15,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Warmstart (App lief schon): View hoert mit und zieht den Puffer sofort.
         NotificationCenter.default.post(name: NSNotification.Name("openSIDFiles"), object: nil)
     }
+
+    // Single-Window-App: schliesst man das Fenster, soll die App beenden
+    // (kein verwaister Hintergrundprozess, der weiterspielt).
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        return true
+    }
 }
 
 @main
@@ -22,11 +28,11 @@ struct ViciousSIDPlayerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        WindowGroup {
+        // Window (nicht WindowGroup): genau EIN Fenster. WindowGroup oeffnete beim
+        // Datei-Open ein zweites Fenster mit eigener MainView/eigenem Coordinator
+        // -> mehrere SIDs spielten gleichzeitig. Window verhindert das.
+        Window("Vicious SID Player", id: "main") {
             MainView()
-                #if os(macOS)
-                .navigationTitle("Vicious SID Player")
-                #endif
         }
         .commands {
             #if os(macOS)
