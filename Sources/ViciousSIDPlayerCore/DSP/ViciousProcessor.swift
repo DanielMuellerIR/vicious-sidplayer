@@ -841,7 +841,14 @@ public final class ViciousProcessor: Sendable {
 
         // Update ENV3/OSC3 read-backs
         if (memory[1] & 3) != 0 {
-            memory[SIDaddr + 0x1B] = UInt8(Int(prevwfout[startChannel + 2]) >> 8)
+            // OSC3-Readback ($D41B) = oberes Byte des Oszillators. Im C-Original
+            // truncatet die Zuweisung an uint8 implizit; die combined-waveform-
+            // Mathematik kann prevwfout aber aus dem 16-Bit-Bereich treiben, sodass
+            // das gepruefte UInt8(...) crasht. Daher byte-truncating (und nicht-
+            // finite/absurde Ausreisser auf 0), statt zu trappen.
+            let osc3 = prevwfout[startChannel + 2]
+            let osc3Int = osc3.isFinite ? Int(max(-16_777_216.0, min(16_777_216.0, osc3))) : 0
+            memory[SIDaddr + 0x1B] = UInt8(truncatingIfNeeded: osc3Int >> 8)
         }
         memory[SIDaddr + 0x1C] = UInt8(envcnt[startChannel + 2])
 
@@ -850,7 +857,10 @@ public final class ViciousProcessor: Sendable {
         var resonance = 1.0
         if SID_model == 8580.0 {
             cutoff = 1.0 - exp(cutoff * cutoff_ratio_8580)
-            resonance = pow(2.0, Double(4 - (memory[SIDaddr + 0x17] >> 4)) / 8.0)
+            // 4 - (nibble) muss signed gerechnet werden (Ergebnis kann negativ
+            // sein). In UInt8 wuerde 4 - 15 underflowen und trappen; in C wird
+            // der uint8-Ausdruck zu int promotet. Daher explizit ueber Int.
+            resonance = pow(2.0, Double(4 - Int(memory[SIDaddr + 0x17] >> 4)) / 8.0)
         } else {
             if cutoff < 24.0 { cutoff = 0.035 }
             else { cutoff = 1.0 - 1.263 * exp(cutoff * cutoff_ratio_6581) }
