@@ -13,7 +13,7 @@ Ein eigenständiger Commodore-64-SID-Musikplayer in zwei Varianten:
 1. **HTML5 (`vicious-sid-player.html`)** — Eine einzelne HTML-Datei (~50 KB), die ohne Webserver direkt per Doppelklick aus dem Dateisystem funktioniert.
 2. **Native macOS App (`Vicious SID Player.app`)** — SwiftUI-Desktop-Anwendung mit `AVAudioEngine` und Echtzeit-Oszilloskop.
 
-Beide Varianten enthalten keine SID-Dateien. Musikstücke werden per Drag & Drop oder Datei-Dialog geladen.
+Beide Varianten enthalten keine SID-Dateien. Musikstücke werden per Drag & Drop, Datei-Dialog oder (macOS-App) Doppelklick auf eine `.sid`-Datei im Finder geladen.
 
 ---
 
@@ -29,6 +29,7 @@ Der HTML5-Player benötigt keinen Download über die Releases hinaus: Die Datei 
 
 - **Drag & Drop**: Einzelne `.sid`-Dateien oder ganze Ordner können auf den Player gezogen werden. Die Wiedergabe startet sofort.
 - **Echtzeit-Oszilloskop**: Zeigt die Wellenformen der drei SID-Stimmen (Dreieck, Sägezahn, Puls, Rauschen) samt Frequenzen, Gate-Status und ADSR-Hüllkurven.
+- **SID-Modellwahl (macOS-App)**: Picker zwischen `Auto`, `6581` und `8580`. `Auto` folgt der in der SID-Datei hinterlegten Präferenz; die feste Wahl erzwingt das jeweilige Chip-Modell und wirkt live auf den laufenden Song (viele Tunes klingen nur auf dem ursprünglich gemeinten Chip korrekt).
 - **Dark / Light Mode**: Automatische Erkennung der Systemeinstellung oder manuelles Umschalten.
 - **Playlist mit Duplikaterkennung**: Bereits geladene Titel werden nicht doppelt aufgenommen. Die Playlist kann jederzeit geleert werden.
 - **Keine externen Assets**: Die gesamte Oberfläche (inkl. macOS-Fensterdekorationen und Icons) ist rein prozedural in CSS bzw. SwiftUI Canvas gezeichnet.
