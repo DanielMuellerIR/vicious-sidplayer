@@ -91,7 +91,18 @@ if [[ "$SIGN_APP" != "0" ]]; then
     if security find-identity -v -p codesigning | grep -Fq "$CODESIGN_IDENTITY"; then
         echo "=== Signing App Bundle ==="
         # Hardened Runtime ist Pflicht fuer spaetere Notarisierung.
-        codesign --force --deep --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$APP_DIR"
+        # --timestamp kontaktiert Apples Zeitstempel-Server, der gelegentlich
+        # transient mit errSecInternalComponent abbricht -> bis zu 3 Versuche.
+        sign_attempt=0
+        until codesign --force --deep --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$APP_DIR"; do
+            sign_attempt=$((sign_attempt + 1))
+            if [[ "$sign_attempt" -ge 3 ]]; then
+                echo "ABBRUCH: codesign nach 3 Versuchen fehlgeschlagen." >&2
+                exit 1
+            fi
+            echo "codesign-Versuch $sign_attempt fehlgeschlagen (oft transienter Zeitstempel-Fehler) — neuer Versuch in 5s..." >&2
+            sleep 5
+        done
         codesign --verify --deep --strict --verbose=2 "$APP_DIR"
     elif [[ "$SIGN_APP" == "1" || "${REQUIRE_CODESIGN:-0}" == "1" ]]; then
         echo "ABBRUCH: Codesign-Identity nicht gefunden: $CODESIGN_IDENTITY" >&2
