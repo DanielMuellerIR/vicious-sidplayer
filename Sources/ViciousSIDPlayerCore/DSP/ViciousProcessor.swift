@@ -197,6 +197,14 @@ public final class ViciousProcessor: Sendable {
         prevbandpass = [0.0, 0.0, 0.0]
     }
 
+    // PSID-Spec: Hat ein Tune mehr als 32 Subtunes, gilt fuer Subtune 33+ dasselbe
+    // Speed-/Timer-Flag wie fuer Subtune 32 (Bit 31). Das timermode-Array hat nur
+    // 32 Eintraege; ohne Begrenzung crasht timermode[subtune] mit Index-out-of-range,
+    // sobald ein solcher Tune auf Subtune >= 32 gestellt wird (72 HVSC-Dateien).
+    private func timerModeForCurrentSubtune() -> UInt8 {
+        return timermode[min(subtune, timermode.count - 1)]
+    }
+
     private func initEmulation(subt: Int) {
         if loaded {
             initialized = false
@@ -212,7 +220,7 @@ public final class ViciousProcessor: Sendable {
                 if CPU() >= 0xFE { break }
             }
 
-            if timermode[subtune] != 0 || memory[0xDC05] != 0 {
+            if timerModeForCurrentSubtune() != 0 || memory[0xDC05] != 0 {
                 if memory[0xDC05] == 0 {
                     memory[0xDC04] = 0x24
                     memory[0xDC05] = 0x40
@@ -916,7 +924,7 @@ public final class ViciousProcessor: Sendable {
                         finished = true
                         break
                     }
-                    if (addr == 0xDC05 || addr == 0xDC04) && (memory[1] & 3) != 0 && timermode[subtune] != 0 {
+                    if (addr == 0xDC05 || addr == 0xDC04) && (memory[1] & 3) != 0 && timerModeForCurrentSubtune() != 0 {
                         frame_sampleperiod = Double(UInt16(memory[0xDC04]) | UInt16(memory[0xDC05]) << 8) / clk_ratio
                         budgetRemaining = clk_ratio
                     }
@@ -1013,7 +1021,7 @@ public final class ViciousProcessor: Sendable {
                 finished = true
                 break
             }
-            if (addr == 0xDC05 || addr == 0xDC04) && (memory[1] & 3) != 0 && timermode[subtune] != 0 {
+            if (addr == 0xDC05 || addr == 0xDC04) && (memory[1] & 3) != 0 && timerModeForCurrentSubtune() != 0 {
                 frame_sampleperiod = Double(UInt16(memory[0xDC04]) | UInt16(memory[0xDC05]) << 8) / clk_ratio
             }
             if storadd >= 0xD420 && storadd < 0xD800 && (memory[1] & 3) != 0 {
