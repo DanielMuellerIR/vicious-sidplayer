@@ -19,10 +19,6 @@ class SidPlayerProcessor {
     // Instance-isolated engine state to support multiple panels or reload cycles cleanly
     let samplerate = sampleRate;
     
-    let CLK = 985248; // PAL CPU clock Hz
-    let FR = 50; // PAL frame rate Hz
-    let CHA = 3; // 3 sound channels
-    let SCALE = 0x10000 * CHA * 16;
     let C64_PAL_CPUCLK = 985248;
     let PAL_FRAMERATE = 50;
     let SID_CHANNEL_AMOUNT = 3;
@@ -41,7 +37,15 @@ class SidPlayerProcessor {
     let playaddr = 0x1003;
     let subtune = 0;
     let subtune_amount = 1;
-    let playlength = 0;
+
+    // Liest den Timer-Modus des aktuellen Subtunes. timermode hat nur 32 Eintraege,
+    // PSID erlaubt aber mehr Subtunes — fuer subtune >= 32 waere timermode[subtune]
+    // sonst undefined (und "undefined && true" === false), was das CIA-Timer-Pacing
+    // stilllegen wuerde. Daher den Index clampen, analog zum Swift-Port
+    // (timerModeForCurrentSubtune, min(subtune, count-1)).
+    function timerModeForSubtune() {
+      return timermode[Math.min(subtune, timermode.length - 1)];
+    }
     
     let preferred_SID_model = [8580.0, 8580.0, 8580.0];
     let SID_model = 8580.0;
@@ -199,7 +203,7 @@ class SidPlayerProcessor {
           if (CPU()) break;
         }
 
-        if (timermode[subtune] || memory[0xDC05]) {
+        if (timerModeForSubtune() || memory[0xDC05]) {
           if (!memory[0xDC05]) {
             memory[0xDC04] = 0x24;
             memory[0xDC05] = 0x40;
@@ -490,7 +494,11 @@ class SidPlayerProcessor {
       // (memory[1] & 3), but ENV3 ($D41C) is updated unconditionally — this
       // matches the reference jsSID, where only the OSC3 line was guarded.
       if (memory[1] & 3) memory[SIDaddr + 0x1B] = wfout >> 8;
-      memory[SIDaddr + 0x1C] = envcnt[3];
+      // ENV3 ($D41C) spiegelt die Huellkurve der dritten Stimme DIESES SIDs.
+      // Frueher stand hier fest envcnt[3] — das ist Stimme 0 von SID 1 und fuer
+      // Single-SID-Tunes immer 0. Korrekt ist der Voice-3-Index des aktuellen
+      // SIDs: startChannel + 2 (envcnt[2]/[5]/[8]), analog zum Swift-Port.
+      memory[SIDaddr + 0x1C] = envcnt[num * SID_CHANNEL_AMOUNT + 2];
 
       // Filter processing
       cutoff = (memory[SIDaddr + 0x15] & 7) / 8 + memory[SIDaddr + 0x16] + 0.2;
@@ -542,7 +550,7 @@ class SidPlayerProcessor {
               finished = 1;
               break;
             }
-            if ((addr == 0xDC05 || addr == 0xDC04) && (memory[1] & 3) && timermode[subtune]) {
+            if ((addr == 0xDC05 || addr == 0xDC04) && (memory[1] & 3) && timerModeForSubtune()) {
               frame_sampleperiod = (memory[0xDC04] + memory[0xDC05] * 256) / clk_ratio;
             }
             if (storadd >= 0xD420 && storadd < 0xD800 && (memory[1] & 3)) {
@@ -575,7 +583,10 @@ class SidPlayerProcessor {
       initialized = 0;
       initSID();
       
-      let offs = filedata[7];
+      // dataOffset ist ein 16-Bit-Big-Endian-Feld an Header-Position 6-7.
+      // Frueher wurde nur das Low-Byte (filedata[7]) gelesen; bei Headern mit
+      // dataOffset > 0xFF haette das die PRG-Bytes falsch positioniert.
+      let offs = filedata[6] * 256 + filedata[7];
       loadaddr = filedata[8] * 256 + filedata[9];
       if (loadaddr === 0) {
         loadaddr = filedata[offs] + filedata[offs + 1] * 256;

@@ -87,7 +87,6 @@ let currentSubtune = 0;
 let totalSubtunesCount = 1;
 let currentMetadata = null;
 let playingState = false;
-let loadingState = false;
 let userVolume = 0.3;
 
 // Scrubber seeking state
@@ -395,7 +394,6 @@ async function loadTrack(index, autoplay) {
   currentIdx = index;
   const track = trackList[index];
   
-  loadingState = true;
   setPlayingUI(false);
   player.stop();
   showError(null);
@@ -426,11 +424,9 @@ async function loadTrack(index, autoplay) {
     }
   } catch (err) {
     showError('Load failed: ' + err.message);
-    loadingState = false;
     return;
   }
 
-  loadingState = false;
   playBtn.disabled = false;
   positionScrubber.disabled = false;
 

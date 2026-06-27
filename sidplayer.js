@@ -89,6 +89,10 @@ export class SidPlayer {
       source.buffer = buffer;
       source.connect(ctx.destination);
       source.start(0);
+      // Den Ein-Sample-Stummschuss sofort wieder vom Graphen trennen, damit der
+      // Source-Knoten nach dem Auslaufen GC-faehig ist und nicht im AudioContext
+      // haengen bleibt.
+      source.disconnect();
     } catch (e) {
       console.warn('SidPlayer: iOS unlock buffer failed:', e);
     }

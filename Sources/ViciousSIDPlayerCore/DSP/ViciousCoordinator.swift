@@ -175,6 +175,13 @@ public final class ViciousCoordinator: ObservableObject {
             startUIUpdates()
         } catch {
             print("Fehler beim Starten der AVAudioEngine: \(error)")
+            // Engine-Start fehlgeschlagen: den bereits attachten/verbundenen
+            // SourceNode symmetrisch zu stop() wieder abbauen, sonst leakt er und
+            // ein erneuter play()-Aufruf haengt einen zweiten Knoten an.
+            audioEngine.disconnectNodeOutput(sourceNode)
+            audioEngine.detach(sourceNode)
+            self.sourceNode = nil
+            self.engineProcessor = nil
         }
     }
 

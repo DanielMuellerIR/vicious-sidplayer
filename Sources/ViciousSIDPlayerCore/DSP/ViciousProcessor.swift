@@ -14,9 +14,6 @@ public final class ViciousProcessor: Sendable {
     private let samplerate: Double
 
     // C64 and SID Constants
-    private let CLK: Int = 985248
-    private let FR: Int = 50
-    private let CHA: Int = 3
     private let C64_PAL_CPUCLK: Double = 985248
     private let PAL_FRAMERATE: Double = 50
     private let SID_CHANNEL_AMOUNT: Int = 3
@@ -54,7 +51,6 @@ public final class ViciousProcessor: Sendable {
     // CPU Registers
     nonisolated(unsafe) private var PC: UInt16 = 0
     nonisolated(unsafe) private var A: UInt8 = 0
-    nonisolated(unsafe) private var T: Int = 0
     nonisolated(unsafe) private var X: UInt8 = 0
     nonisolated(unsafe) private var Y: UInt8 = 0
     nonisolated(unsafe) private var SP: UInt8 = 0xFF
@@ -752,7 +748,6 @@ public final class ViciousProcessor: Sendable {
                 if phaseaccu[channel] > 0xFFFFFF { phaseaccu[channel] -= 0x1000000 }
             }
             let MSB = Double(Int(phaseaccu[channel]) & 0x800000)
-            sourceMSBrise[num] = (MSB > (prevaccu[channel].truncatingRemainder(dividingBy: 0x1000000) == 0 ? 0 : prevaccu[channel] * 0.0)) ? 1 : 0 // simplify MSB rise
             if MSB > (prevaccu[channel] - Double(Int(prevaccu[channel]) & ~0x800000)) {
                 sourceMSBrise[num] = 1
             } else {
