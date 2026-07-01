@@ -28,6 +28,20 @@ let package = Package(
             dependencies: ["ViciousSIDPlayerCore"],
             path: "Tools/sidcheck"
         ),
+        // Quick-Look-Preview-Extension: spielt .sid-Dateien direkt im Finder-
+        // Quick-Look (Leertaste) ab. App-Extensions starten nicht ueber main(),
+        // sondern ueber NSExtensionMain aus Foundation — deshalb das Linker-Flag
+        // "-e _NSExtensionMain". build_app.sh verpackt das Binary als
+        // "Contents/PlugIns/ViciousSIDQuickLook.appex" ins App-Bundle.
+        .executableTarget(
+            name: "ViciousSIDQuickLook",
+            dependencies: ["ViciousSIDPlayerCore"],
+            path: "Sources/ViciousSIDQuickLook",
+            linkerSettings: [
+                .linkedFramework("QuickLookUI"),
+                .unsafeFlags(["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])
+            ]
+        ),
         .testTarget(
             name: "ViciousSIDPlayerTests",
             dependencies: ["ViciousSIDPlayerCore"],

@@ -3,7 +3,7 @@
 Universelle Referenz und Dokumentation für alle Coding-Agents und KI-Modelle.
 
 > **Projektname:** Vicious SID Player (Anspielung auf Sid Vicious)
-> **Status:** v1.0.3 — HTML5 + native macOS SwiftUI App, komplett umbenannt.
+> **Status:** v1.1.0 — HTML5 + native macOS SwiftUI App inkl. Quick-Look-Extension.
 
 ---
 
@@ -47,12 +47,15 @@ p_sidplayer/
 │   │   └── DSP/
 │   │       ├── ViciousProcessor.swift      ← C64 CPU + SID Emulator (Swift)
 │   │       └── ViciousCoordinator.swift    ← AVAudioEngine Host
-│   └── ViciousSIDPlayerApp/
-│       ├── AppMain.swift
-│       └── UI/
-│           ├── Theme.swift
-│           ├── MainView.swift
-│           └── OscilloscopeView.swift
+│   ├── ViciousSIDPlayerApp/
+│   │   ├── AppMain.swift
+│   │   └── UI/
+│   │       ├── Theme.swift
+│   │       ├── MainView.swift
+│   │       └── OscilloscopeView.swift
+│   └── ViciousSIDQuickLook/
+│       ├── main.swift                  ← Dummy (Einstieg ist NSExtensionMain)
+│       └── PreviewViewController.swift ← Quick-Look-Preview: Autoplay + Metadaten
 └── Tests/
     └── ViciousSIDPlayerTests/
         └── ViciousTests.swift
@@ -105,6 +108,17 @@ swift test
 **DMG-Background:** Retina-kompatibel via `tiffutil -cathidpicheck` (1x 600×600 + 2x 1200×1200 TIFF).
 
 **Duplikaterkennung:** Playlist filtert beim Hinzufügen auf doppelte Dateinamen.
+
+**Quick-Look-Extension (macOS):** `Sources/ViciousSIDQuickLook/` wird von
+`build_app.sh` als `Contents/PlugIns/ViciousSIDQuickLook.appex` ins App-Bundle
+verpackt (NSExtension-Point `com.apple.quicklook.preview`, sandboxed, eigener
+UTI `com.viben.sid-tune` für `.sid`). Einstiegspunkt ist `NSExtensionMain`
+(Linker-Flag in `Package.swift`), nicht `main()`. Wiedergabe startet automatisch
+beim Preview (Quick-Look-Views sind auf macOS nicht zuverlässig klickbar) und
+stoppt beim Schließen. Signierung von innen nach außen: erst `.appex` mit
+Sandbox-Entitlements, dann App — **kein `codesign --deep`**, das würde die
+Entitlements der Extension verwerfen. Test: `qlmanage -p audio/<datei>.sid`
+(vorher ggf. `lsregister -f "Vicious SID Player.app"`).
 
 ---
 

@@ -22,6 +22,72 @@ mkdir -p "$RESOURCES_DIR"
 # Copy release binary
 cp ".build/release/ViciousSIDPlayerApp" "$MACOS_DIR/"
 
+echo "=== Assembling Quick Look extension (.appex) ==="
+# Die Quick-Look-Preview-Extension spielt .sid-Dateien direkt im Finder ab
+# (Leertaste). Sie lebt als eigenes Mini-Bundle unter Contents/PlugIns/ und
+# wird vom System ueber die NSExtension-Keys in ihrer Info.plist gefunden.
+APPEX_DIR="$CONTENTS_DIR/PlugIns/ViciousSIDQuickLook.appex"
+APPEX_CONTENTS="$APPEX_DIR/Contents"
+mkdir -p "$APPEX_CONTENTS/MacOS"
+cp ".build/release/ViciousSIDQuickLook" "$APPEX_CONTENTS/MacOS/"
+
+cat <<EOF > "$APPEX_CONTENTS/Info.plist"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>ViciousSIDQuickLook</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.viben.ViciousSIDPlayer.QuickLook</string>
+    <key>CFBundleName</key>
+    <string>SID Quick Look</string>
+    <key>CFBundleDisplayName</key>
+    <string>Vicious SID Quick Look</string>
+    <key>CFBundlePackageType</key>
+    <string>XPC!</string>
+    <key>CFBundleShortVersionString</key>
+    <string>$APP_VERSION</string>
+    <key>CFBundleVersion</key>
+    <string>$APP_VERSION</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>NSExtension</key>
+    <dict>
+        <key>NSExtensionPointIdentifier</key>
+        <string>com.apple.quicklook.preview</string>
+        <key>NSExtensionPrincipalClass</key>
+        <string>PreviewViewController</string>
+        <key>NSExtensionAttributes</key>
+        <dict>
+            <key>QLSupportedContentTypes</key>
+            <array>
+                <string>com.viben.sid-tune</string>
+            </array>
+            <key>QLSupportsSearchableItems</key>
+            <false/>
+        </dict>
+    </dict>
+</dict>
+</plist>
+EOF
+
+# App-Extensions MUESSEN sandboxed sein, sonst laedt das System sie nicht.
+# Lesezugriff auf die previewte Datei gewaehrt Quick Look selbst.
+QL_ENTITLEMENTS="$(mktemp -t ql-entitlements).plist"
+cat <<EOF > "$QL_ENTITLEMENTS"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <key>com.apple.security.files.user-selected.read-only</key>
+    <true/>
+</dict>
+</plist>
+EOF
+
 # Compile and copy AppIcon.icns if AppIcon.png exists
 if [ -f "src/AppIcon.png" ]; then
     echo "=== Compiling AppIcon.icns ==="
@@ -78,41 +144,84 @@ cat <<EOF > "$CONTENTS_DIR/Info.plist"
             <array>
                 <string>sid</string>
             </array>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.viben.sid-tune</string>
+            </array>
             <key>CFBundleTypeIconFile</key>
             <string>AppIcon</string>
+        </dict>
+    </array>
+    <!-- Eigener UTI fuer .sid: darueber findet Quick Look unsere Preview-
+         Extension (QLSupportedContentTypes in der appex-Info.plist). -->
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.viben.sid-tune</string>
+            <key>UTTypeDescription</key>
+            <string>Commodore 64 SID Tune</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+                <string>public.audio</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>sid</string>
+                </array>
+                <key>public.mime-type</key>
+                <array>
+                    <string>audio/prs.sid</string>
+                </array>
+            </dict>
         </dict>
     </array>
 </dict>
 </plist>
 EOF
 
+# Hardened Runtime ist Pflicht fuer spaetere Notarisierung.
+# --timestamp kontaktiert Apples Zeitstempel-Server, der gelegentlich
+# transient mit errSecInternalComponent abbricht -> bis zu 3 Versuche.
+sign_with_retry() {
+    local sign_attempt=0
+    until codesign --force --options runtime --timestamp "$@"; do
+        sign_attempt=$((sign_attempt + 1))
+        if [[ "$sign_attempt" -ge 3 ]]; then
+            echo "ABBRUCH: codesign nach 3 Versuchen fehlgeschlagen." >&2
+            exit 1
+        fi
+        echo "codesign-Versuch $sign_attempt fehlgeschlagen (oft transienter Zeitstempel-Fehler) — neuer Versuch in 5s..." >&2
+        sleep 5
+    done
+}
+
 if [[ "$SIGN_APP" != "0" ]]; then
     echo "=== Checking code signing identity ==="
     if security find-identity -v -p codesigning | grep -Fq "$CODESIGN_IDENTITY"; then
         echo "=== Signing App Bundle ==="
-        # Hardened Runtime ist Pflicht fuer spaetere Notarisierung.
-        # --timestamp kontaktiert Apples Zeitstempel-Server, der gelegentlich
-        # transient mit errSecInternalComponent abbricht -> bis zu 3 Versuche.
-        sign_attempt=0
-        until codesign --force --deep --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$APP_DIR"; do
-            sign_attempt=$((sign_attempt + 1))
-            if [[ "$sign_attempt" -ge 3 ]]; then
-                echo "ABBRUCH: codesign nach 3 Versuchen fehlgeschlagen." >&2
-                exit 1
-            fi
-            echo "codesign-Versuch $sign_attempt fehlgeschlagen (oft transienter Zeitstempel-Fehler) — neuer Versuch in 5s..." >&2
-            sleep 5
-        done
+        # Von innen nach aussen signieren: erst die .appex MIT ihren
+        # Sandbox-Entitlements, dann die App. (Kein --deep mehr: das wuerde
+        # die appex ohne Entitlements neu signieren -> Quick Look laedt sie nicht.)
+        sign_with_retry --entitlements "$QL_ENTITLEMENTS" --sign "$CODESIGN_IDENTITY" "$APPEX_DIR"
+        sign_with_retry --sign "$CODESIGN_IDENTITY" "$APP_DIR"
         codesign --verify --deep --strict --verbose=2 "$APP_DIR"
     elif [[ "$SIGN_APP" == "1" || "${REQUIRE_CODESIGN:-0}" == "1" ]]; then
         echo "ABBRUCH: Codesign-Identity nicht gefunden: $CODESIGN_IDENTITY" >&2
         echo "Tipp: SIGN_APP=0 bash build_app.sh baut lokal ohne Signatur." >&2
         exit 1
     else
-        echo "WARNUNG: Codesign-Identity nicht sichtbar. App bleibt unsigniert."
-        echo "Tipp: REQUIRE_CODESIGN=1 bash build_app.sh erzwingt Signatur fuer Releases."
+        echo "WARNUNG: Codesign-Identity nicht sichtbar. Ad-hoc-Signatur (nur lokal)."
+        # Ad-hoc reicht lokal, damit das System die sandboxed .appex laedt;
+        # fuer Releases weiterhin REQUIRE_CODESIGN=1 verwenden.
+        codesign --force --options runtime --entitlements "$QL_ENTITLEMENTS" --sign - "$APPEX_DIR"
+        codesign --force --options runtime --sign - "$APP_DIR"
     fi
 fi
+rm -f "$QL_ENTITLEMENTS"
 
 echo "=== App Bundle Created Successfully: $APP_DIR ==="
 echo "You can now double-click '$APP_DIR' in Finder to launch the player!"
