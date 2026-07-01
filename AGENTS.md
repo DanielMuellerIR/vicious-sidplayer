@@ -136,6 +136,11 @@ Entitlements der Extension verwerfen. Test: `qlmanage -p audio/<datei>.sid`
 
 - [x] **Todo 3**: GitHub-Auftritt mit README-Icon und Social-Preview-Bild aus dem App-Icon aufwerten.
 
+- [ ] **Todo 5**: README zweisprachig machen: `README.md` als englische
+  Standardfassung, `README.de.md` als deutsche Fassung, beide mit
+  Sprachumschalt-Zeile oben (Konvention Skill `github-publish`). Aktuell ist
+  die README einsprachig deutsch.
+
 - [ ] **Todo 4**: Player-Konkurrenzanalyse. Von <https://hvsc.de/players> alle verlinkten
   SID-Player durchgehen; bei denen mit einsehbarem Quellcode (GitHub o. Ae.) pruefen,
   welche Features sie bieten, die diesem Player fehlen (z. B. 6581/8580-Modellwahl,
