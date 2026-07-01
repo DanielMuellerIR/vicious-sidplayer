@@ -53,12 +53,16 @@ public enum SidParser {
             timermodes[31 - i] = (data[byteOffset] & (1 << bitPos)) != 0
         }
 
-        // Helper to read null-terminated ASCII strings
+        // Helper to read null-terminated Latin-1 strings (PSID/RSID header
+        // fields are ISO 8859-1 per SID file format spec, not ASCII/UTF-8 —
+        // e.g. "C.Hülsbeck" would otherwise show replacement characters)
         let readString = { (offset: Int, maxLength: Int) -> String in
             let sub = data.subdata(in: offset..<(offset + maxLength))
             let len = sub.firstIndex(of: 0) ?? maxLength
             let bytes = sub.subdata(in: 0..<len)
-            return String(decoding: bytes, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            // Latin-1 decoding cannot fail (every byte maps to a scalar)
+            return (String(data: bytes, encoding: .isoLatin1) ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
         let title = readString(0x16, 32)

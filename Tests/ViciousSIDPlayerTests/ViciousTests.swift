@@ -120,4 +120,28 @@ final class ViciousTests: XCTestCase {
         for _ in 0..<1000 { _ = processor.play() }
         // Kein Crash == bestanden.
     }
+
+    // Regression: Umlaute in den Header-Feldern wurden als Ersatzzeichen
+    // angezeigt ("C.H�lsbeck" statt "C.Hülsbeck"), weil die 32-Byte-Felder
+    // Title/Author/Released als UTF-8 dekodiert wurden. Laut SID-Spec sind
+    // sie ISO 8859-1 (Latin-1): das Byte 0xFC muss als "ü" ankommen.
+    func testHeaderStringsDecodeAsLatin1() throws {
+        var bytes = [UInt8](repeating: 0, count: 0x7C)
+        bytes[0] = 0x50; bytes[1] = 0x53; bytes[2] = 0x49; bytes[3] = 0x44 // "PSID"
+        bytes[5] = 0x02                 // Version 2
+        bytes[7] = 0x7C                 // dataOffset = 0x7C
+        bytes[10] = 0x10                // initAddr = 0x1000
+        bytes[12] = 0x10                // playAddr = 0x1000
+        bytes[15] = 1                   // songs = 1
+        bytes[17] = 0x01                // startSong = 1
+        // Author-Feld (0x36, 32 Bytes, null-terminiert): "C.Hülsbeck",
+        // wobei "ü" das Latin-1-Byte 0xFC ist (in UTF-8 waere das ungueltig).
+        let author: [UInt8] = [0x43, 0x2E, 0x48, 0xFC, 0x6C, 0x73, 0x62, 0x65, 0x63, 0x6B]
+        for (i, b) in author.enumerated() { bytes[0x36 + i] = b }
+        // Datenblock: Ladeadresse 0x1000 little-endian + RTS-Opcode
+        bytes += [0x00, 0x10, 0x60]
+
+        let sid = try SidParser.parse(data: Data(bytes))
+        XCTAssertEqual(sid.metadata.author, "C.Hülsbeck")
+    }
 }
