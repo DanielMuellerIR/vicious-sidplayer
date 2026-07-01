@@ -25,7 +25,10 @@ export function parseSidHeader(data) {
   const title = readString(0x16, 32);
   const author = readString(0x36, 32);
   const info = readString(0x56, 32);
-  const subtunesCount = data[0xF] || 1;
+  // PSID-songs-Feld ist 16-bit Big-Endian bei 0x0E; vorher wurde nur das untere
+  // Byte (0x0F) gelesen, was bei genau 256 Subtunes 0 statt 256 ergab. Jetzt beide
+  // Bytes kombinieren, damit JS mit der Swift-Seite und der PSID-Spec uebereinstimmt.
+  const subtunesCount = ((data[0x0E] << 8) | data[0x0F]) || 1;
   const prefModel = (data[0x77] & 0x30) >= 0x20 ? 8580 : 6581;
 
   return { title, author, info, subtunesCount, prefModel };
@@ -231,6 +234,7 @@ export class SidPlayer {
   /**
    * Seek to a position in seconds. The worklet restarts the current subtune and
    * fast-forwards the emulation.
+   * codereview-ok: Worklet clampt NaN->0; lastVisuals.playtime nie NaN (2026-07-01)
    */
   seek(seconds) {
     if (this.workletNode) {

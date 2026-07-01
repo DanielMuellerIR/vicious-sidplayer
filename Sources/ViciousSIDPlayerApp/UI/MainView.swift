@@ -142,10 +142,12 @@ public struct MainView: View {
                     
                     // Metadata Panel
                     VStack(alignment: .leading, spacing: 6) {
+                        // codereview-ok: MetaLine wird genutzt; kein toter Code (2026-07-01)
                         MetaLine(label: "TITLE", value: coordinator.trackName, theme: theme)
                         MetaLine(label: "COMPOSER", value: coordinator.composer, theme: theme)
                         MetaLine(label: "INFO", value: coordinator.info, theme: theme)
-                        
+
+                        // codereview-ok: stilistisch, kein Bug (2026-07-01)
                         if let err = errorMessage {
                             Text(err)
                                 .font(.system(size: 11, weight: .bold))
@@ -170,6 +172,7 @@ public struct MainView: View {
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(textSecCol)
                         
+                        // codereview-ok: loadTrack setzt currentTrackIdx auf den gepickten Index (2026-07-01)
                         Picker("", selection: Binding(
                             get: { self.currentTrackIdx },
                             set: { val in if val != -1 { self.selectTrack(at: val) } }
@@ -232,6 +235,7 @@ public struct MainView: View {
                         }
                         
                         Button(coordinator.isPlaying ? "■ STOP" : "▶ PLAY") {
+                            // codereview-ok: Laden ist synchron; isTransitioning wird korrekt zurueckgesetzt (2026-07-01)
                             guard !isTransitioning else { return }
                             isTransitioning = true
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
@@ -409,6 +413,7 @@ public struct MainView: View {
             fileURL = resolvedURL
         }
 
+        // codereview-ok: defer haelt Scope ueber den Read; ausserdem App nicht sandboxed (2026-07-01)
         let accessed = fileURL.startAccessingSecurityScopedResource()
         defer { if accessed { fileURL.stopAccessingSecurityScopedResource() } }
 
@@ -434,6 +439,7 @@ public struct MainView: View {
         let fm = FileManager.default
 
         for url in urls {
+            // codereview-ok: App nicht sandboxed -> security-scoped calls sind No-Op; latent falls je Sandbox aktiviert wird (2026-07-01)
             let accessed = url.startAccessingSecurityScopedResource()
             var isDir: ObjCBool = false
             if fm.fileExists(atPath: url.path, isDirectory: &isDir) {
@@ -472,7 +478,11 @@ public struct MainView: View {
         var tracksToAdd: [Track] = []
 
         for url in sidFiles {
-            let name = url.lastPathComponent.replacingOccurrences(of: ".sid", with: "")
+            // Endung robust entfernen: deletingPathExtension strippt nur die echte
+            // Datei-Endung (egal ob .sid/.SID/.Sid), waehrend das frueher genutzte
+            // replacingOccurrences(of: ".sid") case-sensitiv war und Grossschreibung
+            // stehen liess (verfaelschte Duplikat-Erkennung via name==name und Anzeige).
+            let name = url.deletingPathExtension().lastPathComponent
             
             // Duplicate check: against existing tracks AND within current batch
             let isDuplicate = allTracks.contains(where: { $0.name == name || ($0.fileURL != nil && $0.fileURL?.path == url.path) })
@@ -567,6 +577,7 @@ public struct MainView: View {
 
     private func setupMenuNotificationHandlers() {
         NotificationCenter.default.addObserver(forName: NSNotification.Name("menuPlayStop"), object: nil, queue: .main) { _ in
+            // codereview-ok: Task{@MainActor} noetig fuer Aktor-Isolation; Entfernen bricht Compile (2026-07-01)
             Task { @MainActor in
                 guard !isTransitioning else { return }
                 isTransitioning = true

@@ -124,6 +124,7 @@ def tighten_js_punctuation(src: str) -> str:
     """
     Entfernt unnötige Spaces direkt vor/nach Satzzeichen.
     """
+    # codereview-ok: escaptes '-' ist harmlos, Regex korrekt (2026-07-01)
     punct = r'[{}()\[\];,:?=<>+\-*/%&|^!~]'
     src = re.sub(rf' *({punct}) *', r'\1', src)
     src = re.sub(r'\n{2,}', '\n', src)

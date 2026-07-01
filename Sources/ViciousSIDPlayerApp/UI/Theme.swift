@@ -9,7 +9,6 @@ public enum PlayerTheme: String, CaseIterable, Identifiable {
 
 public extension Color {
     // macOS Light Mode Colors
-    static let macLightBg = Color(red: 236/255, green: 236/255, blue: 236/255)
     static let macLightSidebar = Color(red: 245/255, green: 245/255, blue: 247/255)
     static let macLightSurface = Color.white
     static let macLightBorder = Color(red: 211/255, green: 211/255, blue: 211/255)

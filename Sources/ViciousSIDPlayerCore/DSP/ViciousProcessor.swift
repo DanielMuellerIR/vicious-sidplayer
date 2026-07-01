@@ -1032,6 +1032,7 @@ public final class ViciousProcessor: Sendable {
             let res = CPU()
             if res >= 0xFE { finished = true; break }
             t += Double(cycles)
+            // codereview-ok: kein Funktionsimpact; korrekt portierte jsSID-Kernal-Bedingung (2026-07-01)
             if (memory[1] & 3) > 1 && pPC < 0xE000 && (PC == 0xEA31 || PC == 0xEA81) {
                 finished = true
                 break

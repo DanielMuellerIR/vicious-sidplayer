@@ -38,7 +38,6 @@ public enum SidParser {
             return UInt16(data[offset]) << 8 | UInt16(data[offset + 1])
         }
 
-        _ = readUInt16(4)
         let dataOffset = Int(readUInt16(6))
         
         var loadAddr = readUInt16(8)

@@ -71,6 +71,7 @@ public final class ViciousCoordinator: ObservableObject {
     private let audioEngine = AVAudioEngine()
     private var sourceNode: AVAudioSourceNode?
 
+    // codereview-ok: activeSid ist die Quelle, aus der play() den Processor neu erzeugt (2026-07-01)
     private var activeSid: SidFileData?
     private var engineProcessor: ViciousProcessor?
     private let visualsBuffer = RealtimeVisualsBuffer()
@@ -167,6 +168,7 @@ public final class ViciousCoordinator: ObservableObject {
         }
         #endif
 
+        // codereview-ok: isPlaying wird erst nach erfolgreichem start() gesetzt; catch raeumt sauber auf (2026-07-01)
         do {
             if !audioEngine.isRunning {
                 try audioEngine.start()

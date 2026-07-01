@@ -625,7 +625,10 @@ class SidPlayerProcessor {
       if (initaddr === 0) initaddr = loadaddr;
       
       playaddr = playaddf = filedata[0xC] * 256 + filedata[0xD];
-      subtune_amount = filedata[0xF];
+      // PSID-songs-Feld ist 16-bit Big-Endian bei 0x0E; vorher wurde nur das untere
+      // Byte (0x0F) gelesen -> bei 256 Subtunes 0 statt 256. Beide Bytes kombinieren,
+      // damit die Anzahl mit Swift-Seite und PSID-Spec uebereinstimmt.
+      subtune_amount = (filedata[0x0E] << 8) | filedata[0x0F];
       
       preferred_SID_model[0] = (filedata[0x77] & 0x30) >= 0x20 ? 8580 : 6581;
       preferred_SID_model[1] = (filedata[0x77] & 0xC0) >= 0x80 ? 8580 : 6581;
