@@ -16,6 +16,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // App-Hintergrund = unlesbar). Theme-Wechsel zieht MainView per applyAppearance nach.
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.appearance = NSAppearance(named: .darkAqua)
+
+        // Bundle-Icon explizit setzen, damit About-Dialog und Dock IMMER unser Icon
+        // zeigen — unabhaengig von einem evtl. veralteten macOS-Icon-Cache (der bei
+        // wiederholten Dev-Builds derselben Bundle-ID sonst das generische Platzhalter-
+        // Icon liefert).
+        if let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+           let icon = NSImage(contentsOf: iconURL) {
+            NSApp.applicationIconImage = icon
+        }
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
