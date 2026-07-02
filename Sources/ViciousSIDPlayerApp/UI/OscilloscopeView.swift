@@ -13,7 +13,10 @@ public struct OscilloscopeView: View {
     }
 
     public var body: some View {
-        TimelineView(.animation) { timeline in
+        // paused: !isPlaying friert die Animation ein — bei Pause bleibt das zuletzt
+        // gezeichnete Bild stehen (die Wellenform im Moment des Pausierens), statt
+        // weiterzuscrollen. Die Werte selbst bleiben ueber isPaused erhalten (unten).
+        TimelineView(.animation(paused: !coordinator.isPlaying)) { timeline in
             Canvas { context, size in
                 let time = timeline.date.timeIntervalSinceReferenceDate
                 let W = size.width
@@ -46,14 +49,16 @@ public struct OscilloscopeView: View {
 
                 // Render 3 channels
                 let channelH = H / 3
-                let live = coordinator.isPlaying
+                // showWave = laeuft ODER pausiert: dann die (letzten) Kanalwerte
+                // zeichnen. Nur im echten Stop-Zustand auf die Null-Linie fallen.
+                let showWave = coordinator.isPlaying || coordinator.isPaused
 
                 for c in 0..<3 {
                     let baselineY = channelH * CGFloat(c) + channelH / 2
-                    let rawFreq = live ? coordinator.frequencies[c] : 0
-                    let env = live ? Double(coordinator.envelopes[c]) : 0.0
-                    let gate = live ? coordinator.gates[c] : 0
-                    let wf = live ? coordinator.waveforms[c] : 0
+                    let rawFreq = showWave ? coordinator.frequencies[c] : 0
+                    let env = showWave ? Double(coordinator.envelopes[c]) : 0.0
+                    let gate = showWave ? coordinator.gates[c] : 0
+                    let wf = showWave ? coordinator.waveforms[c] : 0
                     let duty = Double(coordinator.pulsewidths[c])
 
                     let freqHz = Double(rawFreq) * 0.0587
@@ -66,7 +71,7 @@ public struct OscilloscopeView: View {
 
                     // Draw oscillating trace path
                     var wavePath = Path()
-                    let amplitude = !live ? 0.0 : (env > 0.01 ? Double(env) * Double(channelH * 0.38) : Double.random(in: -0.75...0.75))
+                    let amplitude = !showWave ? 0.0 : (env > 0.01 ? Double(env) * Double(channelH * 0.38) : Double.random(in: -0.75...0.75))
                     let wavelength = freqHz > 10.0 ? max(10.0, min(300.0, 3000.0 / freqHz)) : 150.0
 
                     // Tie the phase offset to current time to scroll smoothly

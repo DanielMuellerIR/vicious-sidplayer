@@ -121,6 +121,8 @@ cat <<EOF > "$CONTENTS_DIR/Info.plist"
     <string>com.viben.ViciousSIDPlayer</string>
     <key>CFBundleName</key>
     <string>Vicious SID Player</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>© 2026 Daniel Müller. Lizenz: WTFPL.</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

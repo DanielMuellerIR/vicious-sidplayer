@@ -3,13 +3,18 @@ import XCTest
 
 final class ViciousTests: XCTestCase {
     func testViciousSynthesis() throws {
-        // 1. Locate the test SID file
-        let currentDir = FileManager.default.currentDirectoryPath
-        let projectDir = URL(fileURLWithPath: currentDir)
-        let sidURL = projectDir.appendingPathComponent("audio/Cybernoid.sid")
-        
-        XCTAssertTrue(FileManager.default.fileExists(atPath: sidURL.path), "Test SID file should exist at \(sidURL.path)")
-        
+        // 1. Test-SID lokalisieren. Die Datei ist copyright-geschuetzt und liegt
+        //    NICHT im Repo, sondern in der persoenlichen Sammlung unter
+        //    ~/Music/Vicious SID Player/. Fehlt sie (frischer Checkout / CI), wird
+        //    dieser Synthese-Smoke-Test uebersprungen statt fehlzuschlagen.
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let sidURL = home.appendingPathComponent("Music/Vicious SID Player/Cybernoid.sid")
+
+        try XCTSkipUnless(
+            FileManager.default.fileExists(atPath: sidURL.path),
+            "Test-SID nicht gefunden (\(sidURL.path)) — Synthese-Smoke-Test uebersprungen."
+        )
+
         // 2. Parse the SID file
         let data = try Data(contentsOf: sidURL)
         let sidFile = try SidParser.parse(data: data)

@@ -2,6 +2,9 @@ import SwiftUI
 import ViciousSIDPlayerCore
 import UniformTypeIdentifiers
 import os
+#if canImport(AppKit)
+import AppKit
+#endif
 
 // Unified Logging (Konsole.app / `log stream`). Subsystem = Bundle-ID, damit
 // sich der Lade-Pfad gezielt mitlesen laesst:
@@ -345,6 +348,15 @@ public struct MainView: View {
                             .border(accentCol, width: 2)
                     )
             }
+
+            // Unsichtbarer Button, damit die Leertaste global Play/Pause umschaltet.
+            // (Kein Menue-Shortcut, weil die Leertaste dort untypisch waere.)
+            Button("") { togglePlayPause() }
+                .keyboardShortcut(.space, modifiers: [])
+                .buttonStyle(PlainButtonStyle())
+                .frame(width: 0, height: 0)
+                .opacity(0)
+                .accessibilityHidden(true)
         }
         .fileImporter(
             isPresented: $showFileImporter,
@@ -392,20 +404,29 @@ public struct MainView: View {
                 didInitialize = true
                 coordinator.setVolume(volume)
                 setupMenuNotificationHandlers()
-                // Lokalen audio/-Ordner als Start-Playlist laden (Test-/Komfort).
+                // Start-Playlist aus ~/Music/Vicious SID Player/ laden.
                 loadLocalAudioFolder()
             }
             // Dateien, die per Doppelklick/"Oeffnen mit" die App gestartet haben,
             // liegen schon im Puffer des AppDelegate -> jetzt nachziehen (Kaltstart;
             // Warmstart laeuft zusaetzlich ueber die "openSIDFiles"-Notification).
             drainPendingOpenURLs()
+            applyAppearance()
         }
+        .onChange(of: theme) { _ in applyAppearance() }
         .onChange(of: coordinator.elapsedSeconds) { elapsed in
             if autoNext && elapsed >= Double(SCRUB_MAX) {
-                coordinator.stop()
-                if allTracks.count > 1 {
+                // Erst alle weiteren Subtunes DIESER SID-Datei durchspielen, dann
+                // zum naechsten Playlist-Eintrag. setSubtune setzt die Position auf 0
+                // zurueck und laeuft (da isPlaying) direkt weiter.
+                if coordinator.currentSubtune + 1 < coordinator.subtunesCount {
+                    coordinator.setSubtune(sub: coordinator.currentSubtune + 1)
+                } else if allTracks.count > 1 {
+                    coordinator.stop()
                     let next = (currentTrackIdx + 1) % allTracks.count
                     loadTrack(index: next, autoplay: true)
+                } else {
+                    coordinator.stop()
                 }
             }
         }
@@ -413,6 +434,16 @@ public struct MainView: View {
 
     private func selectTrack(at index: Int) {
         loadTrack(index: index, autoplay: coordinator.isPlaying)
+    }
+
+    // Erzwingt die AppKit-Fenster-/Control-Darstellung passend zum App-Theme.
+    // Ohne das rendern System-Controls (Picker, Toggle) im Hell-Modus dunklen Text
+    // auf dem dunklen App-Hintergrund — "schwarz auf schwarz", unlesbar. So folgt
+    // die gesamte Fensterdarstellung (auch die Titelleiste) dem gewaehlten Theme.
+    private func applyAppearance() {
+        #if canImport(AppKit)
+        NSApplication.shared.appearance = NSAppearance(named: theme == .light ? .aqua : .darkAqua)
+        #endif
     }
 
     // Play/Pause umschalten: pause() haelt an und behaelt die Position, play() setzt
@@ -574,28 +605,16 @@ public struct MainView: View {
 
     private func loadLocalAudioFolder() {
         let fm = FileManager.default
-        // Kandidaten-Verzeichnisse in Prioritaets-Reihenfolge nach .sid durchsuchen.
-        var candidateDirs: [URL] = []
-        // 1. Persoenlicher Musik-Ordner des Nutzers: ~/Music/Vicious SID Player/
-        //    Liegt AUSSERHALB des Repos, wird NICHT mit ausgeliefert/nach GitHub
-        //    gepusht. Hier eigene .sid-Dateien (auch in Unterordnern) ablegen — sie
-        //    werden beim Start automatisch in die Playlist geladen.
-        candidateDirs.append(fm.homeDirectoryForCurrentUser.appendingPathComponent("Music/Vicious SID Player"))
-        // 2. audio/-Ordner im Arbeitsverzeichnis (lokale Entwicklung via swift run).
-        candidateDirs.append(URL(fileURLWithPath: fm.currentDirectoryPath).appendingPathComponent("audio"))
-        // 3. audio/-Ordner neben dem App-Bundle.
-        if let bundlePath = Bundle.main.bundlePath as String? {
-            let appDir = URL(fileURLWithPath: bundlePath).deletingLastPathComponent()
-            candidateDirs.append(appDir.appendingPathComponent("audio"))
-        }
-        for dir in candidateDirs {
-            var isDir: ObjCBool = false
-            guard fm.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else { continue }
-            let sids = collectSIDs(in: dir, fm: fm)
-            if sids.isEmpty { continue }
-            handleDroppedURLs(sids)
-            return // erstes Verzeichnis mit SIDs verwenden
-        }
+        // Start-Playlist ausschliesslich aus dem persoenlichen Musik-Ordner laden:
+        // ~/Music/Vicious SID Player/ (rekursiv, inkl. Unterordner). Liegt AUSSERHALB
+        // des Repos, wird nie mit ausgeliefert/nach GitHub gepusht. Hier eigene
+        // .sid-Dateien ablegen — sie werden beim Start automatisch geladen.
+        let dir = fm.homeDirectoryForCurrentUser.appendingPathComponent("Music/Vicious SID Player")
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else { return }
+        let sids = collectSIDs(in: dir, fm: fm)
+        guard !sids.isEmpty else { return }
+        handleDroppedURLs(sids)
     }
 
     // Sammelt alle .sid-Dateien in dir REKURSIV (auch aus Unterordnern), natuerlich

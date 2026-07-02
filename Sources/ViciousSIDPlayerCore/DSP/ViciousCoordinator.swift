@@ -51,6 +51,10 @@ public final class RealtimeVisualsBuffer: @unchecked Sendable {
 @MainActor
 public final class ViciousCoordinator: ObservableObject {
     @Published public var isPlaying = false
+    // Pausiert (im Gegensatz zu gestoppt): Wiedergabe haelt an, Emulations-Stand
+    // bleibt erhalten. Das Oszilloskop friert dann das letzte Bild ein, statt auf
+    // die Null-Linie zu springen.
+    @Published public var isPaused = false
     @Published public var trackName = "Kein Song geladen"
     @Published public var composer = "Unbekannter Komponist"
     @Published public var info = "Vicious SID Player"
@@ -108,6 +112,7 @@ public final class ViciousCoordinator: ObservableObject {
             do {
                 if !audioEngine.isRunning { try audioEngine.start() }
                 isPlaying = true
+                isPaused = false
                 startUIUpdates()
             } catch {
                 print("Fehler beim Fortsetzen der AVAudioEngine: \(error)")
@@ -202,6 +207,7 @@ public final class ViciousCoordinator: ObservableObject {
                 try audioEngine.start()
             }
             isPlaying = true
+            isPaused = false
             startUIUpdates()
         } catch {
             print("Fehler beim Starten der AVAudioEngine: \(error)")
@@ -222,6 +228,7 @@ public final class ViciousCoordinator: ObservableObject {
         guard isPlaying else { return }
         audioEngine.pause()
         isPlaying = false
+        isPaused = true
         stopUIUpdates()
     }
 
@@ -234,6 +241,7 @@ public final class ViciousCoordinator: ObservableObject {
         sourceNode = nil
         engineProcessor = nil
         isPlaying = false
+        isPaused = false
         stopUIUpdates()
 
         // Stop bedeutet „zurueck an den Anfang": Position und gemerkten Seek loeschen.
