@@ -77,6 +77,10 @@ public final class ViciousCoordinator: ObservableObject {
     private let visualsBuffer = RealtimeVisualsBuffer()
     private var uiUpdateTimer: Timer?
     private var currentVolume: Float = 0.3
+    // Zielposition eines Seeks, der im gestoppten Zustand angefordert wurde (dann
+    // gibt es noch keinen Processor). play() wendet sie beim Aufbau an, damit die
+    // Wiedergabe an der per Slider gewaehlten Stelle beginnt.
+    private var pendingSeekSeconds: Double?
 
     public init() {}
 
@@ -96,6 +100,21 @@ public final class ViciousCoordinator: ObservableObject {
         guard let sid = activeSid else { return }
         if isPlaying { return }
 
+        // Fortsetzen nach Pause: Processor und Source-Node leben noch mitsamt
+        // ihrem Emulations-Stand (CPU-Register, Speicher, Position). Es reicht,
+        // die Audio-Engine wieder anzuwerfen — NICHT neu aufbauen, sonst begaenne
+        // der Song von vorn.
+        if engineProcessor != nil, sourceNode != nil {
+            do {
+                if !audioEngine.isRunning { try audioEngine.start() }
+                isPlaying = true
+                startUIUpdates()
+            } catch {
+                print("Fehler beim Fortsetzen der AVAudioEngine: \(error)")
+            }
+            return
+        }
+
         let mixer = audioEngine.mainMixerNode
         mixer.outputVolume = currentVolume * currentVolume
         var sampleRate = mixer.outputFormat(forBus: 0).sampleRate
@@ -113,6 +132,12 @@ public final class ViciousCoordinator: ObservableObject {
         _ = processor.loadSID(sidFile: sid)
         processor.setModelOverride(modelOverride.map { Double($0) })
         processor.initSubtune(sub: currentSubtune)
+        // Wurde im gestoppten Zustand vorgespult, hier an die Zielposition springen.
+        if let target = pendingSeekSeconds {
+            processor.seek(seconds: target)
+            visualsBuffer.updatePlaytime(target)
+            pendingSeekSeconds = nil
+        }
         // Die Master-Lautstaerke regelt ausschliesslich der Mixer (siehe unten,
         // quadratische psychoakustische Kurve). Der Processor rendert deshalb mit
         // seiner vollen Standard-Lautstaerke (1.0) — wuerde er hier zusaetzlich mit
@@ -190,6 +215,16 @@ public final class ViciousCoordinator: ObservableObject {
         }
     }
 
+    // Pause: haelt die Wiedergabe an, BEHAELT aber Processor, Source-Node und
+    // Emulations-Stand — play() setzt danach genau hier fort. Im Gegensatz zu
+    // stop(), das alles abbaut und an den Anfang zuruecksetzt.
+    public func pause() {
+        guard isPlaying else { return }
+        audioEngine.pause()
+        isPlaying = false
+        stopUIUpdates()
+    }
+
     public func stop() {
         audioEngine.stop()
         if let node = sourceNode {
@@ -200,7 +235,12 @@ public final class ViciousCoordinator: ObservableObject {
         engineProcessor = nil
         isPlaying = false
         stopUIUpdates()
-        
+
+        // Stop bedeutet „zurueck an den Anfang": Position und gemerkten Seek loeschen.
+        pendingSeekSeconds = nil
+        self.elapsedSeconds = 0.0
+        visualsBuffer.updatePlaytime(0.0)
+
         // Reset visuals
         self.envelopes = [0.0, 0.0, 0.0]
         self.frequencies = [0, 0, 0]
@@ -226,17 +266,23 @@ public final class ViciousCoordinator: ObservableObject {
     }
 
     public func seek(seconds: Double) {
+        let target = (seconds.isFinite && !seconds.isNaN) ? max(0.0, seconds) : 0.0
         if let processor = engineProcessor {
-            processor.seek(seconds: seconds)
-            visualsBuffer.updatePlaytime(seconds)
-            self.elapsedSeconds = seconds
+            // Laeuft oder pausiert: direkt im Emulator springen.
+            processor.seek(seconds: target)
+        } else {
+            // Gestoppt/frisch geladen: Zielposition merken, play() wendet sie an.
+            pendingSeekSeconds = target
         }
+        visualsBuffer.updatePlaytime(target)
+        self.elapsedSeconds = target
     }
 
     public func setSubtune(sub: Int) {
         guard sub >= 0 && sub < subtunesCount else { return }
         self.currentSubtune = sub
         self.elapsedSeconds = 0.0
+        self.pendingSeekSeconds = nil
         visualsBuffer.updatePlaytime(0.0)
 
         if let processor = engineProcessor {
@@ -245,12 +291,18 @@ public final class ViciousCoordinator: ObservableObject {
     }
 
     private func startUIUpdates() {
-        uiUpdateTimer = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { [weak self] _ in
+        // Im .common-Modus in die RunLoop haengen, damit der Timer AUCH waehrend
+        // eines Slider-Drags feuert. Slider-Tracking laeuft im Event-Tracking-Modus;
+        // ein Timer im Default-Modus pausiert dann und das Oszilloskop wuerde beim
+        // Ziehen des Volume-/Positions-Reglers einfrieren.
+        let timer = Timer(timeInterval: 0.02, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             Task { @MainActor in
                 self.updateUI()
             }
         }
+        RunLoop.main.add(timer, forMode: .common)
+        uiUpdateTimer = timer
     }
 
     private func stopUIUpdates() {

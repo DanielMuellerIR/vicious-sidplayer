@@ -167,7 +167,7 @@ public struct MainView: View {
                 // Main Panel
                 VStack(spacing: 0) {
                     // Controls View
-                    HStack(spacing: 12) {
+                    HStack(spacing: 10) {
                         Text("TUNE:")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(textSecCol)
@@ -189,10 +189,13 @@ public struct MainView: View {
                             showFileImporter = true
                         }
                         .font(.system(size: 12, weight: .medium))
-                        
+                        .foregroundColor(textCol)
+                        .help("SID-Datei(en) öffnen")
+
                         Toggle("AUTO NEXT", isOn: $autoNext)
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(textCol)
+                            .fixedSize()   // "AUTO NEXT" einzeilig, kein haesslicher Umbruch
 
                         // SID-Chip-Modell: Auto folgt der Datei-Praeferenz, 6581/8580
                         // erzwingen das jeweilige Modell (viele Tunes klingen nur auf
@@ -211,44 +214,73 @@ public struct MainView: View {
 
                         Spacer()
                         
+                        // Subtune-Umschaltung: eine SID-Datei kann mehrere Songs
+                        // ("Subtunes") enthalten. "2/5" = Subtune 2 von 5. Die Pfeile
+                        // schalten zum vorigen/naechsten Subtune (Akzentfarbe = klickbar).
                         if coordinator.subtunesCount > 1 {
-                            HStack(spacing: 6) {
-                                Button("◀") {
+                            HStack(spacing: 8) {
+                                Button(action: {
                                     let prev = (coordinator.currentSubtune - 1 + coordinator.subtunesCount) % coordinator.subtunesCount
                                     coordinator.setSubtune(sub: prev)
+                                }) {
+                                    Image(systemName: "chevron.left.circle.fill")
+                                        .font(.system(size: 16))
                                 }
-                                .font(.system(size: 11))
                                 .buttonStyle(BorderlessButtonStyle())
-                                
+                                .foregroundColor(accentCol)
+                                .help("Vorheriger Subtune")
+
                                 Text("\(coordinator.currentSubtune + 1)/\(coordinator.subtunesCount)")
                                     .font(.system(size: 12, weight: .bold))
                                     .foregroundColor(textCol)
-                                
-                                Button("▶") {
+                                    .fixedSize()   // Zahl nie wegkuerzen, auch bei engem Balken
+                                    .help("Subtune — ein Song innerhalb dieser SID-Datei")
+
+                                Button(action: {
                                     let next = (coordinator.currentSubtune + 1) % coordinator.subtunesCount
                                     coordinator.setSubtune(sub: next)
+                                }) {
+                                    Image(systemName: "chevron.right.circle.fill")
+                                        .font(.system(size: 16))
                                 }
-                                .font(.system(size: 11))
                                 .buttonStyle(BorderlessButtonStyle())
+                                .foregroundColor(accentCol)
+                                .help("Nächster Subtune")
                             }
                             .padding(.horizontal, 4)
                         }
-                        
-                        Button(coordinator.isPlaying ? "■ STOP" : "▶ PLAY") {
-                            // codereview-ok: Laden ist synchron; isTransitioning wird korrekt zurueckgesetzt (2026-07-01)
-                            guard !isTransitioning else { return }
-                            isTransitioning = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                                self.isTransitioning = false
+
+                        // Transport: 15 s zurueck · Play/Pause · 30 s vor · Stop.
+                        HStack(spacing: 12) {
+                            Button(action: { skip(by: -15) }) {
+                                Image(systemName: "gobackward.15").font(.system(size: 16))
                             }
-                            if coordinator.isPlaying {
-                                coordinator.stop()
-                            } else {
-                                coordinator.play()
+                            .buttonStyle(BorderlessButtonStyle())
+                            .foregroundColor(textCol)
+                            .help("15 Sekunden zurück")
+
+                            Button(action: { togglePlayPause() }) {
+                                Image(systemName: coordinator.isPlaying ? "pause.fill" : "play.fill")
+                                    .font(.system(size: 18))
                             }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .foregroundColor(coordinator.isPlaying ? accentCol : .green)
+                            .help(coordinator.isPlaying ? "Pause" : "Wiedergabe")
+
+                            Button(action: { skip(by: 30) }) {
+                                Image(systemName: "goforward.30").font(.system(size: 16))
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .foregroundColor(textCol)
+                            .help("30 Sekunden vor")
+
+                            Button(action: { coordinator.stop() }) {
+                                Image(systemName: "stop.fill").font(.system(size: 14))
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .foregroundColor(.red)
+                            .help("Stopp (zurück an den Anfang)")
                         }
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(coordinator.isPlaying ? .red : .green)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
@@ -299,7 +331,7 @@ public struct MainView: View {
                 }
                 .background(isLight ? Color.macLightSurface : Color.macDarkSurface)
             }
-            .frame(minWidth: 800, minHeight: 520)
+            .frame(minWidth: 980, minHeight: 540)
             
             // Drag overlay
             if dragOver {
@@ -381,6 +413,23 @@ public struct MainView: View {
 
     private func selectTrack(at index: Int) {
         loadTrack(index: index, autoplay: coordinator.isPlaying)
+    }
+
+    // Play/Pause umschalten: pause() haelt an und behaelt die Position, play() setzt
+    // dort fort (bzw. baut beim ersten Mal die Wiedergabe auf).
+    private func togglePlayPause() {
+        if coordinator.isPlaying {
+            coordinator.pause()
+        } else {
+            coordinator.play()
+        }
+    }
+
+    // Relatives Vor-/Zurueckspringen, auf [0, SCRUB_MAX] begrenzt. Funktioniert auch
+    // im pausierten/gestoppten Zustand (coordinator.seek puffert die Position dann).
+    private func skip(by delta: Double) {
+        let target = min(Double(SCRUB_MAX), max(0.0, coordinator.elapsedSeconds + delta))
+        coordinator.seek(seconds: target)
     }
 
     private func loadTrack(index: Int, autoplay: Bool) {
@@ -525,9 +574,16 @@ public struct MainView: View {
 
     private func loadLocalAudioFolder() {
         let fm = FileManager.default
-        // Scan several candidate directories for .sid files
+        // Kandidaten-Verzeichnisse in Prioritaets-Reihenfolge nach .sid durchsuchen.
         var candidateDirs: [URL] = []
+        // 1. Persoenlicher Musik-Ordner des Nutzers: ~/Music/Vicious SID Player/
+        //    Liegt AUSSERHALB des Repos, wird NICHT mit ausgeliefert/nach GitHub
+        //    gepusht. Hier eigene .sid-Dateien (auch in Unterordnern) ablegen — sie
+        //    werden beim Start automatisch in die Playlist geladen.
+        candidateDirs.append(fm.homeDirectoryForCurrentUser.appendingPathComponent("Music/Vicious SID Player"))
+        // 2. audio/-Ordner im Arbeitsverzeichnis (lokale Entwicklung via swift run).
         candidateDirs.append(URL(fileURLWithPath: fm.currentDirectoryPath).appendingPathComponent("audio"))
+        // 3. audio/-Ordner neben dem App-Bundle.
         if let bundlePath = Bundle.main.bundlePath as String? {
             let appDir = URL(fileURLWithPath: bundlePath).deletingLastPathComponent()
             candidateDirs.append(appDir.appendingPathComponent("audio"))
@@ -535,13 +591,24 @@ public struct MainView: View {
         for dir in candidateDirs {
             var isDir: ObjCBool = false
             guard fm.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else { continue }
-            guard let contents = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { continue }
-            let sids = contents.filter { $0.pathExtension.lowercased() == "sid" }
-                .sorted(by: { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending })
+            let sids = collectSIDs(in: dir, fm: fm)
             if sids.isEmpty { continue }
             handleDroppedURLs(sids)
-            return // Use first directory that contains SIDs
+            return // erstes Verzeichnis mit SIDs verwenden
         }
+    }
+
+    // Sammelt alle .sid-Dateien in dir REKURSIV (auch aus Unterordnern), natuerlich
+    // sortiert nach Pfad. So kann der Nutzer seine Sammlung beliebig verschachteln.
+    private func collectSIDs(in dir: URL, fm: FileManager) -> [URL] {
+        guard let enumerator = fm.enumerator(at: dir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else {
+            return []
+        }
+        var out: [URL] = []
+        for case let url as URL in enumerator where url.pathExtension.lowercased() == "sid" {
+            out.append(url)
+        }
+        return out.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
     }
 
     private func formatTime(_ sec: Double) -> String {
@@ -555,16 +622,7 @@ public struct MainView: View {
         NotificationCenter.default.addObserver(forName: NSNotification.Name("menuPlayStop"), object: nil, queue: .main) { _ in
             // codereview-ok: Task{@MainActor} noetig fuer Aktor-Isolation; Entfernen bricht Compile (2026-07-01)
             Task { @MainActor in
-                guard !isTransitioning else { return }
-                isTransitioning = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    self.isTransitioning = false
-                }
-                if coordinator.isPlaying {
-                    coordinator.stop()
-                } else {
-                    coordinator.play()
-                }
+                togglePlayPause()
             }
         }
         NotificationCenter.default.addObserver(forName: NSNotification.Name("menuNextTrack"), object: nil, queue: .main) { _ in
