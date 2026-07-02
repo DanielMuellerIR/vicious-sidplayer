@@ -907,8 +907,7 @@ public final class ViciousProcessor: Sendable {
             }
 
             if !finished {
-                let budget = clk_ratio
-                var budgetRemaining = budget
+                var budgetRemaining = clk_ratio
                 while CPUtime <= budgetRemaining {
                     pPC = PC
                     let res = CPU()
@@ -919,25 +918,12 @@ public final class ViciousProcessor: Sendable {
                         CPUtime += Double(cycles)
                     }
 
-                    if (memory[1] & 3) > 1 && pPC < 0xE000 && (PC == 0xEA31 || PC == 0xEA81) {
-                        finished = true
-                        break
-                    }
-                    if (addr == 0xDC05 || addr == 0xDC04) && (memory[1] & 3) != 0 && timerModeForCurrentSubtune() != 0 {
-                        frame_sampleperiod = Double(UInt16(memory[0xDC04]) | UInt16(memory[0xDC05]) << 8) / clk_ratio
-                        budgetRemaining = clk_ratio
-                    }
-                    if storadd >= 0xD420 && storadd < 0xD800 && (memory[1] & 3) != 0 {
-                        let isSec = SID_address[1] <= storadd && storadd < (SID_address[1] &+ 0x1F)
-                        let isThird = SID_address[2] <= storadd && storadd < (SID_address[2] &+ 0x1F)
-                        if !isSec && !isThird {
-                            memory[Int(storadd & 0xD41F)] = memory[Int(storadd)]
-                        }
-                    }
-                    // Whittaker workaround
-                    if addr == 0xD404 && (memory[0xD404] & 1) == 0 { ADSRstate[0] &= 0x3E }
-                    if addr == 0xD40B && (memory[0xD40B] & 1) == 0 { ADSRstate[1] &= 0x3E }
-                    if addr == 0xD412 && (memory[0xD412] & 1) == 0 { ADSRstate[2] &= 0x3E }
+                    let step = applyCPUStepSideEffects()
+                    if step.shouldBreak { break }
+                    // Nach einem CIA-Timer-Schreibzugriff das Rest-Budget neu setzen,
+                    // damit die restlichen Zyklen dieses Samples noch abgearbeitet
+                    // werden (nur der play()-Pfad braucht das, runFrameCPU nicht).
+                    if step.timerWritten { budgetRemaining = clk_ratio }
                 }
                 CPUtime -= clk_ratio
             }
@@ -1021,6 +1007,38 @@ public final class ViciousProcessor: Sendable {
         applyCurrentModel()
     }
 
+    // Seiteneffekte EINES CPU-Schritts, die sich play() und runFrameCPU() teilen:
+    // Kernal-Abbruch-Erkennung, CIA-Timer-Nachfuehrung (frame_sampleperiod),
+    // SID-Register-Spiegelung und der Whittaker-Workaround.
+    // Rueckgabe: shouldBreak = Aufrufer soll die CPU-Schleife verlassen;
+    // timerWritten = frame_sampleperiod wurde neu gesetzt (nur play() nutzt das,
+    // um sein Rest-Budget nachzuziehen).
+    @inline(__always)
+    private func applyCPUStepSideEffects() -> (shouldBreak: Bool, timerWritten: Bool) {
+        // codereview-ok: kein Funktionsimpact; korrekt portierte jsSID-Kernal-Bedingung (2026-07-01)
+        if (memory[1] & 3) > 1 && pPC < 0xE000 && (PC == 0xEA31 || PC == 0xEA81) {
+            finished = true
+            return (true, false)
+        }
+        var timerWritten = false
+        if (addr == 0xDC05 || addr == 0xDC04) && (memory[1] & 3) != 0 && timerModeForCurrentSubtune() != 0 {
+            frame_sampleperiod = Double(UInt16(memory[0xDC04]) | UInt16(memory[0xDC05]) << 8) / clk_ratio
+            timerWritten = true
+        }
+        if storadd >= 0xD420 && storadd < 0xD800 && (memory[1] & 3) != 0 {
+            let isSec = SID_address[1] <= storadd && storadd < (SID_address[1] &+ 0x1F)
+            let isThird = SID_address[2] <= storadd && storadd < (SID_address[2] &+ 0x1F)
+            if !isSec && !isThird {
+                memory[Int(storadd & 0xD41F)] = memory[Int(storadd)]
+            }
+        }
+        // Whittaker workaround
+        if addr == 0xD404 && (memory[0xD404] & 1) == 0 { ADSRstate[0] &= 0x3E }
+        if addr == 0xD40B && (memory[0xD40B] & 1) == 0 { ADSRstate[1] &= 0x3E }
+        if addr == 0xD412 && (memory[0xD412] & 1) == 0 { ADSRstate[2] &= 0x3E }
+        return (false, timerWritten)
+    }
+
     private func runFrameCPU() {
         finished = false
         PC = playaddr
@@ -1032,24 +1050,7 @@ public final class ViciousProcessor: Sendable {
             let res = CPU()
             if res >= 0xFE { finished = true; break }
             t += Double(cycles)
-            // codereview-ok: kein Funktionsimpact; korrekt portierte jsSID-Kernal-Bedingung (2026-07-01)
-            if (memory[1] & 3) > 1 && pPC < 0xE000 && (PC == 0xEA31 || PC == 0xEA81) {
-                finished = true
-                break
-            }
-            if (addr == 0xDC05 || addr == 0xDC04) && (memory[1] & 3) != 0 && timerModeForCurrentSubtune() != 0 {
-                frame_sampleperiod = Double(UInt16(memory[0xDC04]) | UInt16(memory[0xDC05]) << 8) / clk_ratio
-            }
-            if storadd >= 0xD420 && storadd < 0xD800 && (memory[1] & 3) != 0 {
-                let isSec = SID_address[1] <= storadd && storadd < (SID_address[1] &+ 0x1F)
-                let isThird = SID_address[2] <= storadd && storadd < (SID_address[2] &+ 0x1F)
-                if !isSec && !isThird {
-                    memory[Int(storadd & 0xD41F)] = memory[Int(storadd)]
-                }
-            }
-            if addr == 0xD404 && (memory[0xD404] & 1) == 0 { ADSRstate[0] &= 0x3E }
-            if addr == 0xD40B && (memory[0xD40B] & 1) == 0 { ADSRstate[1] &= 0x3E }
-            if addr == 0xD412 && (memory[0xD412] & 1) == 0 { ADSRstate[2] &= 0x3E }
+            if applyCPUStepSideEffects().shouldBreak { break }
         }
     }
 

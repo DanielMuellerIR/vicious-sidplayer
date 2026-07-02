@@ -27,6 +27,32 @@ AUDIO_DIR = HERE / 'audio'
 # Minifizierer
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _passthrough_string(src: str, i: int, out: list) -> int:
+    """
+    Hängt das an Position i beginnende String-/Template-Literal unverändert an
+    `out` an (inklusive Escapes und schließendem Anführungszeichen) und gibt den
+    Index direkt nach dem Literal zurück. Erwartet, dass src[i] ein
+    Anführungszeichen (", ' oder `) ist. Gemeinsame Hilfsfunktion für beide
+    Minifier-Durchläufe, damit Strings dort nie zerschossen werden.
+    """
+    n = len(src)
+    quote = src[i]
+    out.append(quote)
+    i += 1
+    while i < n:
+        ch = src[i]
+        if ch == '\\' and i + 1 < n:
+            out.append(ch)
+            out.append(src[i + 1])
+            i += 2
+            continue
+        out.append(ch)
+        i += 1
+        if ch == quote:
+            break
+    return i
+
+
 def strip_js_comments(src: str) -> str:
     """
     Entfernt JavaScript-Kommentare, ohne Strings oder Template-Literale
@@ -41,20 +67,7 @@ def strip_js_comments(src: str) -> str:
 
         # String-Literale durchreichen (mit Escapes).
         if c in ('"', "'", '`'):
-            quote = c
-            out.append(c)
-            i += 1
-            while i < n:
-                ch = src[i]
-                if ch == '\\' and i + 1 < n:
-                    out.append(ch)
-                    out.append(src[i + 1])
-                    i += 2
-                    continue
-                out.append(ch)
-                i += 1
-                if ch == quote:
-                    break
+            i = _passthrough_string(src, i, out)
             continue
 
         # Zeilenkommentar: alles bis zum Newline schlucken (Newline behalten).
@@ -89,20 +102,7 @@ def collapse_js_whitespace(src: str) -> str:
 
         # Strings durchreichen.
         if c in ('"', "'", '`'):
-            quote = c
-            out.append(c)
-            i += 1
-            while i < n:
-                ch = src[i]
-                if ch == '\\' and i + 1 < n:
-                    out.append(ch)
-                    out.append(src[i + 1])
-                    i += 2
-                    continue
-                out.append(ch)
-                i += 1
-                if ch == quote:
-                    break
+            i = _passthrough_string(src, i, out)
             continue
 
         # Whitespace-Block zusammenfassen.
