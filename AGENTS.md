@@ -3,7 +3,7 @@
 Universelle Referenz und Dokumentation für alle Coding-Agents und KI-Modelle.
 
 > **Projektname:** Vicious SID Player (Anspielung auf Sid Vicious)
-> **Status:** v1.1.1 — HTML5 + native macOS SwiftUI App inkl. Quick-Look-Extension.
+> **Status:** v1.2.0 — HTML5 + native macOS SwiftUI App inkl. Quick-Look-Extension, Shuffle, Media-Tasten.
 
 ---
 
