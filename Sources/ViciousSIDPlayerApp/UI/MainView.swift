@@ -2,6 +2,7 @@ import SwiftUI
 import ViciousSIDPlayerCore
 import UniformTypeIdentifiers
 import os
+import MediaPlayer
 #if canImport(AppKit)
 import AppKit
 #endif
@@ -36,6 +37,11 @@ public struct MainView: View {
     @State private var theme: PlayerTheme = .dark
     @State private var volume: Float = 1.0
     @State private var autoNext = true
+    // Zufallswiedergabe. @AppStorage sichert den Zustand in UserDefaults, bleibt
+    // also ueber App-Neustarts erhalten.
+    @AppStorage("shuffleEnabled") private var shuffle = false
+    // MPRemoteCommandCenter nur einmal verdrahten (onAppear kann mehrfach feuern).
+    @State private var mediaCommandsConfigured = false
     
     // Track lists
     @State private var userTracks: [Track] = []
@@ -253,8 +259,15 @@ public struct MainView: View {
                             .padding(.horizontal, 4)
                         }
 
-                        // Transport: 15 s zurueck · Play/Pause · 30 s vor · Stop.
+                        // Transport: Shuffle · 15 s zurueck · Play/Pause · 30 s vor · Stop.
                         HStack(spacing: 12) {
+                            Button(action: { shuffle.toggle() }) {
+                                Image(systemName: "shuffle").font(.system(size: 15))
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .foregroundColor(shuffle ? accentCol : textSecCol)
+                            .help(shuffle ? "Zufallswiedergabe: an" : "Zufallswiedergabe: aus")
+
                             Button(action: { skip(by: -15) }) {
                                 Image(systemName: "gobackward.15").font(.system(size: 16))
                             }
@@ -404,6 +417,7 @@ public struct MainView: View {
                 didInitialize = true
                 coordinator.setVolume(volume)
                 setupMenuNotificationHandlers()
+                setupMediaRemoteCommands()
                 // Start-Playlist aus ~/Music/Vicious SID Player/ laden.
                 loadLocalAudioFolder()
             }
@@ -414,6 +428,11 @@ public struct MainView: View {
             applyAppearance()
         }
         .onChange(of: theme) { _ in applyAppearance() }
+        // "Now Playing"-Infos bei jedem relevanten Zustandswechsel aktualisieren
+        // (nicht bei jedem elapsed-Tick — Titel/Status/Position genuegen dem System).
+        .onChange(of: coordinator.isPlaying) { _ in updateNowPlayingInfo() }
+        .onChange(of: coordinator.isPaused) { _ in updateNowPlayingInfo() }
+        .onChange(of: coordinator.trackName) { _ in updateNowPlayingInfo() }
         .onChange(of: coordinator.elapsedSeconds) { elapsed in
             if autoNext && elapsed >= Double(SCRUB_MAX) {
                 // Erst alle weiteren Subtunes DIESER SID-Datei durchspielen, dann
@@ -423,8 +442,7 @@ public struct MainView: View {
                     coordinator.setSubtune(sub: coordinator.currentSubtune + 1)
                 } else if allTracks.count > 1 {
                     coordinator.stop()
-                    let next = (currentTrackIdx + 1) % allTracks.count
-                    loadTrack(index: next, autoplay: true)
+                    loadTrack(index: advanceTrackIndex(), autoplay: true)
                 } else {
                     coordinator.stop()
                 }
@@ -461,6 +479,19 @@ public struct MainView: View {
     private func skip(by delta: Double) {
         let target = min(Double(SCRUB_MAX), max(0.0, coordinator.elapsedSeconds + delta))
         coordinator.seek(seconds: target)
+    }
+
+    // Index des naechsten Tracks: bei aktiver Zufallswiedergabe ein zufaelliger
+    // (nicht der aktuelle), sonst der naechste in Reihenfolge (mit Umlauf).
+    private func advanceTrackIndex() -> Int {
+        let count = allTracks.count
+        guard count > 1 else { return currentTrackIdx }
+        if shuffle {
+            var idx = Int.random(in: 0..<count)
+            if idx == currentTrackIdx { idx = (idx + 1) % count }
+            return idx
+        }
+        return (currentTrackIdx + 1) % count
     }
 
     private func loadTrack(index: Int, autoplay: Bool) {
@@ -508,7 +539,7 @@ public struct MainView: View {
         }
     }
 
-    private func handleDroppedURLs(_ urls: [URL]) {
+    private func handleDroppedURLs(_ urls: [URL], isStartupLoad: Bool = false) {
         loadLog.info("handleDroppedURLs: \(urls.count, privacy: .public) Eingabe-URL(s)")
         self.errorMessage = nil
         var sidFiles: [URL] = []
@@ -590,9 +621,17 @@ public struct MainView: View {
             self.userTracks.append(contentsOf: tracksToAdd)
         }
 
-        // Instantly select and play
+        // Sofort einen Track auswaehlen und abspielen. Beim Start mit aktiver
+        // Zufallswiedergabe einen zufaelligen statt des ersten (alphabetisch)
+        // Tracks — so beginnt jeder App-Start mit einem anderen Song.
         if firstTrackToPlayIdx != -1 {
-            loadTrack(index: firstTrackToPlayIdx, autoplay: true)
+            let playIdx: Int
+            if isStartupLoad && shuffle && allTracks.count > 1 {
+                playIdx = Int.random(in: 0..<allTracks.count)
+            } else {
+                playIdx = firstTrackToPlayIdx
+            }
+            loadTrack(index: playIdx, autoplay: true)
         }
     }
 
@@ -614,7 +653,7 @@ public struct MainView: View {
         guard fm.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else { return }
         let sids = collectSIDs(in: dir, fm: fm)
         guard !sids.isEmpty else { return }
-        handleDroppedURLs(sids)
+        handleDroppedURLs(sids, isStartupLoad: true)
     }
 
     // Sammelt alle .sid-Dateien in dir REKURSIV (auch aus Unterordnern), natuerlich
@@ -647,10 +686,20 @@ public struct MainView: View {
         NotificationCenter.default.addObserver(forName: NSNotification.Name("menuNextTrack"), object: nil, queue: .main) { _ in
             Task { @MainActor in
                 if allTracks.count > 1 {
-                    let next = (currentTrackIdx + 1) % allTracks.count
-                    loadTrack(index: next, autoplay: coordinator.isPlaying)
+                    loadTrack(index: advanceTrackIndex(), autoplay: coordinator.isPlaying)
                 }
             }
+        }
+        // Media-Tasten: expliziter Play/Pause/Stop (zusaetzlich zum Toggle) — Play
+        // und Pause posten getrennt, weil das System sie getrennt schickt.
+        NotificationCenter.default.addObserver(forName: NSNotification.Name("mediaPlay"), object: nil, queue: .main) { _ in
+            Task { @MainActor in coordinator.play() }
+        }
+        NotificationCenter.default.addObserver(forName: NSNotification.Name("mediaPause"), object: nil, queue: .main) { _ in
+            Task { @MainActor in coordinator.pause() }
+        }
+        NotificationCenter.default.addObserver(forName: NSNotification.Name("menuStop"), object: nil, queue: .main) { _ in
+            Task { @MainActor in coordinator.stop() }
         }
         NotificationCenter.default.addObserver(forName: NSNotification.Name("menuPrevTrack"), object: nil, queue: .main) { _ in
             Task { @MainActor in
@@ -671,6 +720,60 @@ public struct MainView: View {
                 drainPendingOpenURLs()
             }
         }
+    }
+
+    // Media-Tasten (F7/F8/F9 bzw. Touch Bar / AirPods): Registriert die App im
+    // System als "Now Playing"-App. Die Kommandos posten dieselben Notifications
+    // wie die Menuepunkte, sodass beide Quellen einheitlich verarbeitet werden.
+    private func setupMediaRemoteCommands() {
+        guard !mediaCommandsConfigured else { return }
+        mediaCommandsConfigured = true
+
+        let center = MPRemoteCommandCenter.shared()
+        center.togglePlayPauseCommand.addTarget { _ in
+            NotificationCenter.default.post(name: NSNotification.Name("menuPlayStop"), object: nil)
+            return .success
+        }
+        center.playCommand.addTarget { _ in
+            NotificationCenter.default.post(name: NSNotification.Name("mediaPlay"), object: nil)
+            return .success
+        }
+        center.pauseCommand.addTarget { _ in
+            NotificationCenter.default.post(name: NSNotification.Name("mediaPause"), object: nil)
+            return .success
+        }
+        center.stopCommand.addTarget { _ in
+            NotificationCenter.default.post(name: NSNotification.Name("menuStop"), object: nil)
+            return .success
+        }
+        center.nextTrackCommand.addTarget { _ in
+            NotificationCenter.default.post(name: NSNotification.Name("menuNextTrack"), object: nil)
+            return .success
+        }
+        center.previousTrackCommand.addTarget { _ in
+            NotificationCenter.default.post(name: NSNotification.Name("menuPrevTrack"), object: nil)
+            return .success
+        }
+    }
+
+    // Haelt die "Now Playing"-Infos des Systems aktuell (Titel, Komponist, Dauer,
+    // Position, laeuft/pausiert) — Voraussetzung dafuer, dass die Media-Tasten an
+    // diese App geroutet werden. Ohne echte Songlength-DB dient SCRUB_MAX als Dauer.
+    private func updateNowPlayingInfo() {
+        let infoCenter = MPNowPlayingInfoCenter.default()
+        guard currentTrackIdx >= 0 else {
+            infoCenter.nowPlayingInfo = nil
+            infoCenter.playbackState = .stopped
+            return
+        }
+        infoCenter.nowPlayingInfo = [
+            MPMediaItemPropertyTitle: coordinator.trackName,
+            MPMediaItemPropertyArtist: coordinator.composer,
+            MPMediaItemPropertyPlaybackDuration: Double(SCRUB_MAX),
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: coordinator.elapsedSeconds,
+            MPNowPlayingInfoPropertyPlaybackRate: coordinator.isPlaying ? 1.0 : 0.0
+        ]
+        infoCenter.playbackState = coordinator.isPlaying ? .playing : (coordinator.isPaused ? .paused : .stopped)
     }
 
     // Zieht die vom AppDelegate gepufferten Open-URLs und laedt sie wie ein Drop.
