@@ -122,7 +122,7 @@ cat <<EOF > "$CONTENTS_DIR/Info.plist"
     <key>CFBundleName</key>
     <string>Vicious SID Player</string>
     <key>NSHumanReadableCopyright</key>
-    <string>© 2026 Daniel Müller. Lizenz: WTFPL.</string>
+    <string>© 2026 Daniel Müller</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

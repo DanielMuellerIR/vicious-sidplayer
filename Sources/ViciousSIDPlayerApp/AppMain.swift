@@ -50,7 +50,7 @@ struct ViciousSIDPlayerApp: App {
                     let credits = NSAttributedString(
                         string: "Entwickelt von Daniel Müller.\n\n"
                             + "SID-/6502-Emulation portiert aus jsSID 0.9.1 von Hermit (Mihály Horváth).\n\n"
-                            + "Lizenz: WTFPL (Do What The Fuck You Want To Public License).",
+                            + "Lizenz: WTFPL (Do What The Fuck You Want To Public License).\n",
                         attributes: [
                             .font: NSFont.systemFont(ofSize: 11),
                             .foregroundColor: NSColor.labelColor

@@ -192,9 +192,16 @@ public struct MainView: View {
                             }
                         }
                         .pickerStyle(DefaultPickerStyle())
-                        .frame(width: 150)
-                        
-                        Button("DATEI") {
+                        // Breiter Songnamen-Picker: zeigt mehr vom Titel und fuellt den
+                        // zuvor ungenutzten Platz oben. Definite Breite, weil ein
+                        // maxWidth-Rahmen den Pop-up-Button optisch NICHT fuellt. 260
+                        // ist so gewaehlt, dass es bei Minimalbreite (unten) auch dann
+                        // noch passt, wenn der Subtune-Block sichtbar ist — dann fuellt
+                        // der Picker den Platz komplett; ohne Subtunes bleibt ein kleiner
+                        // Rest zum Transport.
+                        .frame(width: 260)
+
+                        Button("Öffnen…") {
                             showFileImporter = true
                         }
                         .font(.system(size: 12, weight: .medium))
@@ -221,8 +228,8 @@ public struct MainView: View {
                         .frame(width: 110)
                         .help("SID-Chip-Modell — Auto folgt der Datei")
 
-                        Spacer()
-                        
+                        Spacer(minLength: 8)
+
                         // Subtune-Umschaltung: eine SID-Datei kann mehrere Songs
                         // ("Subtunes") enthalten. "2/5" = Subtune 2 von 5. Die Pfeile
                         // schalten zum vorigen/naechsten Subtune (Akzentfarbe = klickbar).
@@ -291,7 +298,9 @@ public struct MainView: View {
                             .help("30 Sekunden vor")
 
                             Button(action: { coordinator.stop() }) {
-                                Image(systemName: "stop.fill").font(.system(size: 14))
+                                Image(systemName: "stop.fill")
+                                    .font(.system(size: 14))
+                                    .offset(y: 2)   // wirkte optisch zu hoch — 2 px tiefer
                             }
                             .buttonStyle(BorderlessButtonStyle())
                             .foregroundColor(.red)
@@ -347,7 +356,7 @@ public struct MainView: View {
                 }
                 .background(isLight ? Color.macLightSurface : Color.macDarkSurface)
             }
-            .frame(minWidth: 980, minHeight: 540)
+            .frame(minWidth: 1140, minHeight: 540)
             
             // Drag overlay
             if dragOver {
