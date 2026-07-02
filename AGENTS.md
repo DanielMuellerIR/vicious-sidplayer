@@ -106,6 +106,12 @@ swift test
 
 **Wiedergabe-Zustandsmaschine (Coordinator):** `play()` baut den Processor neu ODER setzt nach `pause()` fort (Engine via `audioEngine.pause()`/`start()`, Emulations-Stand bleibt erhalten). `stop()` baut alles ab und setzt an den Anfang zurück. `seek()` springt bei aktivem Processor direkt, sonst wird die Zielposition in `pendingSeekSeconds` gepuffert und beim nächsten `play()` angewandt (Seek im gestoppten Zustand). Der UI-/Visualizer-Timer läuft im `.common`-RunLoop-Modus, damit das Oszilloskop auch während eines Slider-Drags weiterläuft.
 
+**Zufallswiedergabe:** Toggle neben dem Play-Button; Zustand in `@AppStorage("shuffleEnabled")` (UserDefaults, persistent). Bei aktivem Shuffle wählt `advanceTrackIndex()` einen zufälligen Track (Auto-Next + Nächster-Titel), und beim App-Start (`handleDroppedURLs(isStartupLoad:)`) startet ein zufälliger Song.
+
+**Media-Tasten / Now Playing:** Die App registriert sich via `MPRemoteCommandCenter` (Play/Pause/Stop, Titel vor/zurück → F7/F8/F9, Touch Bar, AirPods) und meldet Titel/Position an `MPNowPlayingInfoCenter` (`setupMediaRemoteCommands()`/`updateNowPlayingInfo()`). Die Remote-Kommandos posten dieselben Notifications wie die Menüpunkte. Erfordert ein echtes `.app`-Bundle (nicht das nackte `swift run`-Binary).
+
+**App-Appearance:** fest ans Theme gekoppelt (`darkAqua`/`aqua` via AppDelegate + `applyAppearance()`), sonst rendern System-Controls (Picker/Toggle) unlesbar dunkel auf dunkel.
+
 **Dark/Light Mode (HTML):** CSS Custom Properties (`--bg-primary`, `--bg-panel`, etc.) mit `@media (prefers-color-scheme: dark)` Auto-Detection und manuellem Toggle via `.theme-dark` / `.theme-light` Klassen.
 
 **DMG-Background:** Retina-kompatibel via `tiffutil -cathidpicheck` (1x 600×600 + 2x 1200×1200 TIFF).
