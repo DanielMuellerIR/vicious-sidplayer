@@ -99,7 +99,11 @@ python3 build.py --no-min         # ohne Minifizierung
 bash build_app.sh                 # → "Vicious SID Player.app"
 ```
 
-Die App sucht beim Start nach einem `audio/`-Verzeichnis neben der Anwendung und lädt dort gefundene `.sid`-Dateien automatisch in die Playlist.
+Die App baut ihre Playlist beim Start aus dem ersten dieser Verzeichnisse, das `.sid`-Dateien enthält (rekursiv durchsucht, inklusive Unterordner):
+
+1. `~/Music/Vicious SID Player/` — die persönliche Sammlung. Diesen Ordner anlegen und `.sid`-Dateien (beliebig in Unterordner verschachtelt) hineinlegen; sie werden beim Start automatisch geladen. Der Ordner liegt außerhalb des Repositorys und wird nie veröffentlicht.
+2. Ein `audio/`-Verzeichnis im Arbeitsverzeichnis (lokale Entwicklung via `swift run`).
+3. Ein `audio/`-Verzeichnis neben dem App-Bundle.
 
 Für Release-Builds signiert `build_app.sh` automatisch mit der Developer-ID
 `Developer ID Application: Daniel Mueller (9QSWKSR4NQ)`, sofern sie im

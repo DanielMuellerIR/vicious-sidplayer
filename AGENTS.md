@@ -102,7 +102,9 @@ swift test
 - AudioWorklet-Engine als Plain Class (kein `extends AudioWorkletProcessor`)
 - Noise-Waveform + ENV3-Readback korrigiert
 
-**Keine gebundelten SIDs:** Copyright-geschützte SID-Dateien werden nicht im Repo oder in Builds mitgeliefert. Die App scannt lokale `audio/`-Verzeichnisse beim Start.
+**Keine gebundelten SIDs:** Copyright-geschützte SID-Dateien werden nicht im Repo oder in Builds mitgeliefert. Die App baut ihre Start-Playlist aus dem ersten Verzeichnis mit `.sid`-Dateien (rekursiv): `~/Music/Vicious SID Player/` (persönliche Sammlung, außerhalb des Repos), dann `audio/` im Arbeitsverzeichnis, dann `audio/` neben dem Bundle. Siehe `loadLocalAudioFolder()`/`collectSIDs()` in `MainView.swift`.
+
+**Wiedergabe-Zustandsmaschine (Coordinator):** `play()` baut den Processor neu ODER setzt nach `pause()` fort (Engine via `audioEngine.pause()`/`start()`, Emulations-Stand bleibt erhalten). `stop()` baut alles ab und setzt an den Anfang zurück. `seek()` springt bei aktivem Processor direkt, sonst wird die Zielposition in `pendingSeekSeconds` gepuffert und beim nächsten `play()` angewandt (Seek im gestoppten Zustand). Der UI-/Visualizer-Timer läuft im `.common`-RunLoop-Modus, damit das Oszilloskop auch während eines Slider-Drags weiterläuft.
 
 **Dark/Light Mode (HTML):** CSS Custom Properties (`--bg-primary`, `--bg-panel`, etc.) mit `@media (prefers-color-scheme: dark)` Auto-Detection und manuellem Toggle via `.theme-dark` / `.theme-light` Klassen.
 
