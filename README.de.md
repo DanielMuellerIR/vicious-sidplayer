@@ -39,7 +39,49 @@ Der HTML5-Player benötigt keinen Download über die Releases hinaus: Die Datei 
 - **Quick-Look-Vorschau (macOS-App)**: `.sid`-Datei im Finder markieren und Leertaste drücken — der Song spielt sofort, dazu erscheinen Titel, Komponist und Copyright samt Song-Umschaltung bei mehreren Subtunes. Einrichtung: siehe [Quick-Look-Vorschau](#quick-look-vorschau-für-sid-dateien-macos).
 - **Dark / Light Mode**: Automatische Erkennung der Systemeinstellung oder manuelles Umschalten.
 - **Playlist mit Duplikaterkennung**: Bereits geladene Titel werden nicht doppelt aufgenommen. Die Playlist kann jederzeit geleert werden.
+- **Shuffle**: Zufallswiedergabe, die über Neustarts erhalten bleibt; ist sie aktiv, startet beim App-Start ein zufälliger Song.
+- **Media-Tasten**: Play/Pause, Stop und Titelsprung über F7/F8/F9, Touch Bar und AirPods — die App registriert sich als *Now Playing*-App des Systems.
 - **Keine externen Assets**: Die gesamte Oberfläche (inkl. macOS-Fensterdekorationen und Icons) ist rein prozedural in CSS bzw. SwiftUI Canvas gezeichnet.
+
+---
+
+## Bedienung & Tastenkürzel (macOS-App)
+
+Jedes Bedienelement der App hat einen Tooltip: den Zeiger einen Moment darauf ruhen lassen, dann erscheint eine kurze Erklärung. macOS zeigt Tooltips erst nach einer Verzögerung an, deshalb übersieht man sie leicht — hier die vollständige Referenz.
+
+**Steuerleiste**
+
+| Element | Funktion |
+|---|---|
+| Tune-Menü | Titel aus der Playlist auswählen. |
+| Öffnen… | Eine oder mehrere `.sid`-Dateien öffnen. |
+| Auto Next | Am Songende automatisch weiter — erst durch die verbleibenden Subtunes der Datei, dann zum nächsten Titel. |
+| SID: Auto / 6581 / 8580 | Chip-Modell. `Auto` folgt der Präferenz der Datei; eine feste Wahl erzwingt das Modell und wirkt live auf den laufenden Song. |
+| ‹ n / m › | Subtune-Navigation. Eine `.sid`-Datei kann mehrere Songs („Subtunes") enthalten; `2 / 5` heißt Subtune 2 von 5. |
+| Shuffle | Zufallswiedergabe. Die Einstellung bleibt über Neustarts erhalten; ist sie an, startet bei jedem App-Start ein zufälliger Song. |
+| ↺ 15 | 15 Sekunden zurück. |
+| Play / Pause | Wiedergabe starten oder pausieren (Pause behält die Position und friert das Oszilloskop ein). |
+| 30 ↻ | 30 Sekunden vor. |
+| Stop | Anhalten und an den Anfang zurück. |
+| Positions-Slider | Springen — funktioniert auch im pausierten oder gestoppten Zustand; Play startet dann von dort. |
+| Lautstärke-Slider | Wiedergabelautstärke. |
+| Papierkorb (Playlist-Kopf) | Playlist leeren. |
+
+Titel, Komponist und Info in der Seitenleiste sowie lange Titelnamen zeigen ihren vollständigen Text ebenfalls als Tooltip, wenn er abgeschnitten ist.
+
+**Tastenkürzel**
+
+| Taste | Aktion |
+|---|---|
+| Leertaste | Play / Pause |
+| ⌘P | Play / Pause |
+| ⌘→ | Nächster Titel |
+| ⌘← | Vorheriger Titel |
+| ⌘T | Hell-/Dunkelmodus umschalten |
+
+**Media-Tasten**
+
+Die App registriert sich als *Now Playing*-App des Systems, daher funktionieren die Media-Tasten (F7 / F8 / F9), die Touch Bar und die AirPods-Steuerung: Play/Pause, Stop und Titel vor/zurück. Titel und Wiedergabeposition erscheinen zudem im Kontrollzentrum.
 
 ---
 

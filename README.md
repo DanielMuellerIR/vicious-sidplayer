@@ -39,7 +39,49 @@ The HTML5 player needs no download beyond that: the file `vicious-sid-player.htm
 - **Quick Look preview (macOS app)**: Select a `.sid` file in Finder and press Space — the tune plays instantly, with title, composer, and copyright plus subtune switching for multi-song files. Setup: see [Quick Look preview](#quick-look-preview-for-sid-files-macos).
 - **Dark / light mode**: Follows the system setting automatically or toggles manually.
 - **Playlist with duplicate detection**: Already loaded tunes are not added twice. The playlist can be cleared at any time.
+- **Shuffle**: Random playback that persists across restarts; a random song starts on launch when enabled.
+- **Media keys**: Play/pause, stop, and track skipping via F7/F8/F9, the Touch Bar, and AirPods — the app registers as the system's *Now Playing* app.
 - **No external assets**: The entire interface (including macOS window decorations and icons) is drawn procedurally in CSS and SwiftUI Canvas.
+
+---
+
+## Controls & shortcuts (macOS app)
+
+Every control in the app has a tooltip: rest the pointer on it for a moment and a short explanation appears. macOS only shows tooltips after a delay, so they are easy to miss — here is the full reference.
+
+**Control bar**
+
+| Control | Function |
+|---|---|
+| Tune menu | Pick a track from the playlist. |
+| Öffnen… | Open one or more `.sid` files. |
+| Auto Next | When a tune ends, continue automatically — first through the remaining subtunes of the file, then to the next track. |
+| SID: Auto / 6581 / 8580 | Chip model. `Auto` follows the file's preference; a fixed choice forces that model and applies live to the running song. |
+| ‹ n / m › | Subtune navigation. A `.sid` file can hold several songs ("subtunes"); `2 / 5` means subtune 2 of 5. |
+| Shuffle | Random playback. The setting persists across restarts; while on, a random song starts each time the app launches. |
+| ↺ 15 | Skip 15 seconds back. |
+| Play / Pause | Start playback, or pause (pausing keeps the current position and freezes the oscilloscope). |
+| 30 ↻ | Skip 30 seconds forward. |
+| Stop | Stop and return to the beginning. |
+| Position slider | Seek — works even while paused or stopped; pressing Play then starts from that point. |
+| Volume slider | Playback volume. |
+| Trash (playlist header) | Clear the playlist. |
+
+Title, composer, and info in the sidebar, as well as long track names, also show their full text as a tooltip when truncated.
+
+**Keyboard shortcuts**
+
+| Key | Action |
+|---|---|
+| Space | Play / pause |
+| ⌘P | Play / pause |
+| ⌘→ | Next track |
+| ⌘← | Previous track |
+| ⌘T | Toggle dark / light theme |
+
+**Media keys**
+
+The app registers as the system's *Now Playing* app, so the media keys (F7 / F8 / F9), the Touch Bar, and AirPods controls work: play/pause, stop, and previous/next track. Title and playback position also appear in Control Center.
 
 ---
 

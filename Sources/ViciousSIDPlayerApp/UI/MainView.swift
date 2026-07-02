@@ -212,6 +212,7 @@ public struct MainView: View {
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(textCol)
                             .fixedSize()   // "AUTO NEXT" einzeilig, kein haesslicher Umbruch
+                            .help("Am Songende automatisch weiter — erst die Subtunes der Datei, dann der nächste Titel")
 
                         // SID-Chip-Modell: Auto folgt der Datei-Praeferenz, 6581/8580
                         // erzwingen das jeweilige Modell (viele Tunes klingen nur auf
@@ -326,6 +327,7 @@ public struct MainView: View {
                             set: { val in coordinator.seek(seconds: val) }
                         ), in: 0...Double(SCRUB_MAX))
                         .accentColor(accentCol)
+                        .help("Position — auch im pausierten oder gestoppten Zustand nutzbar; Play startet dann von hier")
                         
                         Text(formatTime(Double(SCRUB_MAX)))
                             .font(.system(size: 12, design: .monospaced))
@@ -342,6 +344,7 @@ public struct MainView: View {
                             .onChange(of: volume) { val in
                                 coordinator.setVolume(val)
                             }
+                            .help("Lautstärke")
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
