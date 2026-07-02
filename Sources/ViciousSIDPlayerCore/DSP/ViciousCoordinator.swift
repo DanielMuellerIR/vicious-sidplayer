@@ -113,7 +113,10 @@ public final class ViciousCoordinator: ObservableObject {
         _ = processor.loadSID(sidFile: sid)
         processor.setModelOverride(modelOverride.map { Double($0) })
         processor.initSubtune(sub: currentSubtune)
-        processor.setVolume(vol: Double(currentVolume))
+        // Die Master-Lautstaerke regelt ausschliesslich der Mixer (siehe unten,
+        // quadratische psychoakustische Kurve). Der Processor rendert deshalb mit
+        // seiner vollen Standard-Lautstaerke (1.0) — wuerde er hier zusaetzlich mit
+        // currentVolume skaliert, laege der Regler effektiv bei currentVolume^3.
         self.engineProcessor = processor
 
         let buffer = visualsBuffer
@@ -208,11 +211,10 @@ public final class ViciousCoordinator: ObservableObject {
 
     public func setVolume(_ vol: Float) {
         self.currentVolume = vol
-        // Psychoacoustic volume mapping (quadratic)
+        // Psychoakustische Lautstaerke-Kurve (quadratisch) — einzige Stelle, an der
+        // die Master-Lautstaerke angewandt wird. Der Processor bleibt bei 1.0, damit
+        // der Regler nicht doppelt (effektiv kubisch) wirkt.
         audioEngine.mainMixerNode.outputVolume = vol * vol
-        if let processor = engineProcessor {
-            processor.setVolume(vol: Double(vol))
-        }
     }
 
     // SID-Modell-Override setzen (nil = Auto). Wirkt live auf den laufenden Song.

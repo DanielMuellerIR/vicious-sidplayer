@@ -163,12 +163,14 @@ export class SidPlayer {
    * Does NOT touch AudioContext — safe to call anytime.
    */
   async loadBuffer(uint8, subtune = 0) {
-    const myGen = ++this.loadGen;
+    // loadBuffer laeuft komplett synchron durch (kein await), daher waere ein
+    // eigener Generations-Check hier wirkungslos und wurde entfernt. Der Counter
+    // wird dennoch erhoeht, damit ein evtl. noch laufender asynchroner load()
+    // (mit await fetch) sich anschliessend selbst als stale erkennt.
+    this.loadGen++;
 
     const meta = parseSidHeader(uint8);
     if (!meta) throw new Error('Invalid SID file (bad header)');
-
-    if (myGen !== this.loadGen) return; // stale
 
     this.pendingData = uint8;
     this.pendingSubtune = subtune;

@@ -56,8 +56,7 @@ class SidPlayerProcessor {
     let initialized = 0;
     let finished = 0;
     let playtime = 0;
-    let ended = 0;
-    
+
     let clk_ratio = C64_PAL_CPUCLK / samplerate;
     let frame_sampleperiod = samplerate / PAL_FRAMERATE;
     
@@ -227,7 +226,6 @@ class SidPlayerProcessor {
         finished = 0;
         CPUtime = 0;
         playtime = 0;
-        ended = 0;
         initialized = 1;
       }
     }
@@ -673,7 +671,7 @@ class SidPlayerProcessor {
         if (r >= 0xFE) { finished = 1; break; }
         t += cycles;
         if ((memory[1] & 3) > 1 && pPC < 0xE000 && (PC == 0xEA31 || PC == 0xEA81)) { finished = 1; break; }
-        if ((addr == 0xDC05 || addr == 0xDC04) && (memory[1] & 3) && timermode[subtune]) {
+        if ((addr == 0xDC05 || addr == 0xDC04) && (memory[1] & 3) && timerModeForSubtune()) {
           frame_sampleperiod = (memory[0xDC04] + memory[0xDC05] * 256) / clk_ratio;
         }
         if (storadd >= 0xD420 && storadd < 0xD800 && (memory[1] & 3)) {

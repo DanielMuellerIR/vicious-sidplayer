@@ -401,16 +401,12 @@ public struct MainView: View {
         // Stop current play
         coordinator.stop()
         
-        let fileURL: URL
-        if let url = track.fileURL {
-            fileURL = url
-        } else {
-            // Locate builtin track
-            guard let resolvedURL = findTrackURL(filename: track.id) else {
-                self.errorMessage = "Built-in track '\(track.id)' not found."
-                return
-            }
-            fileURL = resolvedURL
+        // User-Tracks tragen immer ihre Datei-URL. Built-in-Tracks gibt es in
+        // diesem Player bewusst nicht (es werden keine SIDs gebuendelt), daher
+        // ist der fileURL == nil-Fall nur eine defensive Absicherung.
+        guard let fileURL = track.fileURL else {
+            self.errorMessage = "Track ohne Datei-URL: \(track.name)"
+            return
         }
 
         // codereview-ok: defer haelt Scope ueber den Read; ausserdem App nicht sandboxed (2026-07-01)
@@ -518,26 +514,6 @@ public struct MainView: View {
         if firstTrackToPlayIdx != -1 {
             loadTrack(index: firstTrackToPlayIdx, autoplay: true)
         }
-    }
-
-    private func findTrackURL(filename: String) -> URL? {
-        // 1. Relative execution path (for local testing)
-        let fm = FileManager.default
-        let relativeURL = URL(fileURLWithPath: fm.currentDirectoryPath).appendingPathComponent("audio").appendingPathComponent(filename)
-        if fm.fileExists(atPath: relativeURL.path) {
-            return relativeURL
-        }
-        
-        // 2. Adjacent audio directory to app bundle
-        if let bundlePath = Bundle.main.bundlePath as String? {
-            let appDir = URL(fileURLWithPath: bundlePath).deletingLastPathComponent()
-            let nearApp = appDir.appendingPathComponent("audio").appendingPathComponent(filename)
-            if fm.fileExists(atPath: nearApp.path) {
-                return nearApp
-            }
-        }
-        
-        return nil
     }
 
     private func clearPlaylist() {
