@@ -142,8 +142,36 @@ Entitlements der Extension verwerfen. Test: `qlmanage -p audio/<datei>.sid`
   Sprachumschalt-Zeile oben (Konvention Skill `github-publish`). Beide
   Fassungen enthalten zudem eine Quick-Look-Installationsanleitung.
 
-- [ ] **Todo 4**: Player-Konkurrenzanalyse. Von <https://hvsc.de/players> alle verlinkten
-  SID-Player durchgehen; bei denen mit einsehbarem Quellcode (GitHub o. Ae.) pruefen,
-  welche Features sie bieten, die diesem Player fehlen (z. B. 6581/8580-Modellwahl,
-  exakte Songlength-DB statt fixem Scrub-Limit, Mehrfach-SID/Stereo, STIL-Infos,
-  Audio-Export). Ergebnis als Feature-Gap-Liste festhalten.
+- [x] **Todo 4**: Player-Konkurrenzanalyse durchgefuehrt (2026-07-02). Ergebnis als
+  Feature-Gap-Liste unten unter „Feature-Gaps / Roadmap-Kandidaten".
+
+---
+
+## Feature-Gaps / Roadmap-Kandidaten
+
+Ergebnis der Konkurrenzanalyse (2026-07-02) gegen gaengige SID-Player
+(libsidplayfp/sidplayfp, JSIDPlay2, DeepSID, WebSID, ACID64, SIDPLAY/Mac u. a.).
+Groesste echte Luecken dieses Players, nach Nutzen/Aufwand priorisiert:
+
+1. **Audio-Export (WAV) + Headless-CLI-Ausbau** — kein Export vorhanden. WAV via
+   schneller-als-Echtzeit-Render ist klein–mittel im Aufwand, benoetigt kein
+   externes Asset und passt zum Ziel der Skript-/Headless-Steuerbarkeit. Baut auf
+   `Tools/sidcheck/main.swift` auf (dort gibt es bereits einen `--dump`-Modus).
+2. **Multi-SID / Stereo (2SID/3SID)** — aktuell nur 1 SID; Multi-SID-Tunes werden
+   unvollstaendig wiedergegeben. Groesster *Korrektheits*-Gewinn, philosophiekonform
+   (reine Emulation). Groesserer Aufwand: zweite/dritte SID-Instanz, Adress-Dekodierung
+   aus dem PSID/RSID-Header (v3/v4), Stereo-Mixing. Verwandt: Pro-Chip-Modellwahl
+   (`preferred_SID_model[0/1/2]` schreibt aktuell denselben Wert).
+3. **Optionale Songlength-DB (`Songlengths.md5`)** — ersetzt das feste Scrub-Limit
+   durch echte Laengen. Nur philosophiekonform, wenn der Nutzer die DB-Datei selbst
+   auswaehlt (kein Buendeln — es werden bewusst keine externen Assets ausgeliefert).
+   MD5 ueber die Datei + INI-Parser, mittlerer Aufwand.
+4. **Voice-Muting + Filter-Toggle** — einzelne der 3 Stimmen live stummschalten und
+   den SID-Filter an/aus. Zwei sehr kleine, synergetische Ergaenzungen zum
+   Oszilloskop (Analyse-Nutzen).
+5. **Fast-Forward / genaueres Seek** — Emulation schneller-als-Echtzeit laufen lassen.
+   Kleiner UX-Gewinn, gut mit der Emulations-Schleife kombinierbar.
+
+Bewusst niedrig/nicht empfohlen: STIL-Infos (externes Asset + HVSC-Pfad-Abhaengigkeit),
+Hardware-/ASID-Ausgabe (Nische), Audio-Fingerprint-Erkennung (sehr grosser Aufwand),
+reSIDfp-Vollport (nur inkrementelle Filter-Verbesserung realistisch).
