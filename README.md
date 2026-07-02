@@ -99,11 +99,7 @@ python3 build.py --no-min         # without minification
 bash build_app.sh                 # → "Vicious SID Player.app"
 ```
 
-On startup the app builds its playlist from the first of these locations that contains `.sid` files (searched recursively, including subfolders):
-
-1. `~/Music/Vicious SID Player/` — your personal collection. Create this folder and drop `.sid` files (in any subfolder structure) there; they load automatically on launch. This lives outside the repository and is never published.
-2. An `audio/` directory in the current working directory (local development via `swift run`).
-3. An `audio/` directory next to the application bundle.
+On startup the app builds its playlist from `~/Music/Vicious SID Player/`, searched recursively (subfolders included). Create this folder and drop your `.sid` files there; they load automatically on launch. It lives outside the repository and is never published.
 
 For release builds, `build_app.sh` automatically signs with the Developer ID
 `Developer ID Application: Daniel Mueller (9QSWKSR4NQ)` if it is available in
