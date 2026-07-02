@@ -3,7 +3,7 @@
 Universelle Referenz und Dokumentation für alle Coding-Agents und KI-Modelle.
 
 > **Projektname:** Vicious SID Player (Anspielung auf Sid Vicious)
-> **Status:** v1.1.0 — HTML5 + native macOS SwiftUI App inkl. Quick-Look-Extension.
+> **Status:** v1.1.1 — HTML5 + native macOS SwiftUI App inkl. Quick-Look-Extension.
 
 ---
 
@@ -25,7 +25,8 @@ p_sidplayer/
 ├── AGENTS.md                 ← diese Datei
 ├── VERSION                   ← Versionsnummer
 ├── LICENSE                   ← WTFPL
-├── README.md                 ← GitHub-README
+├── README.md                 ← GitHub-README (englisch, Standardfassung)
+├── README.de.md              ← GitHub-README (deutsch)
 ├── vicious-sid-player.html    ← fertiger Single-File-Build (generiert, gitignored)
 ├── sidplayer.js              ← Client-seitiger SID-Player-Wrapper
 ├── sid-player-worklet.js     ← AudioWorklet-Prozessor (C64 CPU & SID Core)
@@ -136,10 +137,10 @@ Entitlements der Extension verwerfen. Test: `qlmanage -p audio/<datei>.sid`
 
 - [x] **Todo 3**: GitHub-Auftritt mit README-Icon und Social-Preview-Bild aus dem App-Icon aufwerten.
 
-- [ ] **Todo 5**: README zweisprachig machen: `README.md` als englische
+- [x] **Todo 5**: README zweisprachig machen: `README.md` als englische
   Standardfassung, `README.de.md` als deutsche Fassung, beide mit
-  Sprachumschalt-Zeile oben (Konvention Skill `github-publish`). Aktuell ist
-  die README einsprachig deutsch.
+  Sprachumschalt-Zeile oben (Konvention Skill `github-publish`). Beide
+  Fassungen enthalten zudem eine Quick-Look-Installationsanleitung.
 
 - [ ] **Todo 4**: Player-Konkurrenzanalyse. Von <https://hvsc.de/players> alle verlinkten
   SID-Player durchgehen; bei denen mit einsehbarem Quellcode (GitHub o. Ae.) pruefen,

@@ -1,3 +1,5 @@
+**🌐 Sprache / Language:** [English](README.md) · [Deutsch](README.de.md)
+
 <p align="center">
   <img src="src/AppIcon.png" width="128" alt="Vicious SID Player Icon">
 </p>
@@ -5,62 +7,80 @@
 <h1 align="center">Vicious SID Player</h1>
 
 <p align="center">
-  <strong>Commodore-64-SID-Chiptune-Player als Single-File-HTML5-Version und native SwiftUI-macOS-App.</strong>
+  <strong>Commodore 64 SID chiptune player as a single-file HTML5 version and a native SwiftUI macOS app.</strong>
 </p>
 
 <p align="center">
-  <img src="src/Screenshot.png" width="760" alt="Vicious SID Player – native macOS-App mit Echtzeit-Oszilloskop, hier mit „Cybernoid II“ von Jeroen Tel">
+  <img src="src/Screenshot.png" width="760" alt="Vicious SID Player – native macOS app with real-time oscilloscope, playing “Cybernoid II” by Jeroen Tel">
 </p>
 
-Ein eigenständiger Commodore-64-SID-Musikplayer in zwei Varianten:
+A self-contained Commodore 64 SID music player in two variants:
 
-1. **HTML5 (`vicious-sid-player.html`)** — Eine einzelne HTML-Datei (~50 KB), die ohne Webserver direkt per Doppelklick aus dem Dateisystem funktioniert.
-2. **Native macOS App (`Vicious SID Player.app`)** — SwiftUI-Desktop-Anwendung mit `AVAudioEngine` und Echtzeit-Oszilloskop.
+1. **HTML5 (`vicious-sid-player.html`)** — a single HTML file (~50 KB) that runs straight from the file system via double click, no web server required.
+2. **Native macOS app (`Vicious SID Player.app`)** — SwiftUI desktop application with `AVAudioEngine` and a real-time oscilloscope.
 
-Beide Varianten enthalten keine SID-Dateien. Musikstücke werden per Drag & Drop, Datei-Dialog oder (macOS-App) Doppelklick auf eine `.sid`-Datei im Finder geladen.
+Neither variant ships any SID files. Tunes are loaded via drag & drop, file dialog, or (macOS app) by double-clicking a `.sid` file in Finder.
 
 ---
 
 ## Download
 
-Fertige Builds der macOS-App stehen als notarisierte DMGs auf der [Releases-Seite](https://github.com/DanielMuellerIR/vicious-sidplayer/releases) bereit. DMG herunterladen, öffnen und die App in den Programme-Ordner ziehen.
+Ready-made builds of the macOS app are available as notarized DMGs on the [Releases page](https://github.com/DanielMuellerIR/vicious-sidplayer/releases). Download the DMG, open it, and drag the app into your Applications folder.
 
-Der HTML5-Player benötigt keinen Download über die Releases hinaus: Die Datei `vicious-sid-player.html` lässt sich direkt im Browser öffnen.
-
----
-
-## Funktionsumfang
-
-- **Drag & Drop**: Einzelne `.sid`-Dateien oder ganze Ordner können auf den Player gezogen werden. Die Wiedergabe startet sofort.
-- **Echtzeit-Oszilloskop**: Zeigt die Wellenformen der drei SID-Stimmen (Dreieck, Sägezahn, Puls, Rauschen) samt Frequenzen, Gate-Status und ADSR-Hüllkurven.
-- **SID-Modellwahl (macOS-App)**: Picker zwischen `Auto`, `6581` und `8580`. `Auto` folgt der in der SID-Datei hinterlegten Präferenz; die feste Wahl erzwingt das jeweilige Chip-Modell und wirkt live auf den laufenden Song (viele Tunes klingen nur auf dem ursprünglich gemeinten Chip korrekt).
-- **Quick-Look-Vorschau (macOS-App)**: `.sid`-Datei im Finder markieren und Leertaste drücken — der Song spielt sofort, dazu erscheinen Titel, Komponist und Copyright samt Song-Umschaltung bei mehreren Subtunes. Die Vorschau-Erweiterung liegt im App-Bundle und ist aktiv, sobald die App einmal gestartet wurde.
-- **Dark / Light Mode**: Automatische Erkennung der Systemeinstellung oder manuelles Umschalten.
-- **Playlist mit Duplikaterkennung**: Bereits geladene Titel werden nicht doppelt aufgenommen. Die Playlist kann jederzeit geleert werden.
-- **Keine externen Assets**: Die gesamte Oberfläche (inkl. macOS-Fensterdekorationen und Icons) ist rein prozedural in CSS bzw. SwiftUI Canvas gezeichnet.
+The HTML5 player needs no download beyond that: the file `vicious-sid-player.html` opens directly in the browser.
 
 ---
 
-## Technischer Hintergrund
+## Features
 
-### SID-Emulation
+- **Drag & drop**: Drop single `.sid` files or entire folders onto the player. Playback starts immediately.
+- **Real-time oscilloscope**: Shows the waveforms of the three SID voices (triangle, sawtooth, pulse, noise) along with frequencies, gate status, and ADSR envelopes.
+- **SID model selection (macOS app)**: Picker with `Auto`, `6581`, and `8580`. `Auto` follows the preference stored in the SID file; a fixed choice forces the respective chip model and applies live to the running song (many tunes only sound right on the chip they were originally written for).
+- **Quick Look preview (macOS app)**: Select a `.sid` file in Finder and press Space — the tune plays instantly, with title, composer, and copyright plus subtune switching for multi-song files. Setup: see [Quick Look preview](#quick-look-preview-for-sid-files-macos).
+- **Dark / light mode**: Follows the system setting automatically or toggles manually.
+- **Playlist with duplicate detection**: Already loaded tunes are not added twice. The playlist can be cleared at any time.
+- **No external assets**: The entire interface (including macOS window decorations and icons) is drawn procedurally in CSS and SwiftUI Canvas.
 
-Der Emulator für den MOS 6581/8580 SID-Chip und den 6502-CPU-Core basiert auf **jsSID 0.9.1** von Hermit (Mihály Horváth, 2016, WTFPL-Lizenz).
+---
 
-Gegenüber dem Original wurden folgende Korrekturen vorgenommen:
+## Quick Look preview for .sid files (macOS)
 
-- **6502-Opcode-Maske**: `IR & 0xF0` statt `IR & 0xC0` für implizierte Opcodes. Die fehlerhafte Maske führte dazu, dass Befehle wie `INX`, `TAY`, `PHP` und `PLP` nicht ausgeführt wurden — viele Songs blieben stumm oder froren ein.
-- **AudioWorklet-Architektur**: Die Engine wurde als eigenständige Klasse implementiert statt als Unterklasse von `AudioWorkletProcessor`, was den Konstruktorfehler im Browser beseitigt.
-- **Noise-Waveform und ENV3-Readback**: An die korrekte jsSID-Referenz angeglichen.
-- **Swift-Port**: Korrekte 24-Bit-XOR-Verschiebungen für kombinierte Wellenformen und Array-Schutzguards gegen Out-of-Bounds-Zugriffe.
+The app bundle includes a Quick Look extension that plays `.sid` files directly in the Finder preview. There is nothing to install separately:
 
-### Architektur
+1. Drag `Vicious SID Player.app` into the Applications folder (the DMG contains a shortcut).
+2. Launch the app once — this registers the extension and the `.sid` file type with macOS.
+3. Select a `.sid` file in Finder and press the space bar: the tune starts playing and shows title, composer, and copyright, with buttons to switch between subtunes.
 
-| Schicht | HTML5 | macOS (Swift) |
+If no preview appears:
+
+- Make sure the extension is enabled: open System Settings, search for “Extensions”, and enable **Vicious SID Quick Look** under Quick Look.
+- Reset the Quick Look cache in Terminal: `qlmanage -r`, then press Space on the file again.
+- Test the preview directly from Terminal: `qlmanage -p /path/to/tune.sid`.
+
+Requires macOS 13 or later.
+
+---
+
+## Technical background
+
+### SID emulation
+
+The emulator for the MOS 6581/8580 SID chip and the 6502 CPU core is based on **jsSID 0.9.1** by Hermit (Mihály Horváth, 2016, WTFPL license).
+
+The following fixes were applied on top of the original:
+
+- **6502 opcode mask**: `IR & 0xF0` instead of `IR & 0xC0` for implied opcodes. The faulty mask kept instructions such as `INX`, `TAY`, `PHP`, and `PLP` from executing — many songs stayed silent or froze.
+- **AudioWorklet architecture**: The engine is implemented as a standalone class instead of a subclass of `AudioWorkletProcessor`, which removes the constructor error in the browser.
+- **Noise waveform and ENV3 readback**: Aligned with the correct jsSID reference.
+- **Swift port**: Correct 24-bit XOR shifts for combined waveforms and array guards against out-of-bounds access.
+
+### Architecture
+
+| Layer | HTML5 | macOS (Swift) |
 |---|---|---|
 | Parser | `sidplayer.js` | `SidParser.swift` |
-| DSP / Emulator | `sid-player-worklet.js` (AudioWorklet) | `ViciousProcessor.swift` (`AVAudioSourceNode`) |
-| UI | Vanilla JS + CSS Custom Properties | SwiftUI + Canvas |
+| DSP / emulator | `sid-player-worklet.js` (AudioWorklet) | `ViciousProcessor.swift` (`AVAudioSourceNode`) |
+| UI | Vanilla JS + CSS custom properties | SwiftUI + Canvas |
 
 ---
 
@@ -70,32 +90,36 @@ Gegenüber dem Original wurden folgende Korrekturen vorgenommen:
 
 ```bash
 python3 build.py                  # → vicious-sid-player.html (~50 KB)
-python3 build.py --no-min         # ohne Minifizierung
+python3 build.py --no-min         # without minification
 ```
 
-### macOS App
+### macOS app
 
 ```bash
 bash build_app.sh                 # → "Vicious SID Player.app"
 ```
 
-Die App sucht beim Start nach einem `audio/`-Verzeichnis neben der Anwendung und lädt dort gefundene `.sid`-Dateien automatisch in die Playlist.
+On startup the app looks for an `audio/` directory next to the application and automatically adds any `.sid` files found there to the playlist.
 
-Für Release-Builds signiert `build_app.sh` automatisch mit der Developer-ID
-`Developer ID Application: Daniel Mueller (9QSWKSR4NQ)`, sofern sie im
-Schlüsselbund verfügbar ist. Lokale unsignierte Builds sind mit
-`SIGN_APP=0 bash build_app.sh` möglich.
+For release builds, `build_app.sh` automatically signs with the Developer ID
+`Developer ID Application: Daniel Mueller (9QSWKSR4NQ)` if it is available in
+the keychain. Local unsigned builds are possible with
+`SIGN_APP=0 bash build_app.sh`.
 
-### DMG (für Releases)
+The Quick Look extension is built as part of the app bundle
+(`Contents/PlugIns/ViciousSIDQuickLook.appex`) and is therefore included in
+every app build and DMG automatically.
+
+### DMG (for releases)
 
 ```bash
 bash build_dmg.sh                 # → build/Vicious SID Player.dmg
-bash build_dmg.sh --notarize      # DMG signieren, notarisieren und stapeln
+bash build_dmg.sh --notarize      # sign, notarize, and staple the DMG
 ```
 
-Das DMG enthält ein Retina-kompatibles Hintergrundbild (1x/2x TIFF via `tiffutil`).
-Für die Notarisierung wird ein Keychain-Profil erwartet, standardmäßig
-`SavageProtrackerNotary`. Es kann einmalig interaktiv angelegt werden:
+The DMG contains a Retina-compatible background image (1x/2x TIFF via `tiffutil`).
+Notarization expects a keychain profile, `SavageProtrackerNotary` by default.
+It can be created once interactively:
 
 ```bash
 xcrun notarytool store-credentials SavageProtrackerNotary
@@ -109,22 +133,22 @@ swift test
 
 ---
 
-## GitHub-Veröffentlichung
+## Publishing to GitHub
 
 ```bash
 bash publish_github.sh --dry-run --release
 bash publish_github.sh --release
 ```
 
-Das Veröffentlichungsskript setzt `origin` auf
-`https://github.com/DanielMuellerIR/vicious-sidplayer.git`, blockt versehentlich
-getrackte Audio- und Release-Artefakte und erzeugt bei `--release` den passenden
-GitHub-Release-Eintrag mit DMG-Asset.
+The publishing script sets `origin` to
+`https://github.com/DanielMuellerIR/vicious-sidplayer.git`, blocks accidentally
+tracked audio and release artifacts, and with `--release` creates the matching
+GitHub release entry with the DMG asset.
 
-## Herkunft
+## Origin
 
-Die SID- und CPU-Emulation wurde aus dem JavaScript-Projekt **jsSID** von Hermit portiert und um die oben genannten Bugfixes erweitert. Die native macOS-App ist eine vollständige Neuimplementierung in Swift.
+The SID and CPU emulation was ported from the JavaScript project **jsSID** by Hermit and extended with the bugfixes listed above. The native macOS app is a complete reimplementation in Swift.
 
-## Lizenz
+## License
 
-**WTFPL** — siehe [LICENSE](LICENSE).
+**WTFPL** — see [LICENSE](LICENSE).
