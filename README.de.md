@@ -156,15 +156,16 @@ jedem App-Build und DMG enthalten.
 
 ```bash
 bash build_dmg.sh                 # → build/Vicious SID Player.dmg
-bash build_dmg.sh --notarize      # DMG signieren, notarisieren und stapeln
+NOTARY_PROFILE=<profil> bash build_dmg.sh --notarize   # DMG signieren, notarisieren und stapeln
 ```
 
 Das DMG enthält ein Retina-kompatibles Hintergrundbild (1x/2x TIFF via `tiffutil`).
-Für die Notarisierung wird ein Keychain-Profil erwartet, standardmäßig
-`SavageProtrackerNotary`. Es kann einmalig interaktiv angelegt werden:
+Für die Notarisierung wird ein notarytool-Keychain-Profil erwartet, übergeben
+über die Umgebungsvariable `NOTARY_PROFILE`. Es kann einmalig interaktiv
+angelegt werden:
 
 ```bash
-xcrun notarytool store-credentials SavageProtrackerNotary
+xcrun notarytool store-credentials <profil>
 ```
 
 ### Tests

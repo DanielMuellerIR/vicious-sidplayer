@@ -155,10 +155,13 @@ Entitlements der Extension verwerfen. Test: `qlmanage -p audio/<datei>.sid`
 - [x] **Todo 4**: Player-Konkurrenzanalyse durchgefuehrt (2026-07-02). Ergebnis als
   Feature-Gap-Liste unten unter „Feature-Gaps / Roadmap-Kandidaten".
 
-- [ ] **Todo 6**: Public-Repo-Hygiene: Denylist-Treffer in LICENSE, READMEs,
-  `build_app.sh`/`build_dmg.sh`/`publish_github.sh` und `AppMain.swift` pruefen
-  und generalisieren (Session-Start-Hook meldet sie wiederholt; Entscheidung
-  steht seit 2026-07-03 aus).
+- [x] **Todo 6**: Public-Repo-Hygiene: entschieden 2026-07-05. Die Treffer auf
+  den Autorennamen (LICENSE, READMEs, About-Dialog, Signing-Identity) sind
+  gewollte oeffentliche Autorenschaft — das Repo steht dafuer als `report-only`
+  in der zentralen Ausnahme-Liste, und der Session-Start-Hook schweigt bei
+  dieser Policy jetzt. Zusaetzlich bereinigt: privater Nextcloud-Pfad (jetzt
+  Einstellungen-Dialog) und projektfremder Notary-Profilname (`NOTARY_PROFILE`
+  ist jetzt Pflicht-Env fuer `build_dmg.sh --notarize`, Fail-fast vor dem Build).
 
 - [x] **Todo 7**: Quick-Look-Buttons im Finder per Klick testen — von Daniel
   manuell getestet, funktioniert (2026-07-05).

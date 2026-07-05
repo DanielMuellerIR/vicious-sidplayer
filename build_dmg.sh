@@ -10,7 +10,9 @@ FINAL_DMG="${BUILD_DIR}/${DMG_NAME}.dmg"
 MOUNT_DIR="/Volumes/${VOL_NAME}"
 NOTARIZE=0
 FINDER_LAYOUT=1
-NOTARY_PROFILE="${NOTARY_PROFILE:-SavageProtrackerNotary}"
+# Kein Default: der Profilname ist umgebungsspezifisch (Keychain des Build-Macs)
+# und gehoert nicht ins public Repo. --notarize verlangt NOTARY_PROFILE als Env.
+NOTARY_PROFILE="${NOTARY_PROFILE:-}"
 APPLE_TEAM_ID="${APPLE_TEAM_ID:-9QSWKSR4NQ}"
 CODESIGN_IDENTITY="${CODESIGN_IDENTITY:-Developer ID Application: Daniel Mueller ($APPLE_TEAM_ID)}"
 SIGN_DMG="${SIGN_DMG:-auto}"
@@ -23,7 +25,7 @@ Usage: bash build_dmg.sh [--notarize] [--no-finder-layout]
   --no-finder-layout  Skip Finder/AppleScript icon layout, useful on headless runs.
 
 Environment:
-  NOTARY_PROFILE      Keychain profile for notarytool (default: SavageProtrackerNotary).
+  NOTARY_PROFILE      Keychain profile for notarytool (required for --notarize).
   SIGN_DMG            auto/1/0, controls Developer ID signing of the DMG.
 EOF
 }
@@ -49,6 +51,15 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Fail-fast VOR dem (minutenlangen) DMG-Build: --notarize ohne Profilname
+# wuerde sonst erst ganz am Ende abbrechen und das fertige DMG unnotarisiert
+# zuruecklassen.
+if [[ "$NOTARIZE" == "1" && -z "$NOTARY_PROFILE" ]]; then
+    echo "ABBRUCH: --notarize braucht NOTARY_PROFILE (Name des notarytool-Keychain-Profils)." >&2
+    echo "Beispiel: NOTARY_PROFILE=MeinNotaryProfil bash build_dmg.sh --notarize" >&2
+    exit 1
+fi
 
 cleanup() {
     if hdiutil info | grep -Fq "$MOUNT_DIR"; then
