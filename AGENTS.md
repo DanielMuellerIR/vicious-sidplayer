@@ -3,7 +3,7 @@
 Universelle Referenz und Dokumentation für alle Coding-Agents und KI-Modelle.
 
 > **Projektname:** Vicious SID Player (Anspielung auf Sid Vicious)
-> **Status:** v1.2.0 — HTML5 + native macOS SwiftUI App inkl. Quick-Look-Extension, Shuffle, Media-Tasten.
+> **Status:** v1.3.0 — HTML5 + native macOS SwiftUI App inkl. Quick-Look-Extension, Shuffle, Media-Tasten, Einstellungen-Dialog (Autoplay-Ordner).
 
 ---
 
@@ -45,6 +45,7 @@ p_sidplayer/
 │   ├── ViciousSIDPlayerCore/
 │   │   ├── Parser/
 │   │   │   └── SidParser.swift
+│   │   ├── AutoplayFolder.swift            ← Autoplay-Ordner-Auflösung (testbar)
 │   │   └── DSP/
 │   │       ├── ViciousProcessor.swift      ← C64 CPU + SID Emulator (Swift)
 │   │       └── ViciousCoordinator.swift    ← AVAudioEngine Host
@@ -52,6 +53,7 @@ p_sidplayer/
 │   │   ├── AppMain.swift
 │   │   └── UI/
 │   │       ├── Theme.swift
+│   │       ├── SettingsView.swift          ← Einstellungen (Cmd+,): Autoplay-Ordner
 │   │       ├── MainView.swift
 │   │       └── OscilloscopeView.swift
 │   └── ViciousSIDQuickLook/
@@ -102,7 +104,7 @@ swift test
 - AudioWorklet-Engine als Plain Class (kein `extends AudioWorkletProcessor`)
 - Noise-Waveform + ENV3-Readback korrigiert
 
-**Keine gebundelten SIDs:** Copyright-geschützte SID-Dateien werden nicht im Repo oder in Builds mitgeliefert. Die App baut ihre Start-Playlist ausschließlich aus dem ersten existierenden dieser Ordner (rekursiv, persönliche Sammlung außerhalb des Repos): `~/Nextcloud/Musik/sid/Auswahl/`, sonst `~/Music/Vicious SID Player/`. Siehe `loadLocalAudioFolder()`/`collectSIDs()` in `MainView.swift`.
+**Keine gebundelten SIDs:** Copyright-geschützte SID-Dateien werden nicht im Repo oder in Builds mitgeliefert. Die App baut ihre Start-Playlist aus einem konfigurierbaren Autoplay-Ordner (rekursiv, persönliche Sammlung außerhalb des Repos): wählbar im Einstellungen-Dialog (Cmd+,, `SettingsView.swift`, UserDefaults-Key `autoplayFolderPath`), Default `~/Music/Vicious SID Player/`. Auflösungslogik testbar in `AutoplayFolder.resolve` (Core); Laden via `loadLocalAudioFolder()`/`collectSIDs()` in `MainView.swift`. Eine Änderung in den Einstellungen lädt die Playlist sofort neu.
 
 **Wiedergabe-Zustandsmaschine (Coordinator):** `play()` baut den Processor neu ODER setzt nach `pause()` fort (Engine via `audioEngine.pause()`/`start()`, Emulations-Stand bleibt erhalten). `stop()` baut alles ab und setzt an den Anfang zurück. `seek()` springt bei aktivem Processor direkt, sonst wird die Zielposition in `pendingSeekSeconds` gepuffert und beim nächsten `play()` angewandt (Seek im gestoppten Zustand). Der UI-/Visualizer-Timer läuft im `.common`-RunLoop-Modus, damit das Oszilloskop auch während eines Slider-Drags weiterläuft.
 
@@ -158,8 +160,8 @@ Entitlements der Extension verwerfen. Test: `qlmanage -p audio/<datei>.sid`
   und generalisieren (Session-Start-Hook meldet sie wiederholt; Entscheidung
   steht seit 2026-07-03 aus).
 
-- [ ] **Todo 7**: Quick-Look-Buttons im Finder per Klick testen (Autoplay
-  funktioniert; ob Klicks in der Preview durchkommen, ist ungetestet).
+- [x] **Todo 7**: Quick-Look-Buttons im Finder per Klick testen — von Daniel
+  manuell getestet, funktioniert (2026-07-05).
 
 ---
 

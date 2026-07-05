@@ -193,4 +193,32 @@ final class ViciousTests: XCTestCase {
         XCTAssertEqual(sid.loadAddr, 0x1000)
         XCTAssertEqual([UInt8](sid.binaryData.prefix(3)), [0xA9, 0x0F, 0x60])
     }
+
+    // Autoplay-Ordner-Aufloesung (Einstellungen-Dialog): konfigurierter Ordner
+    // gewinnt, wenn er existiert; sonst Standard-Ordner; sonst nil.
+    func testAutoplayFolderResolve() {
+        let home = URL(fileURLWithPath: "/Users/test", isDirectory: true)
+        let defaultDir = home.appendingPathComponent(AutoplayFolder.defaultRelativePath, isDirectory: true)
+
+        // Konfigurierter Ordner existiert -> er gewinnt.
+        XCTAssertEqual(
+            AutoplayFolder.resolve(configuredPath: "/Volumes/SIDs", home: home) { $0.path == "/Volumes/SIDs" }?.path,
+            "/Volumes/SIDs"
+        )
+        // Konfigurierter Ordner fehlt -> Fallback auf den Standard-Ordner.
+        XCTAssertEqual(
+            AutoplayFolder.resolve(configuredPath: "/Volumes/Weg", home: home) { $0.path == defaultDir.path },
+            defaultDir
+        )
+        // Nichts konfiguriert ("" bzw. nur Whitespace) -> Standard-Ordner.
+        XCTAssertEqual(
+            AutoplayFolder.resolve(configuredPath: "  ", home: home) { $0.path == defaultDir.path },
+            defaultDir
+        )
+        // Gar kein Ordner existiert -> nil (App laedt nichts).
+        XCTAssertNil(AutoplayFolder.resolve(configuredPath: "", home: home) { _ in false })
+        // "~" im konfigurierten Pfad wird expandiert (kein woertliches "~" im Ergebnis).
+        let tilde = AutoplayFolder.resolve(configuredPath: "~/sid", home: home) { _ in true }
+        XCTAssertEqual(tilde?.path.contains("~"), false)
+    }
 }

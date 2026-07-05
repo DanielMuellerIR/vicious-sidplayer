@@ -94,5 +94,11 @@ struct ViciousSIDPlayerApp: App {
             }
             #endif
         }
+
+        // Einstellungen-Fenster (App-Menue -> "Einstellungen…", Cmd+,).
+        // Aktuell nur der konfigurierbare Autoplay-Ordner (siehe SettingsView).
+        Settings {
+            SettingsView()
+        }
     }
 }

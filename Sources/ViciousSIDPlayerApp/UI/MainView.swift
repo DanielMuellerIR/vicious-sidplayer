@@ -40,6 +40,10 @@ public struct MainView: View {
     // Zufallswiedergabe. @AppStorage sichert den Zustand in UserDefaults, bleibt
     // also ueber App-Neustarts erhalten.
     @AppStorage("shuffleEnabled") private var shuffle = false
+    // Autoplay-Ordner aus den Einstellungen (Cmd+,). "" = Standard-Ordner.
+    // Gleicher UserDefaults-Key wie in SettingsView — Aenderungen dort landen
+    // hier sofort (onChange laedt die Playlist neu).
+    @AppStorage("autoplayFolderPath") private var autoplayFolderPath = ""
     // MPRemoteCommandCenter nur einmal verdrahten (onAppear kann mehrfach feuern).
     @State private var mediaCommandsConfigured = false
     
@@ -430,7 +434,7 @@ public struct MainView: View {
                 coordinator.setVolume(volume)
                 setupMenuNotificationHandlers()
                 setupMediaRemoteCommands()
-                // Start-Playlist aus ~/Nextcloud/Musik/sid/Auswahl/ laden.
+                // Start-Playlist aus dem Autoplay-Ordner laden (siehe Einstellungen).
                 loadLocalAudioFolder()
             }
             // Dateien, die per Doppelklick/"Oeffnen mit" die App gestartet haben,
@@ -440,6 +444,12 @@ public struct MainView: View {
             applyAppearance()
         }
         .onChange(of: theme) { _ in applyAppearance() }
+        // Autoplay-Ordner in den Einstellungen geaendert -> Playlist sofort aus
+        // dem neuen Ordner aufbauen (statt erst beim naechsten App-Start).
+        .onChange(of: autoplayFolderPath) { _ in
+            clearPlaylist()
+            loadLocalAudioFolder()
+        }
         // "Now Playing"-Infos bei jedem relevanten Zustandswechsel aktualisieren
         // (nicht bei jedem elapsed-Tick — Titel/Status/Position genuegen dem System).
         .onChange(of: coordinator.isPlaying) { _ in updateNowPlayingInfo() }
@@ -656,22 +666,12 @@ public struct MainView: View {
 
     private func loadLocalAudioFolder() {
         let fm = FileManager.default
-        // Start-Playlist aus dem persoenlichen Musik-Ordner laden (rekursiv, inkl.
-        // Unterordner). Kandidaten in dieser Reihenfolge — der erste existierende
-        // gewinnt:
-        //   1. ~/Nextcloud/Musik/sid/Auswahl/  (Cloud-Sync, auf allen Macs identisch)
-        //   2. ~/Music/Vicious SID Player/     (klassischer Standard-Ordner)
-        // Beide liegen AUSSERHALB des Repos, werden nie mit ausgeliefert/gepusht.
-        // Hier eigene .sid-Dateien ablegen — sie werden beim Start automatisch geladen.
-        let home = fm.homeDirectoryForCurrentUser
-        let candidates = [
-            home.appendingPathComponent("Nextcloud/Musik/sid/Auswahl"),
-            home.appendingPathComponent("Music/Vicious SID Player"),
-        ]
-        var isDir: ObjCBool = false
-        guard let dir = candidates.first(where: {
-            fm.fileExists(atPath: $0.path, isDirectory: &isDir) && isDir.boolValue
-        }) else { return }
+        // Start-Playlist aus dem Autoplay-Ordner laden (rekursiv, inkl. Unterordner).
+        // Der Ordner ist in den Einstellungen (Cmd+,) konfigurierbar; ohne eigene
+        // Auswahl gilt ~/Music/Vicious SID Player/. Er liegt AUSSERHALB des Repos
+        // und wird nie mit ausgeliefert/gepusht. Aufloesungslogik testbar in
+        // AutoplayFolder.resolve (Core).
+        guard let dir = AutoplayFolder.resolve(configuredPath: autoplayFolderPath, fm: fm) else { return }
         let sids = collectSIDs(in: dir, fm: fm)
         guard !sids.isEmpty else { return }
         handleDroppedURLs(sids, isStartupLoad: true)
