@@ -149,4 +149,48 @@ final class ViciousTests: XCTestCase {
         let sid = try SidParser.parse(data: Data(bytes))
         XCTAssertEqual(sid.metadata.author, "C.Hülsbeck")
     }
+
+    // Regression: Bei explizitem loadAddress im Header (Feld != 0) beginnt der
+    // Datenblock laut SID-Spec DIREKT mit dem C64-Binary — es gibt dann KEINE
+    // eingebettete 2-Byte-Ladeadresse. Der Parser hat frueher immer 2 Bytes
+    // uebersprungen, wodurch solche Dateien (z.B. "BotB 23584 Pegmode - Aiya!")
+    // um 2 verschoben geladen wurden und stumm blieben.
+    func testExplicitLoadAddressKeepsFirstTwoBinaryBytes() throws {
+        var bytes = [UInt8](repeating: 0, count: 0x7C)
+        bytes[0] = 0x50; bytes[1] = 0x53; bytes[2] = 0x49; bytes[3] = 0x44 // "PSID"
+        bytes[5] = 0x02                 // Version 2
+        bytes[7] = 0x7C                 // dataOffset = 0x7C
+        bytes[8] = 0x10                 // loadAddr = 0x1000 (explizit im Header!)
+        bytes[10] = 0x10                // initAddr = 0x1000
+        bytes[12] = 0x10                // playAddr = 0x1000
+        bytes[15] = 1                   // songs = 1
+        bytes[17] = 0x01                // startSong = 1
+        // Datenblock: Binary beginnt SOFORT (keine Ladeadresse davor).
+        bytes += [0xA9, 0x0F, 0x60]     // LDA #$0F / RTS
+        let sid = try SidParser.parse(data: Data(bytes))
+
+        XCTAssertEqual(sid.loadAddr, 0x1000)
+        // Die ersten Binary-Bytes muessen erhalten bleiben:
+        XCTAssertEqual([UInt8](sid.binaryData.prefix(3)), [0xA9, 0x0F, 0x60])
+    }
+
+    // Gegenprobe: loadAddress 0 im Header -> Ladeadresse steckt in den ersten
+    // zwei Datenbytes (little-endian) und wird NICHT Teil des Binaries.
+    func testEmbeddedLoadAddressIsStripped() throws {
+        var bytes = [UInt8](repeating: 0, count: 0x7C)
+        bytes[0] = 0x50; bytes[1] = 0x53; bytes[2] = 0x49; bytes[3] = 0x44 // "PSID"
+        bytes[5] = 0x02                 // Version 2
+        bytes[7] = 0x7C                 // dataOffset = 0x7C
+        // loadAddr-Feld bleibt 0 -> eingebettete Ladeadresse
+        bytes[10] = 0x10                // initAddr = 0x1000
+        bytes[12] = 0x10                // playAddr = 0x1000
+        bytes[15] = 1                   // songs = 1
+        bytes[17] = 0x01                // startSong = 1
+        // Datenblock: Ladeadresse 0x1000 little-endian, dann Binary.
+        bytes += [0x00, 0x10, 0xA9, 0x0F, 0x60]
+        let sid = try SidParser.parse(data: Data(bytes))
+
+        XCTAssertEqual(sid.loadAddr, 0x1000)
+        XCTAssertEqual([UInt8](sid.binaryData.prefix(3)), [0xA9, 0x0F, 0x60])
+    }
 }

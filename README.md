@@ -141,7 +141,7 @@ python3 build.py --no-min         # without minification
 bash build_app.sh                 # → "Vicious SID Player.app"
 ```
 
-On startup the app builds its playlist from `~/Music/Vicious SID Player/`, searched recursively (subfolders included). Create this folder and drop your `.sid` files there; they load automatically on launch. It lives outside the repository and is never published.
+On startup the app builds its playlist from the first of these folders that exists, searched recursively (subfolders included): `~/Nextcloud/Musik/sid/Auswahl/` (handy if you sync your collection across machines), then `~/Music/Vicious SID Player/`. Create one of these folders and drop your `.sid` files there; they load automatically on launch. Both live outside the repository and are never published.
 
 For release builds, `build_app.sh` automatically signs with the Developer ID
 `Developer ID Application: Daniel Mueller (9QSWKSR4NQ)` if it is available in

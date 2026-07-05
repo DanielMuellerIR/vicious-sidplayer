@@ -430,7 +430,7 @@ public struct MainView: View {
                 coordinator.setVolume(volume)
                 setupMenuNotificationHandlers()
                 setupMediaRemoteCommands()
-                // Start-Playlist aus ~/Music/Vicious SID Player/ laden.
+                // Start-Playlist aus ~/Nextcloud/Musik/sid/Auswahl/ laden.
                 loadLocalAudioFolder()
             }
             // Dateien, die per Doppelklick/"Oeffnen mit" die App gestartet haben,
@@ -656,13 +656,22 @@ public struct MainView: View {
 
     private func loadLocalAudioFolder() {
         let fm = FileManager.default
-        // Start-Playlist ausschliesslich aus dem persoenlichen Musik-Ordner laden:
-        // ~/Music/Vicious SID Player/ (rekursiv, inkl. Unterordner). Liegt AUSSERHALB
-        // des Repos, wird nie mit ausgeliefert/nach GitHub gepusht. Hier eigene
-        // .sid-Dateien ablegen — sie werden beim Start automatisch geladen.
-        let dir = fm.homeDirectoryForCurrentUser.appendingPathComponent("Music/Vicious SID Player")
+        // Start-Playlist aus dem persoenlichen Musik-Ordner laden (rekursiv, inkl.
+        // Unterordner). Kandidaten in dieser Reihenfolge — der erste existierende
+        // gewinnt:
+        //   1. ~/Nextcloud/Musik/sid/Auswahl/  (Cloud-Sync, auf allen Macs identisch)
+        //   2. ~/Music/Vicious SID Player/     (klassischer Standard-Ordner)
+        // Beide liegen AUSSERHALB des Repos, werden nie mit ausgeliefert/gepusht.
+        // Hier eigene .sid-Dateien ablegen — sie werden beim Start automatisch geladen.
+        let home = fm.homeDirectoryForCurrentUser
+        let candidates = [
+            home.appendingPathComponent("Nextcloud/Musik/sid/Auswahl"),
+            home.appendingPathComponent("Music/Vicious SID Player"),
+        ]
         var isDir: ObjCBool = false
-        guard fm.fileExists(atPath: dir.path, isDirectory: &isDir), isDir.boolValue else { return }
+        guard let dir = candidates.first(where: {
+            fm.fileExists(atPath: $0.path, isDirectory: &isDir) && isDir.boolValue
+        }) else { return }
         let sids = collectSIDs(in: dir, fm: fm)
         guard !sids.isEmpty else { return }
         handleDroppedURLs(sids, isStartupLoad: true)

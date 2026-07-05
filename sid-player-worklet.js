@@ -586,20 +586,26 @@ class SidPlayerProcessor {
       // dataOffset > 0xFF haette das die PRG-Bytes falsch positioniert.
       let offs = filedata[6] * 256 + filedata[7];
       loadaddr = filedata[8] * 256 + filedata[9];
+      // Ladeadresse: Nur wenn das Header-Feld loadAddress 0 ist, stehen die
+      // ersten zwei Bytes des Datenblocks als Little-Endian-Ladeadresse vor dem
+      // C64-Binary (SID-Spec). Bei explizitem loadAddress beginnt der Datenblock
+      // DIREKT mit dem Binary — keine 2 Bytes ueberspringen, sonst Stille.
+      let binOffs = offs;
       if (loadaddr === 0) {
         loadaddr = filedata[offs] + filedata[offs + 1] * 256;
+        binOffs = offs + 2;
       }
-      
+
       for (let i = 0; i < 32; i++) {
         timermode[31 - i] = filedata[0x12 + (i >> 3)] & Math.pow(2, 7 - (i % 8));
       }
-      
+
       // Clear memory
       for (let i = 0; i < memory.length; i++) memory[i] = 0;
-      
-      for (let i = offs + 2; i < filedata.byteLength; i++) {
-        if (loadaddr + i - (offs + 2) < memory.length) {
-          memory[loadaddr + i - (offs + 2)] = filedata[i];
+
+      for (let i = binOffs; i < filedata.byteLength; i++) {
+        if (loadaddr + i - binOffs < memory.length) {
+          memory[loadaddr + i - binOffs] = filedata[i];
         }
       }
       

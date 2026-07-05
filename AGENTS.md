@@ -102,7 +102,7 @@ swift test
 - AudioWorklet-Engine als Plain Class (kein `extends AudioWorkletProcessor`)
 - Noise-Waveform + ENV3-Readback korrigiert
 
-**Keine gebundelten SIDs:** Copyright-geschützte SID-Dateien werden nicht im Repo oder in Builds mitgeliefert. Die App baut ihre Start-Playlist ausschließlich aus `~/Music/Vicious SID Player/` (rekursiv, persönliche Sammlung außerhalb des Repos). Siehe `loadLocalAudioFolder()`/`collectSIDs()` in `MainView.swift`.
+**Keine gebundelten SIDs:** Copyright-geschützte SID-Dateien werden nicht im Repo oder in Builds mitgeliefert. Die App baut ihre Start-Playlist ausschließlich aus dem ersten existierenden dieser Ordner (rekursiv, persönliche Sammlung außerhalb des Repos): `~/Nextcloud/Musik/sid/Auswahl/`, sonst `~/Music/Vicious SID Player/`. Siehe `loadLocalAudioFolder()`/`collectSIDs()` in `MainView.swift`.
 
 **Wiedergabe-Zustandsmaschine (Coordinator):** `play()` baut den Processor neu ODER setzt nach `pause()` fort (Engine via `audioEngine.pause()`/`start()`, Emulations-Stand bleibt erhalten). `stop()` baut alles ab und setzt an den Anfang zurück. `seek()` springt bei aktivem Processor direkt, sonst wird die Zielposition in `pendingSeekSeconds` gepuffert und beim nächsten `play()` angewandt (Seek im gestoppten Zustand). Der UI-/Visualizer-Timer läuft im `.common`-RunLoop-Modus, damit das Oszilloskop auch während eines Slider-Drags weiterläuft.
 

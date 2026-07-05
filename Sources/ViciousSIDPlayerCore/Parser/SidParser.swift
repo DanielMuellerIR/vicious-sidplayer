@@ -83,15 +83,21 @@ public enum SidParser {
         let secondSidAddress = getSidAddress(data[0x7A])
         let thirdSidAddress = getSidAddress(data[0x7B])
 
-        // The first two bytes of the data block always contain the load address in little-endian.
-        guard data.count >= dataOffset + 2 else {
-            throw ParserError.invalidDataOffset
-        }
-        let fileLoadAddr = UInt16(data[dataOffset]) | UInt16(data[dataOffset + 1]) << 8
+        // Ladeadresse: Nur wenn das Header-Feld loadAddress 0 ist, stehen die
+        // ersten zwei Bytes des Datenblocks als Little-Endian-Ladeadresse vor dem
+        // C64-Binary (SID-Spec). Bei explizitem loadAddress im Header beginnt der
+        // Datenblock DIREKT mit dem Binary — dann duerfen keine 2 Bytes
+        // uebersprungen werden, sonst laedt der Code um 2 verschoben (Stille).
+        let binaryOffset: Int
         if loadAddr == 0 {
-            loadAddr = fileLoadAddr
+            guard data.count >= dataOffset + 2 else {
+                throw ParserError.invalidDataOffset
+            }
+            loadAddr = UInt16(data[dataOffset]) | UInt16(data[dataOffset + 1]) << 8
+            binaryOffset = dataOffset + 2
+        } else {
+            binaryOffset = dataOffset
         }
-        let binaryOffset = dataOffset + 2
 
         guard data.count > binaryOffset else {
             throw ParserError.emptyDataBlock
