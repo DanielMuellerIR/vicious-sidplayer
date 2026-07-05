@@ -153,6 +153,14 @@ Entitlements der Extension verwerfen. Test: `qlmanage -p audio/<datei>.sid`
 - [x] **Todo 4**: Player-Konkurrenzanalyse durchgefuehrt (2026-07-02). Ergebnis als
   Feature-Gap-Liste unten unter „Feature-Gaps / Roadmap-Kandidaten".
 
+- [ ] **Todo 6**: Public-Repo-Hygiene: Denylist-Treffer in LICENSE, READMEs,
+  `build_app.sh`/`build_dmg.sh`/`publish_github.sh` und `AppMain.swift` pruefen
+  und generalisieren (Session-Start-Hook meldet sie wiederholt; Entscheidung
+  steht seit 2026-07-03 aus).
+
+- [ ] **Todo 7**: Quick-Look-Buttons im Finder per Klick testen (Autoplay
+  funktioniert; ob Klicks in der Preview durchkommen, ist ungetestet).
+
 ---
 
 ## Feature-Gaps / Roadmap-Kandidaten
