@@ -7,6 +7,11 @@ Universelle Referenz und Dokumentation für alle Coding-Agents und KI-Modelle.
 
 ---
 
+## Typ & Zweck
+- **Typ:** GUI-App
+- **Zweck:** C64-SID-Musikplayer als native SwiftUI-macOS-App (mit Quick-Look) und als Single-File-HTML5-Web-App.
+- **Plattform:** macOS-GUI (+ Web)
+
 ## Projektüberblick
 
 Dieses Projekt ist ein eigenständiger C64 SID-Musikplayer in zwei Varianten:
