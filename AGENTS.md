@@ -3,7 +3,7 @@
 Universelle Referenz und Dokumentation für alle Coding-Agents und KI-Modelle.
 
 > **Projektname:** Vicious SID Player (Anspielung auf Sid Vicious)
-> **Status:** v1.3.0 — HTML5 + native macOS SwiftUI App inkl. Quick-Look-Extension, Shuffle, Media-Tasten, Einstellungen-Dialog (Autoplay-Ordner).
+> **Status:** v1.3.1 — HTML5 + native macOS SwiftUI App inkl. Quick-Look-Extension, Shuffle, Media-Tasten, Einstellungen-Dialog (Autoplay-Ordner).
 
 ---
 
@@ -187,6 +187,10 @@ Groesste echte Luecken dieses Players, nach Nutzen/Aufwand priorisiert:
    durch echte Laengen. Nur philosophiekonform, wenn der Nutzer die DB-Datei selbst
    auswaehlt (kein Buendeln — es werden bewusst keine externen Assets ausgeliefert).
    MD5 ueber die Datei + INI-Parser, mittlerer Aufwand.
+   *Bekannte Folge der fehlenden DB (Code-Review F19, 2026-07-08):* `SCRUB_MAX = 360 s`
+   ist zugleich die Auto-Next-Schwelle. Auto-Next/Subtune-Wechsel feuert daher erst
+   nach 6 min — kuerzere Tunes (HVSC-Mehrheit) laufen bis dahin weiter, statt am
+   tatsaechlichen Songende zu wechseln. Behebt sich mit dieser Songlength-DB.
 4. **Voice-Muting + Filter-Toggle** — einzelne der 3 Stimmen live stummschalten und
    den SID-Filter an/aus. Zwei sehr kleine, synergetische Ergaenzungen zum
    Oszilloskop (Analyse-Nutzen).

@@ -194,6 +194,36 @@ final class ViciousTests: XCTestCase {
         XCTAssertEqual([UInt8](sid.binaryData.prefix(3)), [0xA9, 0x0F, 0x60])
     }
 
+    // Regression (Code-Review F1): Eine fehlerhafte SID, deren Ladeadresse +
+    // Payload ueber das 64-KB-C64-RAM (0x10000) hinausragt, darf NICHT crashen.
+    // Die ueberstehenden Bytes werden sicher abgeklemmt (und eine Warnung geloggt);
+    // der Rest laedt und spielt normal. loadAddr = 0xFFFE + 4 Payload-Bytes ->
+    // 2 Bytes liegen jenseits von 0xFFFF und werden verworfen.
+    func testOverflowingLoadAddressDoesNotCrash() throws {
+        var bytes = [UInt8](repeating: 0, count: 0x7C)
+        bytes[0] = 0x50; bytes[1] = 0x53; bytes[2] = 0x49; bytes[3] = 0x44 // "PSID"
+        bytes[5] = 0x02                 // Version 2
+        bytes[7] = 0x7C                 // dataOffset = 0x7C
+        bytes[8] = 0xFF; bytes[9] = 0xFE // loadAddr = 0xFFFE (explizit, Binary folgt sofort)
+        bytes[10] = 0xFF; bytes[11] = 0xFE // initAddr = 0xFFFE (dort steht ein RTS)
+        bytes[12] = 0xFF; bytes[13] = 0xFE // playAddr = 0xFFFE
+        bytes[15] = 1                   // songs = 1
+        bytes[17] = 0x01                // startSong = 1
+        // 4 Payload-Bytes: 0xFFFE/0xFFFF passen, die letzten zwei laufen ueber 0x10000.
+        bytes += [0x60, 0x60, 0x60, 0x60] // RTS, ...
+        let sid = try SidParser.parse(data: Data(bytes))
+
+        XCTAssertEqual(sid.loadAddr, 0xFFFE)
+        XCTAssertEqual(sid.binaryData.count, 4)
+
+        let processor = ViciousProcessor(sampleRate: 44100.0)
+        _ = processor.loadSID(sidFile: sid) // klemmt die 2 ueberstehenden Bytes ab
+        processor.initSubtune(sub: 0)
+        processor.setVolume(vol: 1.0)
+        for _ in 0..<1000 { _ = processor.play() }
+        // Kein Crash == bestanden.
+    }
+
     // Autoplay-Ordner-Aufloesung (Einstellungen-Dialog): konfigurierter Ordner
     // gewinnt, wenn er existiert; sonst Standard-Ordner; sonst nil.
     func testAutoplayFolderResolve() {

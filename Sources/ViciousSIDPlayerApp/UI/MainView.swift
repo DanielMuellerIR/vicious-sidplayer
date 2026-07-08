@@ -58,6 +58,11 @@ public struct MainView: View {
     // onAppear kann mehrfach feuern (Fenster erscheint erneut, z.B. beim Datei-Open
     // der laufenden App). Einmalige Initialisierung darf sich dann nicht wiederholen.
     @State private var didInitialize = false
+    // codereview-ok: bewusste Limitierung — ohne Songlength-DB gibt es keine echte
+    // Tune-Laenge, daher dient SCRUB_MAX als fixe Ersatz-Dauer und zugleich als
+    // Auto-Next-Schwelle. Folge: Auto-Next/Subtune-Wechsel feuert erst nach 360 s,
+    // kuerzere Tunes laufen bis dahin weiter. Als bekanntes Limit in AGENTS.md
+    // dokumentiert; echter Fix waere die HVSC-Songlengths-DB (eigenes Feature) (2026-07-08)
     private let SCRUB_MAX = 360.0
     
     private var allTracks: [Track] {
@@ -547,6 +552,10 @@ public struct MainView: View {
         defer { if accessed { fileURL.stopAccessingSecurityScopedResource() } }
 
         do {
+            // codereview-ok: synchroner Read ist ok — eine SID laedt ins 64-KB-C64-RAM,
+            // ist also <=~64 KB gross; der Read dauert <1 ms und blockiert den Main-Thread
+            // nicht spuerbar. Async-Umbau des mehrfach aufgerufenen loadTrack braechte nur
+            // Reihenfolge-Risiko ohne Nutzen (2026-07-08)
             let data = try Data(contentsOf: fileURL)
             let sidFile = try SidParser.parse(data: data)
             coordinator.setSid(sidFile)

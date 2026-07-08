@@ -959,6 +959,17 @@ public final class ViciousProcessor: Sendable {
         for i in 0..<memory.count { memory[i] = 0 }
         let binary = sidFile.binaryData
         let count = binary.count
+        // Fehlerhafte SID: ragt der Payload ueber das 64-KB-C64-RAM (memory.count,
+        // = 0x10000) hinaus, koennen die ueberstehenden Bytes nicht geladen werden.
+        // Die Kopierschleife klemmt sie ohnehin sicher ab (targetIdx-Check), aber wir
+        // warnen zusaetzlich — sonst liefe ein solcher Tune unbemerkt nur teilweise
+        // geladen, und die CPU spraenge spaeter in genullten (statt echten) Speicher.
+        let endAddr = Int(loadaddr) + count
+        if endAddr > memory.count {
+            let dropped = endAddr - memory.count
+            print("Warnung: SID-Ladeadresse \(String(format: "$%04X", loadaddr)) + \(count) Byte(s) "
+                + "ueberschreitet das 64-KB-C64-RAM — \(dropped) Byte(s) werden nicht geladen.")
+        }
         for i in 0..<count {
             let targetIdx = Int(loadaddr) + i
             if targetIdx < memory.count {
