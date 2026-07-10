@@ -53,6 +53,15 @@ public struct MainView: View {
     @AppStorage("autoplayFolderPath") private var autoplayFolderPath = ""
     // MPRemoteCommandCenter nur einmal verdrahten (onAppear kann mehrfach feuern).
     @State private var mediaCommandsConfigured = false
+    // Session-Restore: letzter Track (Datei-Pfad), Subtune und Position werden
+    // laufend gesichert und beim naechsten Start wiederhergestellt — aber nur
+    // bei AUSGESCHALTETEM Shuffle (mit Shuffle ist der zufaellige Start bei
+    // jedem Launch das gewollte Verhalten).
+    @AppStorage("lastTrackPath") private var lastTrackPath = ""
+    @AppStorage("lastSubtune") private var lastSubtune = 0
+    @AppStorage("lastPosition") private var lastPosition = 0.0
+    // Drosselung der Positions-Sicherung (alle 5 s statt bei jedem UI-Tick).
+    @State private var lastSavedBucket = -1
     
     // Track lists
     @State private var userTracks: [Track] = []
@@ -526,7 +535,14 @@ public struct MainView: View {
         .onChange(of: songlengthsPath) { _ in
             loadSonglengthDB()
         }
+        .onChange(of: coordinator.isPaused) { _ in saveSessionState() }
         .onChange(of: coordinator.elapsedSeconds) { elapsed in
+            // Position alle 5 s sichern (Session-Restore), nicht bei jedem Tick.
+            let bucket = Int(elapsed / 5.0)
+            if bucket != lastSavedBucket {
+                lastSavedBucket = bucket
+                saveSessionState()
+            }
             if autoNext && elapsed >= currentDuration {
                 // Erst alle weiteren Subtunes DIESER SID-Datei durchspielen, dann
                 // zum naechsten Playlist-Eintrag. setSubtune setzt die Position auf 0
@@ -732,8 +748,22 @@ public struct MainView: View {
 
         // Sofort einen Track auswaehlen und abspielen. Beim Start mit aktiver
         // Zufallswiedergabe einen zufaelligen statt des ersten (alphabetisch)
-        // Tracks — so beginnt jeder App-Start mit einem anderen Song.
+        // Tracks — so beginnt jeder App-Start mit einem anderen Song. Ohne
+        // Shuffle wird stattdessen die letzte Sitzung fortgesetzt (Track,
+        // Subtune, Position), falls der Track noch in der Playlist ist.
         if firstTrackToPlayIdx != -1 {
+            if isStartupLoad && !shuffle && !lastTrackPath.isEmpty,
+               let restoreIdx = allTracks.firstIndex(where: { $0.fileURL?.path == lastTrackPath }) {
+                let sub = lastSubtune
+                let pos = lastPosition
+                loadTrack(index: restoreIdx, autoplay: true)
+                // Nach setSid ist subtunesCount gesetzt -> Subtune/Position gezielt
+                // wiederherstellen (setSubtune prueft den Bereich selbst).
+                if sub > 0 { coordinator.setSubtune(sub: sub) }
+                if pos > 1.0 { coordinator.seek(seconds: pos) }
+                loadLog.info("Session-Restore: \(lastTrackPath, privacy: .public), Subtune \(sub, privacy: .public), Position \(Int(pos), privacy: .public) s")
+                return
+            }
             let playIdx: Int
             if isStartupLoad && shuffle && allTracks.count > 1 {
                 playIdx = Int.random(in: 0..<allTracks.count)
@@ -779,6 +809,15 @@ public struct MainView: View {
             out.append(url)
         }
         return out.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+    }
+
+    // Sichert den Wiedergabe-Stand fuer den naechsten App-Start (Session-Restore).
+    private func saveSessionState() {
+        guard currentTrackIdx >= 0, currentTrackIdx < allTracks.count,
+              let path = allTracks[currentTrackIdx].fileURL?.path else { return }
+        lastTrackPath = path
+        lastSubtune = coordinator.currentSubtune
+        lastPosition = coordinator.elapsedSeconds
     }
 
     // Laedt die Songlengths.md5 im Hintergrund: konfigurierter Pfad aus den
@@ -910,6 +949,15 @@ public struct MainView: View {
                 drainPendingOpenURLs()
             }
         }
+        #if canImport(AppKit)
+        // Beim Beenden den letzten Stand fuer den naechsten Start sichern
+        // (Session-Restore) — zusaetzlich zur laufenden 5-s-Drosselung.
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                saveSessionState()
+            }
+        }
+        #endif
     }
 
     // Exportiert den aktuellen Track (aktueller Subtune, aktuelles SID-Modell)
