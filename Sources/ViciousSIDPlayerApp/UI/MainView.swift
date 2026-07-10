@@ -66,6 +66,27 @@ public struct MainView: View {
     // Track lists
     @State private var userTracks: [Track] = []
     @State private var currentTrackIdx: Int = -1
+
+    // Playlist-Filter: Live-Suche nach Titel + "nur Favoriten". Beide filtern
+    // NUR die Anzeige (sichtbare Indizes) — Auswahl, Auto-Next und Shuffle
+    // arbeiten weiter auf der vollen Liste mit globalen Indizes.
+    @State private var searchText = ""
+    @State private var favoritesOnly = false
+    // Favoriten als Datei-Pfade, persistent in UserDefaults.
+    @State private var favorites: Set<String> = []
+
+    private var visibleTrackIndices: [Int] {
+        var indices = Array(allTracks.indices)
+        if favoritesOnly {
+            indices = indices.filter { idx in
+                allTracks[idx].fileURL.map { favorites.contains($0.path) } ?? false
+            }
+        }
+        if !searchText.isEmpty {
+            indices = indices.filter { allTracks[$0].name.localizedCaseInsensitiveContains(searchText) }
+        }
+        return indices
+    }
     
     @State private var showFileImporter = false
     @State private var dragOver = false
@@ -162,7 +183,16 @@ public struct MainView: View {
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundColor(textSecCol)
                         Spacer()
+                        // Filter "nur Favoriten" (Stern) neben dem Papierkorb.
                         if !userTracks.isEmpty {
+                            Button(action: { favoritesOnly.toggle() }) {
+                                Image(systemName: favoritesOnly ? "star.fill" : "star")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(favoritesOnly ? .yellow : textSecCol)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .help(favoritesOnly ? "Alle Titel zeigen" : "Nur Favoriten zeigen")
+
                             Button(action: clearPlaylist) {
                                 Image(systemName: "trash")
                                     .font(.system(size: 10))
@@ -175,34 +205,72 @@ public struct MainView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
                     .padding(.bottom, 6)
-                    
+
+                    // Live-Suche: filtert die Playlist waehrend des Tippens.
+                    HStack(spacing: 6) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 10))
+                            .foregroundColor(textSecCol)
+                        TextField("Suchen", text: $searchText)
+                            .textFieldStyle(PlainTextFieldStyle())
+                            .font(.system(size: 12))
+                            .foregroundColor(textCol)
+                        if !searchText.isEmpty {
+                            Button(action: { searchText = "" }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(textSecCol)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .help("Suche löschen")
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(isLight ? Color.macLightSurface : Color.macDarkSurface)
+                    .cornerRadius(6)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(borderCol, lineWidth: 1))
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
+
                     ScrollView {
                         VStack(spacing: 2) {
-                            ForEach(0..<allTracks.count, id: \.self) { idx in
+                            ForEach(visibleTrackIndices, id: \.self) { idx in
                                 let track = allTracks[idx]
                                 let isActive = idx == currentTrackIdx
-                                
-                                Button(action: { selectTrack(at: idx) }) {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: isActive ? "play.circle.fill" : "music.note")
-                                            .font(.system(size: 12))
-                                        Text(track.name)
-                                            .font(.system(size: 13))
-                                            .lineLimit(1)
-                                        Spacer()
+                                let isFavorite = track.fileURL.map { favorites.contains($0.path) } ?? false
+
+                                // Zeile = Auswahl-Button + separater Stern-Button
+                                // (Favorit an/aus), beide auf gemeinsamem Hintergrund.
+                                HStack(spacing: 4) {
+                                    Button(action: { selectTrack(at: idx) }) {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: isActive ? "play.circle.fill" : "music.note")
+                                                .font(.system(size: 12))
+                                            Text(track.name)
+                                                .font(.system(size: 13))
+                                                .lineLimit(1)
+                                            Spacer()
+                                        }
+                                        .contentShape(Rectangle())
                                     }
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(
-                                        isActive ? accentCol : Color.clear
-                                    )
-                                    .foregroundColor(
-                                        isActive ? .white : textCol
-                                    )
-                                    .cornerRadius(6)
-                                    .contentShape(Rectangle())
+                                    .buttonStyle(PlainButtonStyle())
+
+                                    Button(action: { toggleFavorite(at: idx) }) {
+                                        Image(systemName: isFavorite ? "star.fill" : "star")
+                                            .font(.system(size: 10))
+                                            .foregroundColor(isFavorite
+                                                             ? .yellow
+                                                             : (isActive ? .white : textSecCol.opacity(0.45)))
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    .help(isFavorite ? "Favorit entfernen" : "Als Favorit markieren")
                                 }
-                                .buttonStyle(PlainButtonStyle())
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(isActive ? accentCol : Color.clear)
+                                .foregroundColor(isActive ? .white : textCol)
+                                .cornerRadius(6)
                             }
                         }
                         .padding(.horizontal, 8)
@@ -495,6 +563,8 @@ public struct MainView: View {
             // doppelte Observer und ein erneutes (storendes) Laden des audio/-Ordners.
             if !didInitialize {
                 didInitialize = true
+                // Favoriten aus UserDefaults laden (persistente Datei-Pfade).
+                favorites = Set(UserDefaults.standard.stringArray(forKey: "favoriteTrackPaths") ?? [])
                 coordinator.setVolume(volume)
                 setupMenuNotificationHandlers()
                 setupMediaRemoteCommands()
@@ -809,6 +879,18 @@ public struct MainView: View {
             out.append(url)
         }
         return out.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+    }
+
+    // Favorit an/aus fuer einen Track (persistent ueber den Datei-Pfad).
+    private func toggleFavorite(at index: Int) {
+        guard index >= 0 && index < allTracks.count,
+              let path = allTracks[index].fileURL?.path else { return }
+        if favorites.contains(path) {
+            favorites.remove(path)
+        } else {
+            favorites.insert(path)
+        }
+        UserDefaults.standard.set(Array(favorites).sorted(), forKey: "favoriteTrackPaths")
     }
 
     // Sichert den Wiedergabe-Stand fuer den naechsten App-Start (Session-Restore).
