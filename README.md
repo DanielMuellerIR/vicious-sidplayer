@@ -11,7 +11,9 @@
 </p>
 
 <p align="center">
-  <img src="src/Screenshot.png" width="760" alt="Vicious SID Player – native macOS app with real-time oscilloscope, playing “Cybernoid II” by Jeroen Tel">
+  <img src="src/Screenshot-dark.png" width="760" alt="Vicious SID Player in dark mode – native macOS app with real-time oscilloscope, playlist search and favorites, playing “Cybernoid” by Jeroen Tel">
+  <br><br>
+  <img src="src/Screenshot-light.png" width="760" alt="Vicious SID Player in light mode – the appearance follows the system setting automatically">
 </p>
 
 A self-contained Commodore 64 SID music player in two variants:
