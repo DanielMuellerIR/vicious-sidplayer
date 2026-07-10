@@ -37,7 +37,9 @@ Der HTML5-Player benötigt keinen Download über die Releases hinaus: Die Datei 
 - **Echtzeit-Oszilloskop**: Zeigt die Wellenformen der drei SID-Stimmen (Dreieck, Sägezahn, Puls, Rauschen) samt Frequenzen, Gate-Status und ADSR-Hüllkurven.
 - **SID-Modellwahl (macOS-App)**: Picker zwischen `Auto`, `6581` und `8580`. `Auto` folgt der in der SID-Datei hinterlegten Präferenz; die feste Wahl erzwingt das jeweilige Chip-Modell und wirkt live auf den laufenden Song (viele Tunes klingen nur auf dem ursprünglich gemeinten Chip korrekt).
 - **Quick-Look-Vorschau (macOS-App)**: `.sid`-Datei im Finder markieren und Leertaste drücken — der Song spielt sofort, dazu erscheinen Titel, Komponist und Copyright samt Song-Umschaltung bei mehreren Subtunes. Einrichtung: siehe [Quick-Look-Vorschau](#quick-look-vorschau-für-sid-dateien-macos).
-- **Dark / Light Mode**: Automatische Erkennung der Systemeinstellung oder manuelles Umschalten.
+- **Voice-Muting & Filter-Schalter**: Jede der drei SID-Stimmen einzeln stummschalten und den SID-Filter überbrücken — direkt im Oszilloskop, nützlich zum Analysieren, wie ein Tune aufgebaut ist.
+- **WAV-Export**: Den aktuellen Song schneller als Echtzeit als WAV-Datei rendern — aus der GUI (⌘E) oder headless von der Kommandozeile (siehe [Headless / CLI](#headless--cli-für-skripte-und-ai-agenten)).
+- **Dark / Light Mode**: Folgt automatisch der Systemeinstellung (Standard); in den Einstellungen (⌘,) lässt sich fest Hell oder Dunkel wählen, ⌘T schaltet um.
 - **Playlist mit Duplikaterkennung**: Bereits geladene Titel werden nicht doppelt aufgenommen. Die Playlist kann jederzeit geleert werden.
 - **Shuffle**: Zufallswiedergabe, die über Neustarts erhalten bleibt; ist sie aktiv, startet beim App-Start ein zufälliger Song.
 - **Media-Tasten**: Play/Pause, Stop und Titelsprung über F7/F8/F9, Touch Bar und AirPods — die App registriert sich als *Now Playing*-App des Systems.
@@ -65,6 +67,8 @@ Jedes Bedienelement der App hat einen Tooltip: den Zeiger einen Moment darauf ru
 | Stop | Anhalten und an den Anfang zurück. |
 | Positions-Slider | Springen — funktioniert auch im pausierten oder gestoppten Zustand; Play startet dann von dort. |
 | Lautstärke-Slider | Wiedergabelautstärke. |
+| Lautsprecher-Symbole (Oszilloskop, rechter Rand) | Jede SID-Stimme einzeln stumm-/lautschalten — die Emulation läuft weiter, nur der Audio-Beitrag entfällt. |
+| FILTER: ON / OFF (Oszilloskop, unten links) | SID-Filter überbrücken; gefilterte Stimmen laufen dann ungefiltert. |
 | Papierkorb (Playlist-Kopf) | Playlist leeren. |
 
 Titel, Komponist und Info in der Seitenleiste sowie lange Titelnamen zeigen ihren vollständigen Text ebenfalls als Tooltip, wenn er abgeschnitten ist.
@@ -77,7 +81,9 @@ Titel, Komponist und Info in der Seitenleiste sowie lange Titelnamen zeigen ihre
 | ⌘P | Play / Pause |
 | ⌘→ | Nächster Titel |
 | ⌘← | Vorheriger Titel |
-| ⌘T | Hell-/Dunkelmodus umschalten |
+| ⌘E | Aktuellen Song als WAV exportieren |
+| ⌘T | Hell-/Dunkelmodus umschalten (wechselt auf feste Wahl; zurück zu *Automatisch* über die Einstellungen) |
+| ⌘, | Einstellungen (Erscheinungsbild, Autoplay-Ordner) |
 
 **Media-Tasten**
 
@@ -100,6 +106,26 @@ Falls keine Vorschau erscheint:
 - Vorschau direkt im Terminal testen: `qlmanage -p /pfad/zu/tune.sid`.
 
 Voraussetzung: macOS 13 oder neuer.
+
+---
+
+## Headless / CLI (für Skripte und AI-Agenten)
+
+Der Emulations-Kern läuft auch ohne GUI. Das Werkzeug `sidcheck` macht ihn für Shell-Skripte, CI-Pipelines und AI-Agenten nutzbar — maschinenlesbare Ausgabe, skriptfreundliche Exit-Codes (`0` = Erfolg, `1` = Fehler bei `--dump`/`--wav`, `2` = Aufruf falsch):
+
+```bash
+swift build -c release          # baut .build/release/sidcheck
+
+# Tune schneller als Echtzeit als WAV rendern (16-bit PCM mono, 44,1 kHz)
+.build/release/sidcheck tune.sid --wav out.wav 180 0     # 180 Sekunden, Subtune 0
+
+# SID-Register-Zustand (Frequenz, Gate, Waveform, Hüllkurve je Stimme) als JSON
+# dumpen, ein Frame alle 20 ms — z. B. für Noten- oder Sound-Parameter-Analysen
+.build/release/sidcheck tune.sid --dump analyse.json 15
+
+# Crash-Sweep: alle Subtunes kurz anspielen; der Prozess stirbt nur bei Emulator-Traps
+.build/release/sidcheck tune.sid
+```
 
 ---
 

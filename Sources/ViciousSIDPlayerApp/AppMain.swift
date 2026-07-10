@@ -93,7 +93,14 @@ struct ViciousSIDPlayerApp: App {
                 .keyboardShortcut(.leftArrow, modifiers: .command)
                 
                 Divider()
-                
+
+                Button("Als WAV exportieren…") {
+                    NotificationCenter.default.post(name: NSNotification.Name("menuExportWAV"), object: nil)
+                }
+                .keyboardShortcut("e", modifiers: .command)
+
+                Divider()
+
                 Button("Design umschalten") {
                     NotificationCenter.default.post(name: NSNotification.Name("menuToggleTheme"), object: nil)
                 }

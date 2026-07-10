@@ -23,6 +23,15 @@ import ViciousSIDPlayerCore
 //      exit 0  = Dump geschrieben
 //      exit 1  = Fehler (anders als im Crash-Sweep zaehlt hier jeder Fehler,
 //                weil der Aufrufer ein Ergebnis-File erwartet)
+//
+// 3) WAV-Export (--wav)
+//    Zweck: einen Subtune schneller als Echtzeit als WAV-Datei rendern
+//    (16-bit PCM mono, 44,1 kHz) — headless/skriptbar, siehe WavRenderer (Core).
+//
+//    Aufruf: sidcheck <file.sid> --wav <out.wav> [dauerSekunden] [subtune]
+//            (Defaults: 180 s, Subtune 0; Subtune 0-basiert)
+//      exit 0  = WAV geschrieben
+//      exit 1  = Fehler
 
 // Ein Eintrag pro SID-Stimme: die fuers Ohr relevanten Register-Werte.
 struct ChannelFrame: Codable {
@@ -42,7 +51,8 @@ struct SidFrame: Codable {
 }
 
 let usage = "usage: sidcheck <file.sid> [samples] [maxSubtunes]\n" +
-            "       sidcheck <file.sid> --dump <out.json> [dauerSekunden]\n"
+            "       sidcheck <file.sid> --dump <out.json> [dauerSekunden]\n" +
+            "       sidcheck <file.sid> --wav <out.wav> [dauerSekunden] [subtune]\n"
 
 let args = CommandLine.arguments
 guard args.count >= 2 else {
@@ -51,6 +61,7 @@ guard args.count >= 2 else {
 }
 let path = args[1]
 let dumpMode = args.count >= 3 && args[2] == "--dump"
+let wavMode = args.count >= 3 && args[2] == "--wav"
 
 // Argumente des Dump-Modus vorab pruefen, damit ein fehlender Ausgabepfad
 // nicht erst nach der Emulation auffaellt.
@@ -65,13 +76,35 @@ if dumpMode {
     if args.count >= 5 { dumpDuration = Double(args[4]) ?? 15.0 }
 }
 
-// Argumente des Crash-Sweeps (werden im Dump-Modus ignoriert).
-let samples = (!dumpMode && args.count >= 3) ? (Int(args[2]) ?? 22050) : 22050   // ~0.5 s @ 44100
-let maxSubtunes = (!dumpMode && args.count >= 4) ? (Int(args[3]) ?? 32) : 32
+// Argumente des WAV-Modus vorab pruefen (wie beim Dump-Modus).
+var wavPath: String? = nil
+var wavDuration = 180.0
+var wavSubtune = 0
+if wavMode {
+    guard args.count >= 4 else {
+        FileHandle.standardError.write(Data(usage.utf8))
+        exit(2)
+    }
+    wavPath = args[3]
+    if args.count >= 5 { wavDuration = Double(args[4]) ?? 180.0 }
+    if args.count >= 6 { wavSubtune = Int(args[5]) ?? 0 }
+}
+
+// Argumente des Crash-Sweeps (werden im Dump-/WAV-Modus ignoriert).
+let samples = (!dumpMode && !wavMode && args.count >= 3) ? (Int(args[2]) ?? 22050) : 22050   // ~0.5 s @ 44100
+let maxSubtunes = (!dumpMode && !wavMode && args.count >= 4) ? (Int(args[3]) ?? 32) : 32
 
 do {
     let data = try Data(contentsOf: URL(fileURLWithPath: path))
     let sid = try SidParser.parse(data: data)
+    if wavMode {
+        // WAV-Export: eigener Renderer (baut sich seinen Processor selbst).
+        try WavRenderer.render(sidFile: sid, subtune: wavSubtune, seconds: wavDuration,
+                               to: URL(fileURLWithPath: wavPath!))
+        print("WAV-Export von '\(sid.metadata.title)' (Subtune \(wavSubtune), \(Int(wavDuration)) s) nach '\(wavPath!)' geschrieben.")
+        exit(0)
+    }
+
     let proc = ViciousProcessor(sampleRate: 44100.0)
     _ = proc.loadSID(sidFile: sid)
 
@@ -122,8 +155,8 @@ do {
     }
     exit(0)
 } catch {
-    if dumpMode {
-        // Im Dump-Modus erwartet der Aufrufer eine Ausgabedatei — Fehler melden.
+    if dumpMode || wavMode {
+        // Im Dump-/WAV-Modus erwartet der Aufrufer eine Ausgabedatei — Fehler melden.
         FileHandle.standardError.write(Data("Fehler: \(error)\n".utf8))
         exit(1)
     }

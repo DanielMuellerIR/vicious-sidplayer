@@ -104,6 +104,47 @@ final class ViciousTests: XCTestCase {
         XCTAssertGreaterThan(bypassAudible, 1000, "Filter-Bypass darf den Ton nicht toeten")
     }
 
+    // WAV-Export: korrekter RIFF-Header + hoerbarer Inhalt. Header/Samples werden
+    // unabhaengig aus den geschriebenen Datei-Bytes geprueft, nicht ueber den
+    // Renderer selbst.
+    func testWavRenderer() throws {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let sidURL = home.appendingPathComponent("Music/Vicious SID Player/Cybernoid.sid")
+        try XCTSkipUnless(
+            FileManager.default.fileExists(atPath: sidURL.path),
+            "Test-SID nicht gefunden (\(sidURL.path)) — WAV-Test uebersprungen."
+        )
+
+        let sidFile = try SidParser.parse(data: try Data(contentsOf: sidURL))
+        let dest = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vicious-wav-test-\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: dest) }
+
+        try WavRenderer.render(sidFile: sidFile, subtune: 0, seconds: 2.0, to: dest)
+
+        let wav = try Data(contentsOf: dest)
+        // 44 Byte Header + 2 s * 44100 Samples * 2 Bytes
+        XCTAssertEqual(wav.count, 44 + 2 * 44100 * 2)
+        XCTAssertEqual(String(data: wav[0..<4], encoding: .ascii), "RIFF")
+        XCTAssertEqual(String(data: wav[8..<12], encoding: .ascii), "WAVE")
+        XCTAssertEqual(String(data: wav[36..<40], encoding: .ascii), "data")
+        // Mono, 16 Bit, 44100 Hz (little-endian Felder im fmt-Chunk)
+        XCTAssertEqual(wav[22], 1)   // channels
+        XCTAssertEqual(UInt32(wav[24]) | UInt32(wav[25]) << 8 | UInt32(wav[26]) << 16 | UInt32(wav[27]) << 24, 44100)
+        XCTAssertEqual(UInt16(wav[34]) | UInt16(wav[35]) << 8, 16)
+        // Inhalt darf nicht still sein.
+        var nonZero = 0
+        var i = 44
+        while i + 1 < wav.count {
+            if wav[i] != 0 || wav[i + 1] != 0 { nonZero += 1 }
+            i += 2
+        }
+        XCTAssertGreaterThan(nonZero, 1000, "WAV-Inhalt darf nicht still sein")
+
+        // Ungueltige Dauer -> sauberer Fehler statt Endlos-Render.
+        XCTAssertThrowsError(try WavRenderer.render(sidFile: sidFile, seconds: 0, to: dest))
+    }
+
     // Regression: Drag & Drop einer .sid-Datei aus dem Finder tat nichts, weil der
     // gelieferte "public.file-url"-Data-Eintrag (eine file://-URL) faelschlich an
     // URL(fileURLWithPath:) ging und so ans cwd gehaengt wurde. Erwartet: der

@@ -37,7 +37,9 @@ The HTML5 player needs no download beyond that: the file `vicious-sid-player.htm
 - **Real-time oscilloscope**: Shows the waveforms of the three SID voices (triangle, sawtooth, pulse, noise) along with frequencies, gate status, and ADSR envelopes.
 - **SID model selection (macOS app)**: Picker with `Auto`, `6581`, and `8580`. `Auto` follows the preference stored in the SID file; a fixed choice forces the respective chip model and applies live to the running song (many tunes only sound right on the chip they were originally written for).
 - **Quick Look preview (macOS app)**: Select a `.sid` file in Finder and press Space — the tune plays instantly, with title, composer, and copyright plus subtune switching for multi-song files. Setup: see [Quick Look preview](#quick-look-preview-for-sid-files-macos).
-- **Dark / light mode**: Follows the system setting automatically or toggles manually.
+- **Voice muting & filter toggle**: Mute each of the three SID voices individually and bypass the SID filter — directly in the oscilloscope view, useful for analyzing how a tune is built.
+- **WAV export**: Render the current tune to a WAV file faster than real time — from the GUI (⌘E) or headless from the command line (see [Headless / CLI](#headless--cli-for-scripts-and-ai-agents)).
+- **Dark / light mode**: Follows the system setting automatically (default); a fixed light or dark appearance can be chosen in the settings (⌘,) or toggled with ⌘T.
 - **Playlist with duplicate detection**: Already loaded tunes are not added twice. The playlist can be cleared at any time.
 - **Shuffle**: Random playback that persists across restarts; a random song starts on launch when enabled.
 - **Media keys**: Play/pause, stop, and track skipping via F7/F8/F9, the Touch Bar, and AirPods — the app registers as the system's *Now Playing* app.
@@ -65,6 +67,8 @@ Every control in the app has a tooltip: rest the pointer on it for a moment and 
 | Stop | Stop and return to the beginning. |
 | Position slider | Seek — works even while paused or stopped; pressing Play then starts from that point. |
 | Volume slider | Playback volume. |
+| Speaker icons (oscilloscope, right edge) | Mute or unmute each SID voice individually — the emulation keeps running, only the audio contribution is removed. |
+| FILTER: ON / OFF (oscilloscope, bottom left) | Bypass the SID filter; filtered voices then play unfiltered. |
 | Trash (playlist header) | Clear the playlist. |
 
 Title, composer, and info in the sidebar, as well as long track names, also show their full text as a tooltip when truncated.
@@ -77,7 +81,9 @@ Title, composer, and info in the sidebar, as well as long track names, also show
 | ⌘P | Play / pause |
 | ⌘→ | Next track |
 | ⌘← | Previous track |
-| ⌘T | Toggle dark / light theme |
+| ⌘E | Export current tune as WAV |
+| ⌘T | Toggle dark / light theme (switches to a fixed appearance; back to *Auto* via settings) |
+| ⌘, | Settings (appearance, autoplay folder) |
 
 **Media keys**
 
@@ -100,6 +106,26 @@ If no preview appears:
 - Test the preview directly from Terminal: `qlmanage -p /path/to/tune.sid`.
 
 Requires macOS 13 or later.
+
+---
+
+## Headless / CLI (for scripts and AI agents)
+
+The emulation core runs without the GUI. The `sidcheck` tool exposes it for shell scripts, CI pipelines, and AI agents — machine-readable output, script-friendly exit codes (`0` = success, `1` = error in `--dump`/`--wav`, `2` = usage):
+
+```bash
+swift build -c release          # builds .build/release/sidcheck
+
+# Render a tune to WAV faster than real time (16-bit PCM mono, 44.1 kHz)
+.build/release/sidcheck tune.sid --wav out.wav 180 0     # 180 seconds, subtune 0
+
+# Dump the SID register state (frequency, gate, waveform, envelope per voice)
+# as JSON, one frame every 20 ms — e.g. for note or sound-parameter analysis
+.build/release/sidcheck tune.sid --dump analysis.json 15
+
+# Crash sweep: briefly play all subtunes; the process only dies on emulator traps
+.build/release/sidcheck tune.sid
+```
 
 ---
 

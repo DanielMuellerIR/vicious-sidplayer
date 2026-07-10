@@ -785,12 +785,59 @@ public struct MainView: View {
                 systemPrefersDark = MainView.systemInterfaceIsDark()
             }
         }
+        // WAV-Export des aktuellen Tracks (Menue "Wiedergabe" -> Cmd+E).
+        NotificationCenter.default.addObserver(forName: NSNotification.Name("menuExportWAV"), object: nil, queue: .main) { _ in
+            Task { @MainActor in
+                exportCurrentTrackAsWAV()
+            }
+        }
         // Doppelklick / "Oeffnen mit" bei bereits laufender App (Warmstart).
         NotificationCenter.default.addObserver(forName: NSNotification.Name("openSIDFiles"), object: nil, queue: .main) { _ in
             Task { @MainActor in
                 drainPendingOpenURLs()
             }
         }
+    }
+
+    // Exportiert den aktuellen Track (aktueller Subtune, aktuelles SID-Modell)
+    // als WAV-Datei — Ziel via Save-Panel, Render im Hintergrund (schneller als
+    // Echtzeit, WavRenderer im Core). Dauer = SCRUB_MAX, wie der Scrubber.
+    private func exportCurrentTrackAsWAV() {
+        guard currentTrackIdx >= 0, currentTrackIdx < allTracks.count,
+              let fileURL = allTracks[currentTrackIdx].fileURL else {
+            errorMessage = "Kein Track für den WAV-Export ausgewählt."
+            return
+        }
+        #if canImport(AppKit)
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.wav]
+        panel.nameFieldStringValue = fileURL.deletingPathExtension().lastPathComponent + ".wav"
+        panel.message = "Aktuellen Song als WAV exportieren (Subtune \(coordinator.currentSubtune + 1))"
+        guard panel.runModal() == .OK, let dest = panel.url else { return }
+
+        let subtune = coordinator.currentSubtune
+        let model = coordinator.modelOverride
+        let seconds = SCRUB_MAX
+        errorMessage = nil
+        // Render abseits des Main-Threads — ein 6-min-Tune braucht nur Sekunden,
+        // soll die UI aber trotzdem nicht blockieren.
+        Task.detached(priority: .userInitiated) {
+            do {
+                let data = try Data(contentsOf: fileURL)
+                let sid = try SidParser.parse(data: data)
+                try WavRenderer.render(sidFile: sid, subtune: subtune, seconds: seconds,
+                                       modelOverride: model, to: dest)
+                await MainActor.run {
+                    // Fertige Datei im Finder zeigen (erwartetes Export-Feedback).
+                    NSWorkspace.shared.activateFileViewerSelecting([dest])
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = "WAV-Export fehlgeschlagen: \(error.localizedDescription)"
+                }
+            }
+        }
+        #endif
     }
 
     // Media-Tasten (F7/F8/F9 bzw. Touch Bar / AirPods): Registriert die App im
