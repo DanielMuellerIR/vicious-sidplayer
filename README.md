@@ -37,6 +37,10 @@ The HTML5 player needs no download beyond that: the file `vicious-sid-player.htm
 - **Real-time oscilloscope**: Shows the waveforms of the three SID voices (triangle, sawtooth, pulse, noise) along with frequencies, gate status, and ADSR envelopes.
 - **SID model selection (macOS app)**: Picker with `Auto`, `6581`, and `8580`. `Auto` follows the preference stored in the SID file; a fixed choice forces the respective chip model and applies live to the running song (many tunes only sound right on the chip they were originally written for).
 - **Quick Look preview (macOS app)**: Select a `.sid` file in Finder and press Space — the tune plays instantly, with title, composer, and copyright plus subtune switching for multi-song files. Setup: see [Quick Look preview](#quick-look-preview-for-sid-files-macos).
+- **Real song lengths**: Reads the HVSC `Songlengths.md5` database (chosen in the settings or found automatically next to your collection) so the position slider and auto-advance use the actual tune length. Tunes without a database entry are analyzed in the background on first play (if they end in silence) and the result is cached.
+- **2SID / 3SID stereo**: Multi-SID tunes (PSID v3/v4) play with all chips, panned in stereo, including per-chip 6581/8580 model preferences from the file header.
+- **Session restore**: With shuffle off, the app resumes the last tune, subtune, and position on launch.
+- **Search & favorites**: Live playlist search plus a star per track (persistent) with a favorites-only filter.
 - **Voice muting & filter toggle**: Mute each of the three SID voices individually and bypass the SID filter — directly in the oscilloscope view, useful for analyzing how a tune is built.
 - **WAV export**: Render the current tune to a WAV file faster than real time — from the GUI (⌘E) or headless from the command line (see [Headless / CLI](#headless--cli-for-scripts-and-ai-agents)).
 - **Dark / light mode**: Follows the system setting automatically (default); a fixed light or dark appearance can be chosen in the settings (⌘,) or toggled with ⌘T.

@@ -3,7 +3,7 @@
 Universelle Referenz und Dokumentation für alle Coding-Agents und KI-Modelle.
 
 > **Projektname:** Vicious SID Player (Anspielung auf Sid Vicious)
-> **Status:** v1.4.0 — HTML5 + native macOS SwiftUI App inkl. Quick-Look-Extension, Shuffle, Media-Tasten, Einstellungen-Dialog (Erscheinungsbild Auto/Hell/Dunkel, Autoplay-Ordner).
+> **Status:** v1.5.0 — HTML5 + native macOS SwiftUI App inkl. Quick-Look-Extension, Shuffle, Media-Tasten, Einstellungen-Dialog (Erscheinungsbild Auto/Hell/Dunkel, Autoplay-Ordner, Songlengths-DB), echte Songlaengen (HVSC-DB + Hintergrund-Berechnung), Voice-Muting/Filter-Toggle, WAV-Export (GUI + CLI), Session-Restore, Playlist-Suche + Favoriten, 2SID/3SID-Stereo.
 
 ---
 
@@ -52,6 +52,9 @@ p_sidplayer/
 │   │   │   └── SidParser.swift
 │   │   ├── AutoplayFolder.swift            ← Autoplay-Ordner-Auflösung (testbar)
 │   │   ├── ThemeMode.swift                 ← Erscheinungsbild Auto/Hell/Dunkel (testbar)
+│   │   ├── Songlength.swift                ← HVSC-Songlengths.md5: Parser, MD5, Auto-Fund
+│   │   ├── SongLengthEstimator.swift       ← Laengen-Berechnung (Stille-Erkennung) + Cache
+│   │   ├── WavRenderer.swift               ← WAV-Export (schneller als Echtzeit, mono/stereo)
 │   │   └── DSP/
 │   │       ├── ViciousProcessor.swift      ← C64 CPU + SID Emulator (Swift)
 │   │       └── ViciousCoordinator.swift    ← AVAudioEngine Host
@@ -136,6 +139,35 @@ Hell-Modus dunklere Trace-Farben (Neon-Cyan/Grün/Pink wäre auf Weiß unlesbar)
 
 **Duplikaterkennung:** Playlist filtert beim Hinzufügen auf doppelte Dateinamen.
 
+**Songlaengen (seit v1.5.0):** Aufloesung in `MainView.currentDuration`, Reihenfolge:
+HVSC-DB (`SonglengthDB`, Songlengths.md5 — Einstellungen oder Auto-Fund
+`DOCUMENTS/Songlengths.md5` im/ueber dem Autoplay-Ordner, Lookup per Datei-MD5)
+→ berechneter Cache (`SongLengthEstimator`: Tune ohne DB-Eintrag wird beim ersten
+Abspielen im Hintergrund schneller als Echtzeit gerendert; endet er in ≥3 s Stille,
+wird die Laenge erkannt und in `~/Library/Application Support/Vicious SID Player/
+computed-songlengths.json` gecacht, auch negative "Loop"-Ergebnisse als -1)
+→ Fallback `SCRUB_MAX` (360 s). Steuert Scrubber, Auto-Next, Now-Playing und
+WAV-Export-Dauer.
+
+**Voice-Muting/Filter-Toggle (seit v1.5.0):** `voiceMuted[9]`/`filterEnabled` im
+Processor — Emulation laeuft bei Mute normal weiter (nur Mix-Beitrag entfaellt);
+Filter-Bypass laesst den Filterzustand warm weiterlaufen. UI als Overlay im
+Oszilloskop (Mute pro Kanal rechts, FILTER unten links).
+
+**Multi-SID/Stereo (seit v1.5.0):** 2SID/3SID-Emulation war im Kern vorhanden;
+`playStereo()` pannt Chip 1 links / Chip 2 rechts (75/25) bzw. links/Mitte/rechts,
+1 SID bleibt mittig. Pro-Chip-Modell aus PSID-v3/v4-Flags (`prefModel2/3`,
+0 = wie Chip 1); Nutzer-Override gilt global. WAV-Export wird bei 2SID stereo.
+
+**Session-Restore (seit v1.5.0):** letzter Track/Subtune/Position in UserDefaults
+(`lastTrackPath`/`lastSubtune`/`lastPosition`), gesichert gedrosselt alle 5 s +
+bei Pause + willTerminate; Wiederherstellung beim Start NUR bei ausgeschaltetem
+Shuffle (Shuffle-Start bleibt zufaellig — gewolltes Verhalten).
+
+**WAV-Export (seit v1.5.0):** `WavRenderer` (Core), GUI Cmd+E (Save-Panel,
+Hintergrund-Render, zeigt Ergebnis im Finder), CLI `sidcheck --wav out.wav
+[dauer] [subtune]`. 16-bit PCM, 44,1 kHz, mono (stereo bei 2SID).
+
 **Quick-Look-Extension (macOS):** `Sources/ViciousSIDQuickLook/` wird von
 `build_app.sh` als `Contents/PlugIns/ViciousSIDQuickLook.appex` ins App-Bundle
 verpackt (NSExtension-Point `com.apple.quicklook.preview`, sandboxed, eigener
@@ -192,31 +224,29 @@ Vertieft am 2026-07-10 durch eine vollstaendige Auswertung der HVSC-Players-Seit
 inkl. Feature-Matrix und Priorisierung: `tasks/2026-07-10-player-recherche/recherche.md`
 (neu darin u. a. Phosphor und sidplaywx als moderne Cross-Platform-Konkurrenten;
 Sidplay5/macOS als direkter, aber UI-technisch veralteter Konkurrent = unsere Luecke).
-Groesste echte Luecken dieses Players, nach Nutzen/Aufwand priorisiert:
+**Erledigt in v1.5.0 (2026-07-10):** WAV-Export + CLI (`sidcheck --wav`),
+Multi-SID/Stereo + Pro-Chip-Modellwahl, Songlength-DB + Hintergrund-Berechnung
+mit Cache (behebt auch F19: Auto-Next feuert jetzt am echten Songende),
+Voice-Muting + Filter-Toggle, Instant-Seek (bereits vorhanden, per Benchmark
+belegt: 300-s-Sprung < 0,1 s im Release), Session-Restore, Playlist-Suche,
+Favoriten, Erscheinungsbild Auto/Hell/Dunkel (v1.4.0).
 
-1. **Audio-Export (WAV) + Headless-CLI-Ausbau** — kein Export vorhanden. WAV via
-   schneller-als-Echtzeit-Render ist klein–mittel im Aufwand, benoetigt kein
-   externes Asset und passt zum Ziel der Skript-/Headless-Steuerbarkeit. Baut auf
-   `Tools/sidcheck/main.swift` auf (dort gibt es bereits einen `--dump`-Modus).
-2. **Multi-SID / Stereo (2SID/3SID)** — aktuell nur 1 SID; Multi-SID-Tunes werden
-   unvollstaendig wiedergegeben. Groesster *Korrektheits*-Gewinn, philosophiekonform
-   (reine Emulation). Groesserer Aufwand: zweite/dritte SID-Instanz, Adress-Dekodierung
-   aus dem PSID/RSID-Header (v3/v4), Stereo-Mixing. Verwandt: Pro-Chip-Modellwahl
-   (`preferred_SID_model[0/1/2]` schreibt aktuell denselben Wert).
-3. **Optionale Songlength-DB (`Songlengths.md5`)** — ersetzt das feste Scrub-Limit
-   durch echte Laengen. Nur philosophiekonform, wenn der Nutzer die DB-Datei selbst
-   auswaehlt (kein Buendeln — es werden bewusst keine externen Assets ausgeliefert).
-   MD5 ueber die Datei + INI-Parser, mittlerer Aufwand.
-   *Bekannte Folge der fehlenden DB (Code-Review F19, 2026-07-08):* `SCRUB_MAX = 360 s`
-   ist zugleich die Auto-Next-Schwelle. Auto-Next/Subtune-Wechsel feuert daher erst
-   nach 6 min — kuerzere Tunes (HVSC-Mehrheit) laufen bis dahin weiter, statt am
-   tatsaechlichen Songende zu wechseln. Behebt sich mit dieser Songlength-DB.
-4. **Voice-Muting + Filter-Toggle** — einzelne der 3 Stimmen live stummschalten und
-   den SID-Filter an/aus. Zwei sehr kleine, synergetische Ergaenzungen zum
-   Oszilloskop (Analyse-Nutzen).
-5. **Fast-Forward / genaueres Seek** — Emulation schneller-als-Echtzeit laufen lassen.
-   Kleiner UX-Gewinn, gut mit der Emulations-Schleife kombinierbar.
+Verbleibende Kandidaten, nach Nutzen/Aufwand priorisiert:
 
-Bewusst niedrig/nicht empfohlen: STIL-Infos (externes Asset + HVSC-Pfad-Abhaengigkeit),
-Hardware-/ASID-Ausgabe (Nische), Audio-Fingerprint-Erkennung (sehr grosser Aufwand),
-reSIDfp-Vollport (nur inkrementelle Filter-Verbesserung realistisch).
+1. **STIL-Integration** (`DOCUMENTS/STIL.txt` aus HVSC) — Kommentare/Cover-Infos
+   pro Song; laut Recherche 2026-07-10 Standard bei allen etablierten Playern.
+   Gleiche Philosophie wie die Songlength-DB: Nutzer-Datei, kein Buendeln;
+   Auto-Fund-Infrastruktur existiert bereits (SonglengthDB.autodetect-Muster).
+2. **HVSC-Browser/Bibliotheksansicht** — Ordnerbaum statt flacher Playlist,
+   fuer grosse Sammlungen (die volle HVSC hat >55k Dateien; aktuell laedt der
+   Autoplay-Ordner alles flach). Mittlerer Aufwand.
+3. **Mini-Player** — kleines Zusatzfenster (Titel + Transport), Luecke bei
+   Sidplay5 (Recherche).
+4. **HTTP-Remote/URL-Schema** — Phosphor-Vorbild; passt zur AI-Agent-Doktrin,
+   sidcheck deckt Headless bereits ab, daher eher niedrig.
+5. **Filter-Einstellungen** (Cutoff-Kurve 6581) — Feintuning, klein aber Nische.
+
+Bewusst niedrig/nicht empfohlen: Hardware-/ASID-Ausgabe (Nische),
+Audio-Fingerprint-Erkennung/WhatsSID (sehr grosser Aufwand),
+reSIDfp-Vollport (nur inkrementelle Filter-Verbesserung realistisch),
+MUS/CGSC-Support (Nische).
