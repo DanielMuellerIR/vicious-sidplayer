@@ -34,7 +34,14 @@ final class DropURLsContainer: @unchecked Sendable {
 
 public struct MainView: View {
     @StateObject private var coordinator = ViciousCoordinator()
-    @State private var theme: PlayerTheme = .dark
+    // Erscheinungsbild-Modus aus den Einstellungen (Auto/Hell/Dunkel). Gleicher
+    // UserDefaults-Key wie in SettingsView — Aenderungen dort wirken sofort.
+    // "auto" (Default) folgt dem Hell/Dunkel-Modus von macOS.
+    @AppStorage(ThemeMode.userDefaultsKey) private var themeModeRaw = ThemeMode.auto.rawValue
+    // Aktueller System-Modus (Dark ja/nein); wird ueber die verteilte
+    // "AppleInterfaceThemeChangedNotification" live nachgefuehrt (siehe
+    // setupMenuNotificationHandlers), damit der Auto-Modus sofort umschaltet.
+    @State private var systemPrefersDark = MainView.systemInterfaceIsDark()
     @State private var volume: Float = 1.0
     @State private var autoNext = true
     // Zufallswiedergabe. @AppStorage sichert den Zustand in UserDefaults, bleibt
@@ -67,6 +74,22 @@ public struct MainView: View {
     
     private var allTracks: [Track] {
         return userTracks
+    }
+
+    private var themeMode: ThemeMode { ThemeMode(storedValue: themeModeRaw) }
+
+    // Effektives Theme: der gespeicherte Modus, im Auto-Fall aufgeloest gegen
+    // den aktuellen System-Modus. Alle Farben im Body haengen hieran.
+    private var theme: PlayerTheme {
+        themeMode.resolvesToDark(systemPrefersDark: systemPrefersDark) ? .dark : .light
+    }
+
+    // Liest den macOS-Dark-Mode aus den globalen UserDefaults: der Key
+    // "AppleInterfaceStyle" existiert nur im Dark-Modus (Wert "Dark") — im
+    // Hell-Modus fehlt er. Zuverlaessiger als NSApp.effectiveAppearance, weil
+    // Letzteres unsere eigene appearance-Override widerspiegeln wuerde.
+    static func systemInterfaceIsDark() -> Bool {
+        UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
     }
 
     public init() {}
@@ -448,7 +471,9 @@ public struct MainView: View {
             drainPendingOpenURLs()
             applyAppearance()
         }
-        .onChange(of: theme) { _ in applyAppearance() }
+        // Erscheinungsbild-Modus geaendert (Einstellungen oder Cmd+T) -> AppKit-
+        // Appearance nachziehen; die SwiftUI-Farben folgen ueber `theme` von selbst.
+        .onChange(of: themeModeRaw) { _ in applyAppearance() }
         // Autoplay-Ordner in den Einstellungen geaendert -> Playlist sofort aus
         // dem neuen Ordner aufbauen (statt erst beim naechsten App-Start).
         .onChange(of: autoplayFolderPath) { _ in
@@ -485,9 +510,15 @@ public struct MainView: View {
     // Ohne das rendern System-Controls (Picker, Toggle) im Hell-Modus dunklen Text
     // auf dem dunklen App-Hintergrund — "schwarz auf schwarz", unlesbar. So folgt
     // die gesamte Fensterdarstellung (auch die Titelleiste) dem gewaehlten Theme.
+    // Im Auto-Modus wird die Override entfernt (nil) — dann folgt AppKit dem
+    // System selbst, und unsere SwiftUI-Farben folgen via systemPrefersDark.
     private func applyAppearance() {
         #if canImport(AppKit)
-        NSApplication.shared.appearance = NSAppearance(named: theme == .light ? .aqua : .darkAqua)
+        switch themeMode {
+        case .auto: NSApplication.shared.appearance = nil
+        case .light: NSApplication.shared.appearance = NSAppearance(named: .aqua)
+        case .dark: NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+        }
         #endif
     }
 
@@ -739,9 +770,19 @@ public struct MainView: View {
                 }
             }
         }
+        // Cmd+T schaltet FEST auf das jeweils andere Theme um (verlaesst also den
+        // Auto-Modus) — Basis ist das gerade sichtbare Theme. Zurueck zu "Auto"
+        // geht ueber die Einstellungen (Cmd+,).
         NotificationCenter.default.addObserver(forName: NSNotification.Name("menuToggleTheme"), object: nil, queue: .main) { _ in
             Task { @MainActor in
-                theme = theme == .light ? .dark : .light
+                themeModeRaw = (theme == .light ? ThemeMode.dark : ThemeMode.light).rawValue
+            }
+        }
+        // System-Wechsel Hell/Dunkel (macOS-Einstellungen): verteilte Notification,
+        // damit der Auto-Modus live folgt, ohne dass die App neu starten muss.
+        DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main) { _ in
+            Task { @MainActor in
+                systemPrefersDark = MainView.systemInterfaceIsDark()
             }
         }
         // Doppelklick / "Oeffnen mit" bei bereits laufender App (Warmstart).

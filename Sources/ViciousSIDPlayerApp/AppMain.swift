@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import ViciousSIDPlayerCore
 
 // Empfaengt Dateien, die per Doppelklick / "Oeffnen mit" aus dem Finder kommen.
 // SwiftUI allein liefert solche File-Open-Events nicht an die View — dafuer
@@ -10,12 +11,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // und beim Erscheinen der View nachziehen. (Alles Main-Thread -> static ok.)
     @MainActor static var pendingURLs: [URL] = []
 
-    // Standard-Theme ist dunkel: die App-Appearance schon VOR dem Erzeugen des
-    // Fensters auf Dark setzen, damit System-Controls (Picker/Toggle) und die
-    // Titelleiste von Anfang an dunkel rendern (sonst schwarzer Text auf dunklem
-    // App-Hintergrund = unlesbar). Theme-Wechsel zieht MainView per applyAppearance nach.
+    // Die App-Appearance schon VOR dem Erzeugen des Fensters gemaess dem
+    // gespeicherten Erscheinungsbild-Modus setzen, damit System-Controls
+    // (Picker/Toggle) und die Titelleiste von Anfang an passend rendern (sonst
+    // schwarzer Text auf dunklem App-Hintergrund = unlesbar). Auto (Default) =
+    // keine Override (nil), AppKit folgt dann dem System. Theme-Wechsel zur
+    // Laufzeit zieht MainView per applyAppearance nach.
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.appearance = NSAppearance(named: .darkAqua)
+        switch ThemeMode(storedValue: UserDefaults.standard.string(forKey: ThemeMode.userDefaultsKey)) {
+        case .auto: NSApp.appearance = nil
+        case .light: NSApp.appearance = NSAppearance(named: .aqua)
+        case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
 
         // Bundle-Icon explizit setzen, damit About-Dialog und Dock IMMER unser Icon
         // zeigen — unabhaengig von einem evtl. veralteten macOS-Icon-Cache (der bei

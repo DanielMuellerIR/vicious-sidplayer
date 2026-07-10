@@ -5,16 +5,35 @@ import AppKit
 #endif
 
 // Einstellungen-Fenster (App-Menue -> "Einstellungen…", Cmd+,).
-// Einzige Option bisher: der Autoplay-Ordner, aus dem die App beim Start ihre
-// Playlist baut (rekursiv, inkl. Unterordner). Der Wert landet via @AppStorage
-// in UserDefaults ("autoplayFolderPath") — MainView beobachtet denselben Key
-// und laedt die Playlist bei einer Aenderung sofort neu.
+// Optionen: das Erscheinungsbild (Auto/Hell/Dunkel) und der Autoplay-Ordner,
+// aus dem die App beim Start ihre Playlist baut (rekursiv, inkl. Unterordner).
+// Beide Werte landen via @AppStorage in UserDefaults — MainView beobachtet
+// dieselben Keys und reagiert auf Aenderungen sofort.
 struct SettingsView: View {
     // "" = nicht gesetzt -> Standard-Ordner ~/Music/Vicious SID Player/
     @AppStorage("autoplayFolderPath") private var autoplayFolderPath = ""
+    // Erscheinungsbild-Modus; "auto" (Default) folgt dem System-Dark/Light-Modus.
+    @AppStorage(ThemeMode.userDefaultsKey) private var themeModeRaw = ThemeMode.auto.rawValue
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            Text("Erscheinungsbild")
+                .font(.headline)
+            Picker("", selection: $themeModeRaw) {
+                Text("Automatisch").tag(ThemeMode.auto.rawValue)
+                Text("Hell").tag(ThemeMode.light.rawValue)
+                Text("Dunkel").tag(ThemeMode.dark.rawValue)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            Text("Automatisch folgt dem Hell/Dunkel-Modus von macOS. Cmd+T im Player schaltet fest auf Hell bzw. Dunkel um.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+                .padding(.vertical, 4)
+
             Text("Autoplay-Ordner")
                 .font(.headline)
             Text("Aus diesem Ordner (inkl. Unterordner) baut die App beim Start ihre Playlist. Ohne eigene Auswahl wird ~/\(AutoplayFolder.defaultRelativePath)/ verwendet.")

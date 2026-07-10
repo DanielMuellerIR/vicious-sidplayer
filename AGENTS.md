@@ -3,7 +3,7 @@
 Universelle Referenz und Dokumentation für alle Coding-Agents und KI-Modelle.
 
 > **Projektname:** Vicious SID Player (Anspielung auf Sid Vicious)
-> **Status:** v1.3.1 — HTML5 + native macOS SwiftUI App inkl. Quick-Look-Extension, Shuffle, Media-Tasten, Einstellungen-Dialog (Autoplay-Ordner).
+> **Status:** v1.4.0 — HTML5 + native macOS SwiftUI App inkl. Quick-Look-Extension, Shuffle, Media-Tasten, Einstellungen-Dialog (Erscheinungsbild Auto/Hell/Dunkel, Autoplay-Ordner).
 
 ---
 
@@ -51,6 +51,7 @@ p_sidplayer/
 │   │   ├── Parser/
 │   │   │   └── SidParser.swift
 │   │   ├── AutoplayFolder.swift            ← Autoplay-Ordner-Auflösung (testbar)
+│   │   ├── ThemeMode.swift                 ← Erscheinungsbild Auto/Hell/Dunkel (testbar)
 │   │   └── DSP/
 │   │       ├── ViciousProcessor.swift      ← C64 CPU + SID Emulator (Swift)
 │   │       └── ViciousCoordinator.swift    ← AVAudioEngine Host
@@ -58,7 +59,7 @@ p_sidplayer/
 │   │   ├── AppMain.swift
 │   │   └── UI/
 │   │       ├── Theme.swift
-│   │       ├── SettingsView.swift          ← Einstellungen (Cmd+,): Autoplay-Ordner
+│   │       ├── SettingsView.swift          ← Einstellungen (Cmd+,): Erscheinungsbild, Autoplay-Ordner
 │   │       ├── MainView.swift
 │   │       └── OscilloscopeView.swift
 │   └── ViciousSIDQuickLook/
@@ -117,7 +118,17 @@ swift test
 
 **Media-Tasten / Now Playing:** Die App registriert sich via `MPRemoteCommandCenter` (Play/Pause/Stop, Titel vor/zurück → F7/F8/F9, Touch Bar, AirPods) und meldet Titel/Position an `MPNowPlayingInfoCenter` (`setupMediaRemoteCommands()`/`updateNowPlayingInfo()`). Die Remote-Kommandos posten dieselben Notifications wie die Menüpunkte. Erfordert ein echtes `.app`-Bundle (nicht das nackte `swift run`-Binary).
 
-**App-Appearance:** fest ans Theme gekoppelt (`darkAqua`/`aqua` via AppDelegate + `applyAppearance()`), sonst rendern System-Controls (Picker/Toggle) unlesbar dunkel auf dunkel.
+**Erscheinungsbild (Auto/Hell/Dunkel):** Modus in `ThemeMode` (Core, testbar via
+`resolvesToDark`), persistent in UserDefaults-Key `themeMode` (Default `auto` =
+folgt dem macOS-Dark/Light-Modus). Einstellbar im Einstellungen-Dialog (Cmd+,);
+Cmd+T schaltet FEST auf das jeweils andere Theme (verlässt Auto). System-Wechsel
+wird live via `AppleInterfaceThemeChangedNotification` (DistributedNotificationCenter)
+nachgeführt; der System-Zustand wird aus dem globalen Default `AppleInterfaceStyle`
+gelesen (nicht `NSApp.effectiveAppearance` — das würde die eigene Override spiegeln).
+Die AppKit-Appearance bleibt ans effektive Theme gekoppelt (`darkAqua`/`aqua`, im
+Auto-Modus `nil` via AppDelegate + `applyAppearance()`), sonst rendern
+System-Controls (Picker/Toggle) unlesbar dunkel auf dunkel. Oszilloskop nutzt im
+Hell-Modus dunklere Trace-Farben (Neon-Cyan/Grün/Pink wäre auf Weiß unlesbar).
 
 **Dark/Light Mode (HTML):** CSS Custom Properties (`--bg-primary`, `--bg-panel`, etc.) mit `@media (prefers-color-scheme: dark)` Auto-Detection und manuellem Toggle via `.theme-dark` / `.theme-light` Klassen.
 
@@ -177,6 +188,10 @@ Entitlements der Extension verwerfen. Test: `qlmanage -p audio/<datei>.sid`
 
 Ergebnis der Konkurrenzanalyse (2026-07-02) gegen gaengige SID-Player
 (libsidplayfp/sidplayfp, JSIDPlay2, DeepSID, WebSID, ACID64, SIDPLAY/Mac u. a.).
+Vertieft am 2026-07-10 durch eine vollstaendige Auswertung der HVSC-Players-Seite
+inkl. Feature-Matrix und Priorisierung: `tasks/2026-07-10-player-recherche/recherche.md`
+(neu darin u. a. Phosphor und sidplaywx als moderne Cross-Platform-Konkurrenten;
+Sidplay5/macOS als direkter, aber UI-technisch veralteter Konkurrent = unsere Luecke).
 Groesste echte Luecken dieses Players, nach Nutzen/Aufwand priorisiert:
 
 1. **Audio-Export (WAV) + Headless-CLI-Ausbau** — kein Export vorhanden. WAV via

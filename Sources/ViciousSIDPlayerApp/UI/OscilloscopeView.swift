@@ -5,7 +5,16 @@ public struct OscilloscopeView: View {
     @ObservedObject var coordinator: ViciousCoordinator
     var theme: PlayerTheme
 
-    private let traceColors: [Color] = [.cyan, .green, .pink]
+    // Trace-Farben pro Theme: die Neon-Toene (Cyan/Gruen/Pink) leuchten nur auf
+    // dunklem Grund — auf Weiss sind sie kaum lesbar. Der Hell-Modus bekommt
+    // deshalb dunklere Varianten derselben Farbfamilien (Petrol/Waldgruen/Magenta).
+    private var traceColors: [Color] {
+        theme == .dark
+            ? [.cyan, .green, .pink]
+            : [Color(red: 0.00, green: 0.45, blue: 0.55),
+               Color(red: 0.13, green: 0.50, blue: 0.13),
+               Color(red: 0.75, green: 0.10, blue: 0.45)]
+    }
 
     public init(coordinator: ViciousCoordinator, theme: PlayerTheme) {
         self.coordinator = coordinator
@@ -113,9 +122,14 @@ public struct OscilloscopeView: View {
                 // Draw bottom HUD label
                 let model = coordinator.prefModel == 8580 ? "8580" : "6581"
                 let hudText = "CHIP MODEL: C64 \(model) // CHANNELS: 3 TRACE"
+                // HUD-Farbe passend zum Theme: halbtransparentes Neon-Gruen ist auf
+                // Weiss unsichtbar -> im Hell-Modus dunkleres Gruen, etwas kraeftiger.
+                let hudColor = isDark
+                    ? Color.green.opacity(0.4)
+                    : Color(red: 0.13, green: 0.50, blue: 0.13).opacity(0.55)
                 let resolvedHud = context.resolve(Text(hudText)
                     .font(.system(size: 9, design: .monospaced))
-                    .foregroundColor(Color.green.opacity(0.4)))
+                    .foregroundColor(hudColor))
                 
                 context.draw(resolvedHud, at: CGPoint(x: W - 10, y: H - 12), anchor: .trailing)
             }

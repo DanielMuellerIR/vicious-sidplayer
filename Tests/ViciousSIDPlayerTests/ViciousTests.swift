@@ -251,4 +251,20 @@ final class ViciousTests: XCTestCase {
         let tilde = AutoplayFolder.resolve(configuredPath: "~/sid", home: home) { _ in true }
         XCTAssertEqual(tilde?.path.contains("~"), false)
     }
+
+    // Erscheinungsbild-Modus (Einstellungen-Dialog): Auto folgt dem System,
+    // Hell/Dunkel sind fest; unbekannte/fehlende gespeicherte Werte -> Auto.
+    func testThemeModeResolve() {
+        // Auto: uebernimmt den System-Zustand 1:1.
+        XCTAssertTrue(ThemeMode.auto.resolvesToDark(systemPrefersDark: true))
+        XCTAssertFalse(ThemeMode.auto.resolvesToDark(systemPrefersDark: false))
+        // Manuell: ignoriert den System-Zustand.
+        XCTAssertFalse(ThemeMode.light.resolvesToDark(systemPrefersDark: true))
+        XCTAssertTrue(ThemeMode.dark.resolvesToDark(systemPrefersDark: false))
+        // Gespeicherte Werte: gueltige Strings mappen, alles andere faellt auf Auto.
+        XCTAssertEqual(ThemeMode(storedValue: "dark"), .dark)
+        XCTAssertEqual(ThemeMode(storedValue: "light"), .light)
+        XCTAssertEqual(ThemeMode(storedValue: nil), .auto)
+        XCTAssertEqual(ThemeMode(storedValue: "kaputt"), .auto)
+    }
 }
