@@ -65,6 +65,45 @@ final class ViciousTests: XCTestCase {
         print("Sample subtune 1: \(sampleSubtune1)")
     }
 
+    // Voice-Muting + Filter-Bypass: alle 3 Stimmen stumm -> Ausgabe still; wieder
+    // laut + Filter-Bypass -> Ausgabe weiter hoerbar (unabhaengige Messung ueber
+    // die tatsaechlich synthetisierten Samples, nicht ueber den Mute-Zustand).
+    func testVoiceMutingAndFilterToggle() throws {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let sidURL = home.appendingPathComponent("Music/Vicious SID Player/Cybernoid.sid")
+        try XCTSkipUnless(
+            FileManager.default.fileExists(atPath: sidURL.path),
+            "Test-SID nicht gefunden (\(sidURL.path)) — Muting-Test uebersprungen."
+        )
+
+        let sidFile = try SidParser.parse(data: try Data(contentsOf: sidURL))
+        let processor = ViciousProcessor(sampleRate: 44100.0)
+        _ = processor.loadSID(sidFile: sidFile)
+        processor.initSubtune(sub: 0)
+        processor.setVolume(vol: 1.0)
+
+        // Anspielen (1 s), damit die Stimmen sicher klingen.
+        var audible = 0
+        for _ in 0..<44100 where abs(processor.play()) > 0.000001 { audible += 1 }
+        XCTAssertGreaterThan(audible, 1000, "Referenz: Tune muss hoerbar sein")
+
+        // Alle 3 Stimmen stumm -> still (Emulation laeuft weiter). Der Filter
+        // klingt nach dem Stummschalten noch kurz aus (sein Zustand laeuft bewusst
+        // warm weiter) — daher erst 0,1 s Ausklingphase, dann muss Stille sein.
+        for v in 0..<3 { processor.setVoiceMuted(voice: v, muted: true) }
+        for _ in 0..<4410 { _ = processor.play() }
+        var mutedNonZero = 0
+        for _ in 0..<44100 where abs(processor.play()) > 0.000001 { mutedNonZero += 1 }
+        XCTAssertEqual(mutedNonZero, 0, "Alle Stimmen stumm -> keine Ausgabe")
+
+        // Wieder laut + Filter-Bypass -> wieder hoerbar, kein Crash.
+        for v in 0..<3 { processor.setVoiceMuted(voice: v, muted: false) }
+        processor.setFilterEnabled(false)
+        var bypassAudible = 0
+        for _ in 0..<44100 where abs(processor.play()) > 0.000001 { bypassAudible += 1 }
+        XCTAssertGreaterThan(bypassAudible, 1000, "Filter-Bypass darf den Ton nicht toeten")
+    }
+
     // Regression: Drag & Drop einer .sid-Datei aus dem Finder tat nichts, weil der
     // gelieferte "public.file-url"-Data-Eintrag (eine file://-URL) faelschlich an
     // URL(fileURLWithPath:) ging und so ans cwd gehaengt wurde. Erwartet: der

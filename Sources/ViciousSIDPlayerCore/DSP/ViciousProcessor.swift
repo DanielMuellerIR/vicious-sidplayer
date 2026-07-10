@@ -110,6 +110,16 @@ public final class ViciousProcessor: Sendable {
     nonisolated(unsafe) private var cutoff_ratio_8580: Double = 0.0
     nonisolated(unsafe) private var cutoff_ratio_6581: Double = 0.0
 
+    // Voice-Muting (Analyse-Feature): stummgeschaltete Stimmen laufen in der
+    // Emulation normal weiter (Envelope, Oszillator, Register-Readbacks bleiben
+    // korrekt) — nur ihr Beitrag zum Audio-Mix entfaellt. 9 Eintraege wie die
+    // uebrigen Kanal-Arrays (3 Stimmen x bis zu 3 SID-Chips).
+    nonisolated(unsafe) private var voiceMuted = [Bool](repeating: false, count: 9)
+    // Filter-Bypass (Analyse-Feature): bei false gehen die eigentlich gefilterten
+    // Stimmen ungefiltert in den Mix. Die Filter-Zustandsvariablen laufen warm
+    // weiter, damit das Wiedereinschalten ohne Knackser/Einschwingen passiert.
+    nonisolated(unsafe) private var filterEnabled = true
+
     // Precalculated combined wave tables
     nonisolated(unsafe) private var TriSaw_8580 = [Double](repeating: 0.0, count: 4096)
     nonisolated(unsafe) private var PulseSaw_8580 = [Double](repeating: 0.0, count: 4096)
@@ -839,7 +849,11 @@ public final class ViciousProcessor: Sendable {
             prevaccu[channel] = phaseaccu[channel]
             sourceMSB[num] = MSB
 
-            if (memory[SIDaddr + 0x17] & FILTSW[channel]) != 0 {
+            // Stummgeschaltete Stimmen liefern keinen Mix-Beitrag; alles davor
+            // (Envelope, Oszillator, Readbacks) ist bereits normal gelaufen.
+            if voiceMuted[channel] {
+                // kein Beitrag
+            } else if (memory[SIDaddr + 0x17] & FILTSW[channel]) != 0 {
                 filtin += (wfout - 32768.0) * (envcnt[channel] / 256.0)
             } else if (channel % SID_CHANNEL_AMOUNT) != 2 || (memory[SIDaddr + 0x18] & OFF3_BITMASK) == 0 {
                 output += (wfout - 32768.0) * (envcnt[channel] / 256.0)
@@ -877,15 +891,21 @@ public final class ViciousProcessor: Sendable {
 
         let bandpassVal = filtin + prevbandpass[num] * resonance + prevlowpass[num]
         var outputFiltered = output
-        if (memory[SIDaddr + 0x18] & HIGHPASS_BITMASK) != 0 { outputFiltered -= bandpassVal }
-        
+
+        // Filter-Zustand IMMER weiterrechnen (warm halten fuers Wiedereinschalten),
+        // die Filter-Anteile aber nur bei aktivem Filter in den Mix geben. Bei
+        // Bypass gehen die eigentlich gefilterten Stimmen stattdessen roh dazu.
+        if filterEnabled && (memory[SIDaddr + 0x18] & HIGHPASS_BITMASK) != 0 { outputFiltered -= bandpassVal }
+
         let nextBandpass = prevbandpass[num] - bandpassVal * cutoff
         prevbandpass[num] = nextBandpass
-        if (memory[SIDaddr + 0x18] & BANDPASS_BITMASK) != 0 { outputFiltered -= nextBandpass }
-        
+        if filterEnabled && (memory[SIDaddr + 0x18] & BANDPASS_BITMASK) != 0 { outputFiltered -= nextBandpass }
+
         let nextLowpass = prevlowpass[num] + nextBandpass * cutoff
         prevlowpass[num] = nextLowpass
-        if (memory[SIDaddr + 0x18] & LOWPASS_BITMASK) != 0 { outputFiltered += nextLowpass }
+        if filterEnabled && (memory[SIDaddr + 0x18] & LOWPASS_BITMASK) != 0 { outputFiltered += nextLowpass }
+
+        if !filterEnabled { outputFiltered += filtin }
 
         let scaledVol = Double(memory[SIDaddr + 0x18] & 0xF)
         return (outputFiltered / OUTPUT_SCALEDOWN) * scaledVol
@@ -1016,6 +1036,24 @@ public final class ViciousProcessor: Sendable {
         defer { lock.unlock() }
         modelOverride = model
         applyCurrentModel()
+    }
+
+    // Stimme 0..2 stummschalten (wirkt live). Gilt fuer die entsprechende Stimme
+    // auf ALLEN SID-Chips (Multi-SID-Tunes: Stimme v = Kanaele v, v+3, v+6).
+    public func setVoiceMuted(voice: Int, muted: Bool) {
+        guard voice >= 0 && voice < SID_CHANNEL_AMOUNT else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        voiceMuted[voice] = muted
+        voiceMuted[voice + 3] = muted
+        voiceMuted[voice + 6] = muted
+    }
+
+    // SID-Filter ueberbruecken/aktivieren (wirkt live, s. Kommentar am Feld).
+    public func setFilterEnabled(_ enabled: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        filterEnabled = enabled
     }
 
     // Seiteneffekte EINES CPU-Schritts, die sich play() und runFrameCPU() teilen:

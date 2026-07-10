@@ -22,6 +22,39 @@ public struct OscilloscopeView: View {
     }
 
     public var body: some View {
+        // Canvas + Bedien-Overlay: die Mute-Buttons liegen als echte SwiftUI-Views
+        // UEBER dem Canvas (Canvas selbst ist nicht klickbar) — vertikal auf die
+        // drei Kanal-Baender verteilt, der Filter-Schalter unten links (das HUD
+        // sitzt unten rechts).
+        ZStack {
+            scopeCanvas
+            GeometryReader { geo in
+                let channelH = geo.size.height / 3
+                ForEach(0..<3, id: \.self) { voice in
+                    let muted = coordinator.voiceMuted[voice]
+                    Button(action: { coordinator.toggleVoiceMuted(voice) }) {
+                        Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                            .font(.system(size: 13))
+                            .foregroundColor(muted ? .red : traceColors[voice].opacity(0.7))
+                    }
+                    .buttonStyle(BorderlessButtonStyle())
+                    .help(muted ? "Stimme \(voice + 1) wieder einschalten" : "Stimme \(voice + 1) stummschalten")
+                    .position(x: geo.size.width - 20, y: channelH * CGFloat(voice) + 14)
+                }
+
+                Button(action: { coordinator.toggleFilterEnabled() }) {
+                    Text(coordinator.filterEnabled ? "FILTER: ON" : "FILTER: OFF")
+                        .font(.system(size: 9, design: .monospaced))
+                        .foregroundColor(coordinator.filterEnabled ? Color.green.opacity(0.7) : .red)
+                }
+                .buttonStyle(BorderlessButtonStyle())
+                .help("SID-Filter an/aus (Analyse — gefilterte Stimmen laufen bei OFF ungefiltert weiter)")
+                .position(x: 52, y: geo.size.height - 12)
+            }
+        }
+    }
+
+    private var scopeCanvas: some View {
         // paused: !isPlaying friert die Animation ein — bei Pause bleibt das zuletzt
         // gezeichnete Bild stehen (die Wellenform im Moment des Pausierens), statt
         // weiterzuscrollen. Die Werte selbst bleiben ueber isPaused erhalten (unten).
@@ -101,8 +134,10 @@ public struct OscilloscopeView: View {
                         }
                     }
 
-                    // Draw the wave trace
-                    let color = traceColors[c]
+                    // Draw the wave trace — stummgeschaltete Stimmen gedimmt zeichnen
+                    // (die Emulation laeuft weiter, nur der Mix-Beitrag fehlt).
+                    let isMuted = coordinator.voiceMuted[c]
+                    let color = isMuted ? traceColors[c].opacity(0.25) : traceColors[c]
                     context.stroke(wavePath, with: .color(color), style: StrokeStyle(lineWidth: gate != 0 ? 2.0 : 1.0))
 
                     // Draw overlays labels
@@ -110,7 +145,8 @@ public struct OscilloscopeView: View {
                     let freqStr = freqHz > 20.0 ? "\(Int(round(freqHz))) Hz" : "0 Hz"
                     let envStr = "\(Int(round(Double(env) * 100.0)))%"
                     let wfStr = wfName(wf)
-                    let textInfo = "V\(c + 1) | \(wfStr) | [\(gateStr)] | Freq: \(freqStr) | Env: \(envStr)"
+                    let mutedStr = isMuted ? " | MUTED" : ""
+                    let textInfo = "V\(c + 1) | \(wfStr) | [\(gateStr)] | Freq: \(freqStr) | Env: \(envStr)\(mutedStr)"
 
                     let resolvedText = context.resolve(Text(textInfo)
                         .font(.system(size: 9, design: .monospaced))

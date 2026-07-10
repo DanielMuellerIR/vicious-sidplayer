@@ -64,6 +64,11 @@ public final class ViciousCoordinator: ObservableObject {
     @Published public var prefModel: Int = 8580
     // Nutzer-Override des SID-Modells: nil = Auto (Datei-Praeferenz), 6581 oder 8580.
     @Published public var modelOverride: Int? = nil
+    // Analyse-Features (nicht persistent — gelten pro Sitzung): Stimmen 1-3 einzeln
+    // stumm und SID-Filter an/aus. Wirken live und ueberleben den Processor-
+    // Neuaufbau in play() (werden dort erneut angewandt).
+    @Published public var voiceMuted: [Bool] = [false, false, false]
+    @Published public var filterEnabled = true
 
     // Live visual data bound to the UI
     @Published public var envelopes: [Float] = [0.0, 0.0, 0.0]
@@ -136,6 +141,8 @@ public final class ViciousCoordinator: ObservableObject {
         let processor = ViciousProcessor(sampleRate: sampleRate)
         _ = processor.loadSID(sidFile: sid)
         processor.setModelOverride(modelOverride.map { Double($0) })
+        for voice in 0..<3 { processor.setVoiceMuted(voice: voice, muted: voiceMuted[voice]) }
+        processor.setFilterEnabled(filterEnabled)
         processor.initSubtune(sub: currentSubtune)
         // Wurde im gestoppten Zustand vorgespult, hier an die Zielposition springen.
         if let target = pendingSeekSeconds {
@@ -271,6 +278,19 @@ public final class ViciousCoordinator: ObservableObject {
         if let processor = engineProcessor {
             processor.setModelOverride(model.map { Double($0) })
         }
+    }
+
+    // Stimme 1-3 stumm/laut schalten (Analyse; wirkt live auf den laufenden Song).
+    public func toggleVoiceMuted(_ voice: Int) {
+        guard voice >= 0 && voice < voiceMuted.count else { return }
+        voiceMuted[voice].toggle()
+        engineProcessor?.setVoiceMuted(voice: voice, muted: voiceMuted[voice])
+    }
+
+    // SID-Filter an/aus (Analyse; wirkt live auf den laufenden Song).
+    public func toggleFilterEnabled() {
+        filterEnabled.toggle()
+        engineProcessor?.setFilterEnabled(filterEnabled)
     }
 
     public func seek(seconds: Double) {
