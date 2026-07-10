@@ -17,6 +17,10 @@ public struct SidFileData: Sendable {
     public let prefModel: Int
     public let secondSidAddress: UInt32
     public let thirdSidAddress: UInt32
+    // Bevorzugtes Modell des 2./3. SID-Chips aus den PSID-v3/v4-Flags;
+    // 0 = keine eigene Angabe -> wie der erste Chip.
+    public let prefModel2: Int
+    public let prefModel3: Int
     public let timermodes: [Bool] // true for 16-bit timer (CIA), false for vertical blank interrupt (VBI)
     public let binaryData: Data // Execution binary to map into memory
 }
@@ -69,19 +73,31 @@ public enum SidParser {
         let author = readString(0x36, 32)
         let info = readString(0x56, 32)
 
+        // Header-Version (offset 4, big-endian): 1-4. Steuert, welche der
+        // Multi-SID-Felder unten ueberhaupt gueltig sind (bei aelteren Versionen
+        // sind die Bytes "reserved" und koennten Muell enthalten).
+        let version = Int(readUInt16(4))
+
         // Preferred SID Model from flags at 0x76-0x77
         // Bits 4-5 of offset 0x77 (flags LSB): 01 = 6581, 10 = 8580
         let prefModel = (data[0x77] & 0x30) >= 0x20 ? 8580 : 6581
+        // PSID v3/v4: eigene Modell-Flags fuer den 2. Chip (Bits 6-7 von 0x77)
+        // und den 3. Chip (Bits 0-1 von 0x76); 00 = wie der erste Chip.
+        let modelFromBits = { (bits: UInt8) -> Int in
+            bits >= 0x2 ? 8580 : (bits == 0x1 ? 6581 : 0)
+        }
+        let prefModel2 = version >= 3 ? modelFromBits((data[0x77] >> 6) & 0x3) : 0
+        let prefModel3 = version >= 4 ? modelFromBits(data[0x76] & 0x3) : 0
 
-        // Second and third SID addresses from 0x7A and 0x7B
+        // Second and third SID addresses from 0x7A (v3+) and 0x7B (v4+)
         let getSidAddress = { (val: UInt8) -> UInt32 in
             if val >= 0x42 && (val < 0x80 || val >= 0xE0) {
                 return 0xD000 + UInt32(val) * 16
             }
             return 0
         }
-        let secondSidAddress = getSidAddress(data[0x7A])
-        let thirdSidAddress = getSidAddress(data[0x7B])
+        let secondSidAddress = version >= 3 ? getSidAddress(data[0x7A]) : 0
+        let thirdSidAddress = version >= 4 ? getSidAddress(data[0x7B]) : 0
 
         // Ladeadresse: Nur wenn das Header-Feld loadAddress 0 ist, stehen die
         // ersten zwei Bytes des Datenblocks als Little-Endian-Ladeadresse vor dem
@@ -122,6 +138,8 @@ public enum SidParser {
             prefModel: prefModel,
             secondSidAddress: secondSidAddress,
             thirdSidAddress: thirdSidAddress,
+            prefModel2: prefModel2,
+            prefModel3: prefModel3,
             timermodes: timermodes,
             binaryData: binaryData
         )

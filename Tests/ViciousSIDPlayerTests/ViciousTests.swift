@@ -453,6 +453,97 @@ final class ViciousTests: XCTestCase {
         XCTAssertNil(SongLengthEstimator.estimate(sidFile: silent, subtune: 0, maxSeconds: 5.0))
     }
 
+    // Seek-Geschwindigkeit (UX-Smoke-Test): der Sprung ans Ende eines langen
+    // Tunes (300 s) muss deutlich unter einer Sekunde bleiben — der Seek-Pfad
+    // emuliert nur CPU-Frames (runFrameCPU), ohne Sample-Synthese. Grosszuegige
+    // Schranke, damit der Test auf langsamen Maschinen nicht flackert.
+    func testSeekIsFast() throws {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let sidURL = home.appendingPathComponent("Music/Vicious SID Player/Cybernoid.sid")
+        try XCTSkipUnless(
+            FileManager.default.fileExists(atPath: sidURL.path),
+            "Test-SID nicht gefunden — Seek-Benchmark uebersprungen."
+        )
+        let sid = try SidParser.parse(data: try Data(contentsOf: sidURL))
+        let processor = ViciousProcessor(sampleRate: 44100.0)
+        _ = processor.loadSID(sidFile: sid)
+        processor.initSubtune(sub: 0)
+
+        let start = Date()
+        processor.seek(seconds: 300.0)
+        let elapsed = Date().timeIntervalSince(start)
+        print("Seek auf 300 s dauerte \(String(format: "%.3f", elapsed)) s")
+        XCTAssertLessThan(elapsed, 3.0, "Seek muss quasi-sofort sein")
+        // Nach dem Seek muss die Wiedergabe hoerbar weiterlaufen.
+        var audible = 0
+        for _ in 0..<22050 where abs(processor.play()) > 0.000001 { audible += 1 }
+        XCTAssertGreaterThan(audible, 1000)
+    }
+
+    // 2SID (PSID v3): Parser liest Zweit-Chip-Adresse + eigenes Modell; die
+    // Stereo-Wiedergabe pannt Chip 1 nach links und Chip 2 nach rechts —
+    // gemessen an den tatsaechlich synthetisierten Samples.
+    func testSecondSidStereo() throws {
+        // PSID-v3-Header: init $1000, play = RTS, 2. SID bei $D420 (0x7A = 0x42),
+        // Modell-Flags: Chip 1 = 8580 (Bits 4-5 = 10), Chip 2 = 6581 (Bits 6-7 = 01).
+        var bytes = [UInt8](repeating: 0, count: 0x7C)
+        bytes[0] = 0x50; bytes[1] = 0x53; bytes[2] = 0x49; bytes[3] = 0x44 // "PSID"
+        bytes[5] = 0x03                 // Version 3 (2SID faehig)
+        bytes[7] = 0x7C                 // dataOffset
+        bytes[10] = 0x10                // initAddr = 0x1000
+        bytes[12] = 0x10                // playAddr = 0x1000 + 0x2F (RTS am Ende des Init)
+        bytes[13] = 0x2F
+        bytes[15] = 1                   // songs
+        bytes[17] = 0x01                // startSong
+        bytes[0x77] = 0x60              // Chip 1: 8580, Chip 2: 6581
+        bytes[0x7A] = 0x42              // 2. SID bei $D000 + $42*16 = $D420
+
+        // init ($1000): beide Master-Volumes auf, je Chip Stimme 1 mit
+        // unterschiedlicher Tonhoehe (Dreieck + Gate + Sustain).
+        var binary: [UInt8] = [
+            0xA9, 0x0F, 0x8D, 0x18, 0xD4, 0x8D, 0x38, 0xD4, // Volumes $D418/$D438
+            0xA9, 0x25, 0x8D, 0x01, 0xD4,                   // SID1 Freq hi
+            0xA9, 0xF0, 0x8D, 0x06, 0xD4,                   // SID1 Sustain
+            0xA9, 0x11, 0x8D, 0x04, 0xD4,                   // SID1 Dreieck+Gate
+            0xA9, 0x50, 0x8D, 0x21, 0xD4,                   // SID2 Freq hi (hoeher)
+            0xA9, 0xF0, 0x8D, 0x26, 0xD4,                   // SID2 Sustain
+            0xA9, 0x11, 0x8D, 0x24, 0xD4,                   // SID2 Dreieck+Gate
+            0x60                                            // RTS (Offset 0x2F)
+        ]
+        while binary.count < 0x30 { binary.append(0x60) }
+        bytes += [0x00, 0x10] + binary
+
+        let sid = try SidParser.parse(data: Data(bytes))
+        XCTAssertEqual(sid.secondSidAddress, 0xD420)
+        XCTAssertEqual(sid.prefModel, 8580)
+        XCTAssertEqual(sid.prefModel2, 6581)
+        XCTAssertEqual(sid.thirdSidAddress, 0)   // v3 hat kein drittes SID-Feld
+
+        let processor = ViciousProcessor(sampleRate: 44100.0)
+        _ = processor.loadSID(sidFile: sid)
+        processor.initSubtune(sub: 0)
+        processor.setVolume(vol: 1.0)
+
+        // 0,5 s stereo rendern: beide Kanaele hoerbar, aber deutlich verschieden
+        // (unterschiedliche Chips links/rechts gepannt).
+        var sumL = 0.0, sumR = 0.0, sumDiff = 0.0
+        for _ in 0..<22050 {
+            let s = processor.playStereo()
+            sumL += abs(s.left)
+            sumR += abs(s.right)
+            sumDiff += abs(s.left - s.right)
+        }
+        XCTAssertGreaterThan(sumL, 10.0, "Linker Kanal muss hoerbar sein")
+        XCTAssertGreaterThan(sumR, 10.0, "Rechter Kanal muss hoerbar sein")
+        XCTAssertGreaterThan(sumDiff, sumL * 0.2, "Kanaele muessen sich deutlich unterscheiden (Panning)")
+
+        // Mono-Pfad (play) mischt weiterhin beide Chips hoerbar.
+        processor.initSubtune(sub: 0)
+        var monoAudible = 0
+        for _ in 0..<22050 where abs(processor.play()) > 0.000001 { monoAudible += 1 }
+        XCTAssertGreaterThan(monoAudible, 1000)
+    }
+
     // Erscheinungsbild-Modus (Einstellungen-Dialog): Auto folgt dem System,
     // Hell/Dunkel sind fest; unbekannte/fehlende gespeicherte Werte -> Auto.
     func testThemeModeResolve() {

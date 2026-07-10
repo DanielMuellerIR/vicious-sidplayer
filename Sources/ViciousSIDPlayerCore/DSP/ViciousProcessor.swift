@@ -70,8 +70,11 @@ public final class ViciousProcessor: Sendable {
     nonisolated(unsafe) private var timermode = [UInt8](repeating: 0, count: 32)
     nonisolated(unsafe) private var preferred_SID_model: [Double] = [8580.0, 8580.0, 8580.0]
     // Das in der SID-Datei bevorzugte Modell + optionaler Nutzer-Override
-    // (nil = Auto = der Datei-Praeferenz folgen).
+    // (nil = Auto = der Datei-Praeferenz folgen). PSID v3/v4 koennen fuer den
+    // 2./3. Chip eigene Modelle angeben (0 = wie der erste Chip).
     nonisolated(unsafe) private var filePreferredModel: Double = 8580.0
+    nonisolated(unsafe) private var filePreferredModel2: Double = 0.0
+    nonisolated(unsafe) private var filePreferredModel3: Double = 0.0
     nonisolated(unsafe) private var modelOverride: Double? = nil
     nonisolated(unsafe) private var SID_model: Double = 8580.0
     nonisolated(unsafe) private var SID_address: [UInt32] = [0xD400, 0, 0]
@@ -88,6 +91,9 @@ public final class ViciousProcessor: Sendable {
     nonisolated(unsafe) private var pPC: UInt16 = 0
     nonisolated(unsafe) private var SIDamount: Int = 1
     nonisolated(unsafe) private var mix: Double = 0.0
+    // Ausgang je SID-Chip aus synthesizeSample() — Basis fuer Mono- und
+    // Stereo-Mix (play()/playStereo()).
+    nonisolated(unsafe) private var chipOut = [Double](repeating: 0.0, count: 3)
     private let lock = NSLock()
 
     // SID channels voice states
@@ -911,10 +917,9 @@ public final class ViciousProcessor: Sendable {
         return (outputFiltered / OUTPUT_SCALEDOWN) * scaledVol
     }
 
-    public func play() -> Double {
-        lock.lock()
-        defer { lock.unlock() }
-        
+    // Synthetisiert EIN Sample: CPU-Emulation vorantreiben und jeden aktiven
+    // SID-Chip einzeln rendern (chipOut). play()/playStereo() mischen daraus.
+    private func synthesizeSample() {
         if loaded && initialized {
             framecnt -= 1.0
             playtime += 1.0 / samplerate
@@ -949,12 +954,49 @@ public final class ViciousProcessor: Sendable {
             }
         }
 
-        mix = SID_core(num: 0, SIDaddr: 0xD400)
-        if SID_address[1] != 0 { mix += SID_core(num: 1, SIDaddr: Int(SID_address[1])) }
-        if SID_address[2] != 0 { mix += SID_core(num: 2, SIDaddr: Int(SID_address[2])) }
+        chipOut[0] = SID_core(num: 0, SIDaddr: 0xD400)
+        chipOut[1] = SID_address[1] != 0 ? SID_core(num: 1, SIDaddr: Int(SID_address[1])) : 0.0
+        chipOut[2] = SID_address[2] != 0 ? SID_core(num: 2, SIDaddr: Int(SID_address[2])) : 0.0
+    }
+
+    public func play() -> Double {
+        lock.lock()
+        defer { lock.unlock() }
+
+        synthesizeSample()
+        mix = chipOut[0] + chipOut[1] + chipOut[2]
 
         let activeVol = SIDamount_vol[min(3, max(1, SIDamount))]
         return mix * volume * activeVol
+    }
+
+    // Stereo-Variante fuer Multi-SID-Tunes: 1 SID = Mitte; 2 SIDs = Chip 1 links,
+    // Chip 2 rechts (jeweils leicht zur Mitte gemischt, kein hartes Panning);
+    // 3 SIDs = links / Mitte / rechts. Bei 1 SID identisch zu play() auf beiden
+    // Kanaelen.
+    public func playStereo() -> (left: Double, right: Double) {
+        lock.lock()
+        defer { lock.unlock() }
+
+        synthesizeSample()
+        let activeVol = SIDamount_vol[min(3, max(1, SIDamount))] * volume
+
+        if SIDamount <= 1 {
+            let mono = chipOut[0] * activeVol
+            return (mono, mono)
+        }
+        // Panning-Gewichte: 0.75/0.25 statt 1/0 — haerteres Panning zerreisst
+        // 2SID-Tunes auf Kopfhoerern.
+        let l: Double
+        let r: Double
+        if SIDamount == 2 {
+            l = chipOut[0] * 0.75 + chipOut[1] * 0.25
+            r = chipOut[0] * 0.25 + chipOut[1] * 0.75
+        } else {
+            l = chipOut[0] * 0.75 + chipOut[1] * 0.5 + chipOut[2] * 0.25
+            r = chipOut[0] * 0.25 + chipOut[1] * 0.5 + chipOut[2] * 0.75
+        }
+        return (l * activeVol, r * activeVol)
     }
 
     public func loadSID(sidFile: SidFileData) -> SidMetadata {
@@ -998,6 +1040,8 @@ public final class ViciousProcessor: Sendable {
         }
 
         filePreferredModel = Double(sidFile.prefModel)
+        filePreferredModel2 = Double(sidFile.prefModel2)
+        filePreferredModel3 = Double(sidFile.prefModel3)
         applyCurrentModel()
 
         SID_address[1] = sidFile.secondSidAddress
@@ -1021,12 +1065,19 @@ public final class ViciousProcessor: Sendable {
         self.volume = vol
     }
 
-    // Aktuelles SID-Modell anwenden: Override hat Vorrang, sonst Datei-Praeferenz.
+    // Aktuelles SID-Modell anwenden: Nutzer-Override hat Vorrang (gilt dann fuer
+    // alle Chips), sonst die Datei-Praeferenz — pro Chip, wobei 0 (= keine eigene
+    // Angabe fuer Chip 2/3) auf das Modell des ersten Chips zurueckfaellt.
     private func applyCurrentModel() {
-        let m = modelOverride ?? filePreferredModel
-        preferred_SID_model[0] = m
-        preferred_SID_model[1] = m
-        preferred_SID_model[2] = m
+        if let override = modelOverride {
+            preferred_SID_model[0] = override
+            preferred_SID_model[1] = override
+            preferred_SID_model[2] = override
+            return
+        }
+        preferred_SID_model[0] = filePreferredModel
+        preferred_SID_model[1] = filePreferredModel2 > 0 ? filePreferredModel2 : filePreferredModel
+        preferred_SID_model[2] = filePreferredModel3 > 0 ? filePreferredModel3 : filePreferredModel
     }
 
     // Nutzer-Override fuer das SID-Modell (nil = Auto = der Datei folgen). Wirkt

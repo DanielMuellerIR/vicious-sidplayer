@@ -171,9 +171,11 @@ public final class ViciousCoordinator: ObservableObject {
             let right = rightPtr.assumingMemoryBound(to: Float.self)
 
             for frame in 0..<Int(frameCount) {
-                let sample = Float(processor.play())
-                left[frame] = sample
-                right[frame] = sample
+                // Stereo: bei 1 SID identisch auf beiden Kanaelen, bei 2SID/3SID
+                // pannt der Processor die Chips links/rechts (playStereo).
+                let sample = processor.playStereo()
+                left[frame] = Float(sample.left)
+                right[frame] = Float(sample.right)
             }
 
             // Sync visualizer data approx. 43 times per second

@@ -36,20 +36,31 @@ public enum WavRenderer {
 
         // Samples synthetisieren und nach 16-bit PCM wandeln (hart geclippt —
         // der Emulator bleibt normalerweise deutlich unter Vollaussteuerung).
+        // Multi-SID-Tunes (2SID/3SID) werden stereo exportiert (gepannte Chips),
+        // Single-SID mono.
+        let stereo = sidFile.secondSidAddress != 0
         let totalSamples = Int(seconds * sampleRate)
-        var pcm = [Int16](repeating: 0, count: totalSamples)
-        for i in 0..<totalSamples {
-            let sample = max(-1.0, min(1.0, processor.play()))
-            pcm[i] = Int16(sample * 32767.0)
+        var pcm = [Int16](repeating: 0, count: totalSamples * (stereo ? 2 : 1))
+        if stereo {
+            for i in 0..<totalSamples {
+                let sample = processor.playStereo()
+                pcm[i * 2] = Int16(max(-1.0, min(1.0, sample.left)) * 32767.0)
+                pcm[i * 2 + 1] = Int16(max(-1.0, min(1.0, sample.right)) * 32767.0)
+            }
+        } else {
+            for i in 0..<totalSamples {
+                let sample = max(-1.0, min(1.0, processor.play()))
+                pcm[i] = Int16(sample * 32767.0)
+            }
         }
 
-        try wavData(pcm: pcm, sampleRate: Int(sampleRate)).write(to: url)
+        try wavData(pcm: pcm, sampleRate: Int(sampleRate), channels: stereo ? 2 : 1).write(to: url)
     }
 
     // Baut die komplette WAV-Datei (RIFF-Header + PCM-Daten, little-endian).
-    static func wavData(pcm: [Int16], sampleRate: Int) -> Data {
+    // pcm ist bei channels == 2 interleaved (L, R, L, R, ...).
+    static func wavData(pcm: [Int16], sampleRate: Int, channels: Int = 1) -> Data {
         let dataSize = pcm.count * 2         // 16 Bit = 2 Bytes pro Sample
-        let channels = 1
         let byteRate = sampleRate * channels * 2
         let blockAlign = channels * 2
 
