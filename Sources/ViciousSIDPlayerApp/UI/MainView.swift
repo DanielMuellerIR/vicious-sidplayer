@@ -65,12 +65,35 @@ public struct MainView: View {
     // onAppear kann mehrfach feuern (Fenster erscheint erneut, z.B. beim Datei-Open
     // der laufenden App). Einmalige Initialisierung darf sich dann nicht wiederholen.
     @State private var didInitialize = false
-    // codereview-ok: bewusste Limitierung — ohne Songlength-DB gibt es keine echte
-    // Tune-Laenge, daher dient SCRUB_MAX als fixe Ersatz-Dauer und zugleich als
-    // Auto-Next-Schwelle. Folge: Auto-Next/Subtune-Wechsel feuert erst nach 360 s,
-    // kuerzere Tunes laufen bis dahin weiter. Als bekanntes Limit in AGENTS.md
-    // dokumentiert; echter Fix waere die HVSC-Songlengths-DB (eigenes Feature) (2026-07-08)
+    // Fallback-Dauer, wenn keine echte Songlaenge bekannt ist (weder HVSC-DB-
+    // Eintrag noch berechnete Laenge): dient dann als Scrub-Limit und Auto-Next-
+    // Schwelle. Mit Songlaenge gilt stattdessen currentDuration (s.u.).
     private let SCRUB_MAX = 360.0
+
+    // Songlaengen-Aufloesung (Reihenfolge: HVSC-DB -> berechneter Cache -> SCRUB_MAX).
+    // songlengthDB wird im Hintergrund geladen (Datei aus den Einstellungen oder
+    // Auto-Fund im HVSC-Ordner); currentTrackLengths sind die DB-Laengen der
+    // aktuellen Datei (je Subtune); computedLength ist die im Hintergrund
+    // berechnete Laenge des aktuellen Subtunes (Tunes, die in Stille enden).
+    @State private var songlengthDB: SonglengthDB? = nil
+    @State private var currentTrackLengths: [Double]? = nil
+    @State private var computedLength: Double? = nil
+    @State private var currentMD5: String? = nil
+    private let lengthCache = SongLengthCache.defaultCache()
+    // Pfad zur Songlengths.md5 aus den Einstellungen ("" = automatisch suchen).
+    @AppStorage("songlengthsPath") private var songlengthsPath = ""
+
+    // Effektive Dauer des aktuellen Subtunes — bestimmt Scrubber, Auto-Next,
+    // Now-Playing und WAV-Export-Dauer.
+    private var currentDuration: Double {
+        if let lengths = currentTrackLengths, coordinator.currentSubtune < lengths.count {
+            return lengths[coordinator.currentSubtune]
+        }
+        if let computed = computedLength {
+            return computed
+        }
+        return SCRUB_MAX
+    }
     
     private var allTracks: [Track] {
         return userTracks
@@ -355,16 +378,20 @@ public struct MainView: View {
                             .frame(width: 36)
                         
                         Slider(value: Binding(
-                            get: { min(coordinator.elapsedSeconds, Double(SCRUB_MAX)) },
+                            get: { min(coordinator.elapsedSeconds, currentDuration) },
                             set: { val in coordinator.seek(seconds: val) }
-                        ), in: 0...Double(SCRUB_MAX))
+                        ), in: 0...currentDuration)
                         .accentColor(accentCol)
                         .help("Position — auch im pausierten oder gestoppten Zustand nutzbar; Play startet dann von hier")
-                        
-                        Text(formatTime(Double(SCRUB_MAX)))
+
+                        // Echte Songlaenge (HVSC-DB oder berechnet), sonst Fallback 6:00.
+                        Text(formatTime(currentDuration))
                             .font(.system(size: 12, design: .monospaced))
                             .foregroundColor(textSecCol)
                             .frame(width: 36)
+                            .help(currentTrackLengths != nil
+                                  ? "Songlänge aus der HVSC-Datenbank"
+                                  : (computedLength != nil ? "Songlänge berechnet (Tune endet in Stille)" : "Keine Songlänge bekannt — Standard-Limit"))
                         
                         Text("VOL:")
                             .font(.system(size: 12, weight: .semibold))
@@ -462,6 +489,9 @@ public struct MainView: View {
                 coordinator.setVolume(volume)
                 setupMenuNotificationHandlers()
                 setupMediaRemoteCommands()
+                // Songlengths-DB (HVSC) im Hintergrund laden — VOR der Playlist,
+                // damit der erste Track seine Laenge moeglichst schon findet.
+                loadSonglengthDB()
                 // Start-Playlist aus dem Autoplay-Ordner laden (siehe Einstellungen).
                 loadLocalAudioFolder()
             }
@@ -479,14 +509,25 @@ public struct MainView: View {
         .onChange(of: autoplayFolderPath) { _ in
             clearPlaylist()
             loadLocalAudioFolder()
+            // Auto-Fund der Songlengths-DB haengt am Autoplay-Ordner -> neu suchen.
+            if songlengthsPath.isEmpty { loadSonglengthDB() }
         }
         // "Now Playing"-Infos bei jedem relevanten Zustandswechsel aktualisieren
         // (nicht bei jedem elapsed-Tick — Titel/Status/Position genuegen dem System).
         .onChange(of: coordinator.isPlaying) { _ in updateNowPlayingInfo() }
         .onChange(of: coordinator.isPaused) { _ in updateNowPlayingInfo() }
         .onChange(of: coordinator.trackName) { _ in updateNowPlayingInfo() }
+        // Subtune gewechselt -> Laenge des neuen Subtunes aufloesen (DB-Array wird
+        // per Index gelesen; nur die berechnete Laenge muss neu ermittelt werden).
+        .onChange(of: coordinator.currentSubtune) { _ in
+            resolveComputedLengthIfNeeded()
+        }
+        // Songlengths-Datei in den Einstellungen geaendert -> DB neu laden.
+        .onChange(of: songlengthsPath) { _ in
+            loadSonglengthDB()
+        }
         .onChange(of: coordinator.elapsedSeconds) { elapsed in
-            if autoNext && elapsed >= Double(SCRUB_MAX) {
+            if autoNext && elapsed >= currentDuration {
                 // Erst alle weiteren Subtunes DIESER SID-Datei durchspielen, dann
                 // zum naechsten Playlist-Eintrag. setSubtune setzt die Position auf 0
                 // zurueck und laeuft (da isPlaying) direkt weiter.
@@ -532,10 +573,10 @@ public struct MainView: View {
         }
     }
 
-    // Relatives Vor-/Zurueckspringen, auf [0, SCRUB_MAX] begrenzt. Funktioniert auch
+    // Relatives Vor-/Zurueckspringen, auf [0, Songdauer] begrenzt. Funktioniert auch
     // im pausierten/gestoppten Zustand (coordinator.seek puffert die Position dann).
     private func skip(by delta: Double) {
-        let target = min(Double(SCRUB_MAX), max(0.0, coordinator.elapsedSeconds + delta))
+        let target = min(currentDuration, max(0.0, coordinator.elapsedSeconds + delta))
         coordinator.seek(seconds: target)
     }
 
@@ -591,6 +632,12 @@ public struct MainView: View {
             let sidFile = try SidParser.parse(data: data)
             coordinator.setSid(sidFile)
             coordinator.setVolume(volume)
+            // Songlaenge aufloesen: MD5 der Datei ist der Schluessel der HVSC-DB.
+            // Ohne DB-Eintrag wird die Laenge im Hintergrund berechnet/gecacht.
+            let md5 = SonglengthDB.md5Hex(of: data)
+            currentMD5 = md5
+            currentTrackLengths = songlengthDB?.lengths(forMD5: md5)
+            resolveComputedLengthIfNeeded()
             loadLog.info("loadTrack[\(index, privacy: .public)] geparst: \(fileURL.lastPathComponent, privacy: .public), autoplay=\(autoplay, privacy: .public)")
             if autoplay {
                 coordinator.play()
@@ -702,6 +749,10 @@ public struct MainView: View {
         userTracks.removeAll()
         currentTrackIdx = -1
         errorMessage = nil
+        // Songlaengen-Zustand des (nicht mehr vorhandenen) Tracks zuruecksetzen.
+        currentMD5 = nil
+        currentTrackLengths = nil
+        computedLength = nil
     }
 
     private func loadLocalAudioFolder() {
@@ -728,6 +779,68 @@ public struct MainView: View {
             out.append(url)
         }
         return out.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+    }
+
+    // Laedt die Songlengths.md5 im Hintergrund: konfigurierter Pfad aus den
+    // Einstellungen oder Auto-Fund (DOCUMENTS/Songlengths.md5 im/ueber dem
+    // Autoplay-Ordner). Danach die Laengen des aktuellen Tracks nachziehen.
+    private func loadSonglengthDB() {
+        let configured = songlengthsPath
+        let autoplayPath = autoplayFolderPath
+        Task.detached(priority: .utility) {
+            let fm = FileManager.default
+            let url: URL?
+            if !configured.isEmpty {
+                url = URL(fileURLWithPath: (configured as NSString).expandingTildeInPath)
+            } else {
+                let folder = AutoplayFolder.resolve(configuredPath: autoplayPath, fm: fm)
+                url = folder.flatMap { SonglengthDB.autodetect(nearFolder: $0, fm: fm) }
+            }
+            let db = url.flatMap { try? SonglengthDB.load(url: $0) }
+            await MainActor.run {
+                songlengthDB = db
+                if let md5 = currentMD5 {
+                    currentTrackLengths = db?.lengths(forMD5: md5)
+                    resolveComputedLengthIfNeeded()
+                }
+                if let db { loadLog.info("Songlengths-DB geladen: \(db.count, privacy: .public) Eintraege") }
+            }
+        }
+    }
+
+    // Berechnete Laenge fuer den aktuellen Track/Subtune aufloesen, falls die
+    // HVSC-DB nichts liefert: erst der persistente Cache, sonst Hintergrund-
+    // Berechnung (schneller als Echtzeit; Ergebnis wird gecacht — auch ein
+    // "kein Ende gefunden" als -1, damit Loop-Tunes nicht immer wieder neu
+    // gerechnet werden).
+    private func resolveComputedLengthIfNeeded() {
+        computedLength = nil
+        // DB-Laenge vorhanden? Dann ist nichts zu berechnen.
+        if let lengths = currentTrackLengths, coordinator.currentSubtune < lengths.count { return }
+        guard let md5 = currentMD5,
+              currentTrackIdx >= 0, currentTrackIdx < allTracks.count,
+              let fileURL = allTracks[currentTrackIdx].fileURL else { return }
+        let subtune = coordinator.currentSubtune
+
+        if let cached = lengthCache.length(md5: md5, subtune: subtune) {
+            // -1 = frueher berechnet, kein Ende gefunden (Loop) -> Fallback behalten.
+            if cached > 0 { computedLength = cached }
+            return
+        }
+
+        let cache = lengthCache
+        Task.detached(priority: .utility) {
+            guard let data = try? Data(contentsOf: fileURL),
+                  let sid = try? SidParser.parse(data: data) else { return }
+            let result = SongLengthEstimator.estimate(sidFile: sid, subtune: subtune)
+            cache.store(md5: md5, subtune: subtune, seconds: result ?? -1)
+            await MainActor.run {
+                // Nur uebernehmen, wenn immer noch derselbe Track/Subtune laeuft.
+                if currentMD5 == md5 && coordinator.currentSubtune == subtune, let result {
+                    computedLength = result
+                }
+            }
+        }
     }
 
     private func formatTime(_ sec: Double) -> String {
@@ -817,7 +930,8 @@ public struct MainView: View {
 
         let subtune = coordinator.currentSubtune
         let model = coordinator.modelOverride
-        let seconds = SCRUB_MAX
+        // Echte Songlaenge, wenn bekannt — sonst das Standard-Limit.
+        let seconds = currentDuration
         errorMessage = nil
         // Render abseits des Main-Threads — ein 6-min-Tune braucht nur Sekunden,
         // soll die UI aber trotzdem nicht blockieren.
@@ -887,7 +1001,7 @@ public struct MainView: View {
         infoCenter.nowPlayingInfo = [
             MPMediaItemPropertyTitle: coordinator.trackName,
             MPMediaItemPropertyArtist: coordinator.composer,
-            MPMediaItemPropertyPlaybackDuration: Double(SCRUB_MAX),
+            MPMediaItemPropertyPlaybackDuration: currentDuration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: coordinator.elapsedSeconds,
             MPNowPlayingInfoPropertyPlaybackRate: coordinator.isPlaying ? 1.0 : 0.0
         ]

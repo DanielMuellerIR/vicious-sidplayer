@@ -332,6 +332,127 @@ final class ViciousTests: XCTestCase {
         XCTAssertEqual(tilde?.path.contains("~"), false)
     }
 
+    // Songlengths.md5-Parser: Kommentare/Sektionen ignorieren, M:SS und
+    // M:SS.mmm parsen, Attribute in Klammern abschneiden, kaputte Zeilen skippen.
+    func testSonglengthDBParse() {
+        let text = """
+        [Database]
+        ; /MUSICIANS/T/Tel_Jeroen/Cybernoid.sid
+        c2a01b2e5a55278e6b37b1d63a11e19c=2:51 1:07.500 0:45(G)
+        ; kaputte Zeilen:
+        zukurz=1:00
+        aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=kaputt
+        """
+        let db = SonglengthDB.parse(text: text)
+        XCTAssertEqual(db.count, 1)
+        let lengths = db.lengths(forMD5: "C2A01B2E5A55278E6B37B1D63A11E19C") // case-insensitiv
+        XCTAssertEqual(lengths?.count, 3)
+        XCTAssertEqual(lengths?[0] ?? 0, 171.0, accuracy: 0.001)
+        XCTAssertEqual(lengths?[1] ?? 0, 67.5, accuracy: 0.001)
+        XCTAssertEqual(lengths?[2] ?? 0, 45.0, accuracy: 0.001)
+        XCTAssertNil(db.lengths(forMD5: "ffffffffffffffffffffffffffffffff"))
+        // MD5-Hex gegen bekannten Referenzwert ("abc").
+        XCTAssertEqual(SonglengthDB.md5Hex(of: Data("abc".utf8)), "900150983cd24fb0d6963f7d28e17f72")
+    }
+
+    // Auto-Fund der Songlengths.md5: liegt unter <HVSC-Root>/DOCUMENTS/, auch
+    // wenn der Startordner ein Unterordner (z.B. MUSICIANS/) ist.
+    func testSonglengthDBAutodetect() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("vicious-hvsc-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: root) }
+        let docs = root.appendingPathComponent("C64Music/DOCUMENTS")
+        let musicians = root.appendingPathComponent("C64Music/MUSICIANS/T")
+        try fm.createDirectory(at: docs, withIntermediateDirectories: true)
+        try fm.createDirectory(at: musicians, withIntermediateDirectories: true)
+        let dbFile = docs.appendingPathComponent("Songlengths.md5")
+        try Data("[Database]\n".utf8).write(to: dbFile)
+
+        // Vom HVSC-Root und aus einem Unterordner gefunden; woanders nicht.
+        XCTAssertEqual(SonglengthDB.autodetect(nearFolder: root.appendingPathComponent("C64Music"), fm: fm)?.path, dbFile.path)
+        XCTAssertEqual(SonglengthDB.autodetect(nearFolder: musicians, fm: fm)?.path, dbFile.path)
+        XCTAssertNil(SonglengthDB.autodetect(nearFolder: fm.temporaryDirectory, fm: fm))
+    }
+
+    // Berechneter Songlaengen-Cache: Roundtrip + Persistenz ueber Instanzen.
+    func testSongLengthCache() {
+        let fm = FileManager.default
+        let file = fm.temporaryDirectory.appendingPathComponent("vicious-cache-\(UUID().uuidString).json")
+        defer { try? fm.removeItem(at: file) }
+
+        let cache = SongLengthCache(fileURL: file)
+        XCTAssertNil(cache.length(md5: "abc", subtune: 0))
+        cache.store(md5: "abc", subtune: 0, seconds: 123.5)
+        cache.store(md5: "abc", subtune: 1, seconds: -1)   // "kein Ende gefunden"
+        XCTAssertEqual(cache.length(md5: "ABC", subtune: 0), 123.5)
+        XCTAssertEqual(cache.length(md5: "abc", subtune: 1), -1)
+
+        // Neue Instanz liest dieselbe Datei -> persistent.
+        let reloaded = SongLengthCache(fileURL: file)
+        XCTAssertEqual(reloaded.length(md5: "abc", subtune: 0), 123.5)
+    }
+
+    // Songlaengen-Berechnung: ein synthetischer Tune, der nach ~0,5 s die
+    // Master-Lautstaerke auf 0 setzt (endet in Stille), muss eine Laenge um
+    // 1 s liefern; ein komplett stiller Tune liefert nil (kein Ende erkennbar).
+    func testSongLengthEstimator() throws {
+        // PSID-Header: init $1000, play $1040, 1 Song.
+        var bytes = [UInt8](repeating: 0, count: 0x7C)
+        bytes[0] = 0x50; bytes[1] = 0x53; bytes[2] = 0x49; bytes[3] = 0x44 // "PSID"
+        bytes[5] = 0x02                 // Version 2
+        bytes[7] = 0x7C                 // dataOffset
+        bytes[10] = 0x10                // initAddr = 0x1000
+        bytes[12] = 0x10; bytes[13] = 0x40 // playAddr = 0x1040
+        bytes[15] = 1                   // songs
+        bytes[17] = 0x01                // startSong
+
+        // C64-Binary ab $1000 (eingebettete Ladeadresse unten im Datenblock):
+        var binary = [UInt8](repeating: 0x60 /* RTS als Fuellung */, count: 0x60)
+        // init ($1000): Volume auf, Zaehler $02 = 0, Stimme 1 Dreieck + Gate an.
+        let initCode: [UInt8] = [
+            0xA9, 0x0F, 0x8D, 0x18, 0xD4,   // LDA #$0F / STA $D418 (Volume max)
+            0xA9, 0x00, 0x85, 0x02,          // LDA #$00 / STA $02   (Frame-Zaehler)
+            0xA9, 0x25, 0x8D, 0x01, 0xD4,   // LDA #$25 / STA $D401 (Frequenz hi)
+            0xA9, 0xF0, 0x8D, 0x06, 0xD4,   // LDA #$F0 / STA $D406 (Sustain max)
+            0xA9, 0x11, 0x8D, 0x04, 0xD4,   // LDA #$11 / STA $D404 (Dreieck+Gate)
+            0x60                             // RTS
+        ]
+        // play ($1040): nach 25 Frames (~0,5 s bei 50 Hz) Volume 0 + Gate aus.
+        let playCode: [UInt8] = [
+            0xE6, 0x02,                      // INC $02
+            0xA5, 0x02,                      // LDA $02
+            0xC9, 0x19,                      // CMP #25
+            0x90, 0x08,                      // BCC -> RTS (8 Bytes ueberspringen)
+            0xA9, 0x00,                      // LDA #$00
+            0x8D, 0x18, 0xD4,                // STA $D418 (Volume 0 -> Stille)
+            0x8D, 0x04, 0xD4,                // STA $D404 (Gate aus)
+            0x60                             // RTS
+        ]
+        for (i, b) in initCode.enumerated() { binary[i] = b }
+        for (i, b) in playCode.enumerated() { binary[0x40 + i] = b }
+        bytes += [0x00, 0x10] + binary       // eingebettete Ladeadresse $1000
+
+        let sid = try SidParser.parse(data: Data(bytes))
+        let length = SongLengthEstimator.estimate(sidFile: sid, subtune: 0, maxSeconds: 10.0)
+        let unwrapped = try XCTUnwrap(length, "Endender Tune muss eine Laenge liefern")
+        // ~0,5 s Musik + 0,5 s Ausklang-Puffer, mit Toleranz fuer Envelope-Release.
+        XCTAssertGreaterThan(unwrapped, 0.4)
+        XCTAssertLessThan(unwrapped, 3.0)
+
+        // Komplett stiller Tune (nur RTS): kein Ende erkennbar -> nil.
+        var silentBytes = [UInt8](repeating: 0, count: 0x7C)
+        silentBytes[0] = 0x50; silentBytes[1] = 0x53; silentBytes[2] = 0x49; silentBytes[3] = 0x44
+        silentBytes[5] = 0x02
+        silentBytes[7] = 0x7C
+        silentBytes[10] = 0x10
+        silentBytes[12] = 0x10
+        silentBytes[15] = 1
+        silentBytes[17] = 0x01
+        silentBytes += [0x00, 0x10, 0x60]    // Ladeadresse + RTS
+        let silent = try SidParser.parse(data: Data(silentBytes))
+        XCTAssertNil(SongLengthEstimator.estimate(sidFile: silent, subtune: 0, maxSeconds: 5.0))
+    }
+
     // Erscheinungsbild-Modus (Einstellungen-Dialog): Auto folgt dem System,
     // Hell/Dunkel sind fest; unbekannte/fehlende gespeicherte Werte -> Auto.
     func testThemeModeResolve() {
