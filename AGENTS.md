@@ -250,3 +250,17 @@ Bewusst niedrig/nicht empfohlen: Hardware-/ASID-Ausgabe (Nische),
 Audio-Fingerprint-Erkennung/WhatsSID (sehr grosser Aufwand),
 reSIDfp-Vollport (nur inkrementelle Filter-Verbesserung realistisch),
 MUS/CGSC-Support (Nische).
+
+## Verzeichnisstruktur
+
+<!-- directory-structure: generated -->
+- [AGENTS.md](AGENTS.md) — Projektprofil, Arbeitsregeln und dieses Datei-Verzeichnis.
+- [README.de.md](README.de.md) — Projekt-Einstieg und Nutzerdokumentation.
+- [README.md](README.md) — Projekt-Einstieg und Nutzerdokumentation.
+- `Sources/` — Projektbestandteil; Details stehen im Code bzw. in der verlinkten Dokumentation.
+- `Tests/` — Projektbestandteil; Details stehen im Code bzw. in der verlinkten Dokumentation.
+- `Tools/` — Projektbestandteil; Details stehen im Code bzw. in der verlinkten Dokumentation.
+- `Vicious SID Player.app/` — Projektbestandteil; Details stehen im Code bzw. in der verlinkten Dokumentation.
+- `src/` — Projektbestandteil; Details stehen im Code bzw. in der verlinkten Dokumentation.
+- `tasks/` — Projektbestandteil; Details stehen im Code bzw. in der verlinkten Dokumentation.
+<!-- /directory-structure -->
