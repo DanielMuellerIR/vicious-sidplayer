@@ -5,6 +5,63 @@ CLI-Player, optional später mehr. Kein separates Repo, kein Fork: der portable 
 (`ViciousSIDPlayerCore`) wird plattformübergreifend genutzt, macOS-App/Quick-Look bleiben
 unverändert.
 
+## Stand 2026-07-15: Phase 0 und 1 erledigt, ALSA aus Phase 2 erledigt (v1.6.0)
+
+Verifiziert auf dem lokalen Linux-Testrechner (Mint 22.2, x86_64) im Container
+`swift:6.0` (Swift 6.0.3):
+
+- **Phase 0 erfüllt:** `swift build` und `swift test` laufen auf Linux grün, ohne
+  Sonderflags. 22 Tests auf Linux, 24 auf macOS — die Differenz sind exakt die zwei
+  CryptoKit-Kreuzvergleiche der MD5, die es auf Linux nicht gibt.
+- **Phase 1 erfüllt:** `vicious-sid` baut und läuft. Die WAV-Ausgabe ist zwischen
+  macOS-arm64 und Linux-x86_64 **byteidentisch** (gleiche MD5, gleiche Größe) — die
+  Emulation rechnet auf beiden Architekturen bitgenau dasselbe.
+- **ALSA (Phase 2) erledigt und laufzeitgeprüft:** Wiedergabe über eine temporäre
+  PipeWire-Null-Senke, Mitschnitt per `parec`: 5,2 s, Spitzenpegel 14121/32767,
+  79 % Nicht-Null-Samples, sauberes Ende mit `.sourceFinished`. Alle neun unsicheren
+  ALSA-C-Signaturen sind gegen echte Header verifiziert (der Build beweist sie).
+- Statisches Binary (`--static-swift-stdlib`, ~65 MB) läuft nativ auf dem Host und
+  hängt nur noch an System-Bibliotheken inklusive `libasound.so.2`.
+
+### Noch offen
+
+- **Phase 2, Rest:** Tastatursteuerung im CLI (Pause, Subtune +/-, Quit) über
+  Terminal-Raw-Mode. Damit auch ein sauberer Strg-C-Abbruch statt Prozess-Kill.
+- **Phase 3:** MPRIS2, .desktop-Datei, AppImage — weiterhin optional.
+- **CI:** GitHub-Actions-Job `ubuntu-latest` fehlt noch (Build + Tests +
+  Determinismus-Check). Nur nach ausdrücklichem Auftrag, da GitHub-Bezug.
+- **`AVAudioEnginePCMSink` deklariert als einziger Sink kein `Sendable`.** Die anderen
+  beiden sind `@unchecked Sendable`. Ein Sink ist naturgemäß ein Objekt über
+  Thread-Grenzen; `PCMSink: AnyObject, Sendable` wäre der ehrlichere Vertrag. Bewusst
+  verschoben, um nicht in laufende Arbeit zu greifen.
+- **Ehrlichkeitslücke in `ALSAPCMSink`:** wird `waitUntilFinished()` aus dem
+  Renderblock heraus gerufen, kann es nicht warten und liefert `.notStarted`, obwohl
+  gerade gespielt wird. Im Code benannt.
+- Der CLI-Renderpfad zieht immer stereo. Bei 1SID sind beide Kanäle identisch — das
+  ist doppelte Arbeit gegenüber `play()`, aber gewollt einfach. Falls Messungen es
+  rechtfertigen, wäre mono bei 1SID die Optimierung.
+
+## Nachtrag 2026-07-15 (Umsetzungsbeginn)
+
+Beim Angehen von Phase 0 gefunden, im Ist-Stand unten noch nicht enthalten:
+
+- **CryptoKit-Blocker:** `Songlength.swift` importiert `CryptoKit` (`Insecure.MD5`) für
+  den MD5-Schlüssel des HVSC-Lookups. Auf Linux nicht verfügbar — blockiert den
+  gesamten Core-Build, nicht nur den Coordinator. Entscheidung (Daniel, 2026-07-15):
+  **eigene MD5 im Core**, keine Fremdabhängigkeit; das Repo bleibt abhängigkeitsfrei.
+  MD5 ist hier kein Sicherheitsmerkmal, sondern nur ein Lookup-Schlüssel. Abgesichert
+  über RFC-1321-Vektoren plus Kreuzvergleich gegen CryptoKit auf macOS.
+- **`RealtimeVisualsBuffer` bleibt ungeguardet:** steht zwar in `ViciousCoordinator.swift`,
+  braucht aber nur Foundation. Nur `ViciousCoordinator` selbst ist AVFoundation-geguardet,
+  damit der Linux-CLI-Pfad den Puffer nutzen kann.
+- **Der Linux-Testrechner braucht einmalig eine Einrichtung mit Root-Rechten:** Docker-
+  Gruppenmitgliedschaft für den Benutzer und `libasound2-dev`. Ohne Docker-Zugriff und
+  ALSA-Header lässt sich der Port weder bauen noch prüfen.
+- **App/Quick-Look blockieren den Linux-Build** (SwiftUI/AppKit). Gelöst in `Package.swift`:
+  Die Apple-Targets kommen per `#if os(macOS)` gar nicht erst ins Paket, deshalb genügen
+  auf beiden Plattformen `swift build` und `swift test` ohne Sonderflags. (Der ältere
+  Vorschlag „auf Linux nur `--product vicious-sid` bauen" ist damit hinfällig.)
+
 ## Ausgangslage (verifiziert 2026-07-05)
 
 - `Sources/ViciousSIDPlayerCore/` ist bis auf **eine Datei** reines Foundation:

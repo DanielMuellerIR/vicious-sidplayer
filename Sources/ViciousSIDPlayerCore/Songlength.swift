@@ -1,5 +1,4 @@
 import Foundation
-import CryptoKit
 
 // Songlaengen-Aufloesung, Teil A: die kuratierte HVSC-Datenbank.
 //
@@ -67,8 +66,10 @@ public struct SonglengthDB: Sendable {
     }
 
     // MD5-Hex des kompletten Datei-Inhalts — der Schluessel der HVSC-DB.
+    // Eigene MD5-Implementierung (siehe MD5.swift), damit der Core ohne CryptoKit
+    // auch auf Linux baut. Format unveraendert: lowercase Hex ohne Trenner.
     public static func md5Hex(of data: Data) -> String {
-        return Insecure.MD5.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        return MD5.hexString(of: data)
     }
 
     // Auto-Fund der DB relativ zu einem Musik-Ordner: HVSC legt sie unter

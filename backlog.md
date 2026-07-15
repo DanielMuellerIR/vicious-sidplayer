@@ -7,7 +7,15 @@
 3. Mini-Player mit Titel und Transportsteuerung.
 4. HTTP-Remote oder URL-Schema nur als kleiner, abgesicherter Agenteneinstieg; CLI ist
    bereits der primäre Headless-Weg.
-5. Optional Filter-Cutoff-Tuning für 6581.
+5. Filter-Cutoff-Tuning für 6581. Ersetzt dauerhaft einen vollständigen reSIDfp-Port
+   (Entscheidung 2026-07-15): holt den hörbaren Teil des Gewinns ohne Engine-Umbau.
 
-Bewusst niedrig: ASID-Hardware, Audiofingerprint/WhatsSID, vollständiger reSIDfp-Port,
-MUS/CGSC. Erledigte Release-/Quick-Look-/v1.5.0-Arbeit nicht zurückführen.
+In Arbeit: Linux-Port (CLI + Audio-Backend) nach `tasks/2026-07-05-linux-port/plan.md`.
+
+Permanent zurückgestellt, nur Kandidaten für schlimme Langeweile: Audiofingerprint/
+WhatsSID (bräuchte serverseitige Fingerprint-DB über die HVSC), MUS/CGSC (eigenes Format
+plus eigene Player-Routine für einen kleinen Sammlungszweig).
+
+Gestrichen: ASID/Echt-SID-Hardware (2026-07-15) — nicht wieder aufnehmen.
+
+Erledigte Release-/Quick-Look-/v1.5.0-Arbeit nicht zurückführen.

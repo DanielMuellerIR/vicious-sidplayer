@@ -135,6 +135,43 @@ swift build -c release          # builds .build/release/sidcheck
 
 ---
 
+## Linux (CLI player)
+
+The emulation core is platform-neutral, so the player also runs on Linux — as a command-line player named `vicious-sid`. There is no native Linux GUI; the HTML5 player covers that need.
+
+**Requirements:** Swift 6.0 and `libasound2-dev` to build, `libasound2` at runtime. The binary always links against `libasound.so.2`, even for WAV export.
+
+```bash
+sudo apt install libasound2-dev
+
+swift build     # no special flags needed: the Apple-only targets (app, Quick Look)
+swift test      # are left out of the package on Linux
+```
+
+Usage:
+
+```bash
+vicious-sid tune.sid                    # real-time playback via ALSA
+vicious-sid tune.sid --subtune 2        # pick a subtune (0-based)
+vicious-sid tune.sid --seconds 30       # stop after 30 seconds
+vicious-sid tune.sid --wav out.wav      # render faster than real time
+
+# Raw PCM into a pipe (s16le, interleaved)
+vicious-sid tune.sid --stdout | aplay -f S16_LE -r 44100 -c 2
+```
+
+Playback goes through ALSA and therefore works with PipeWire and PulseAudio too. Everything human-readable — title, author, errors — goes to stderr, so stdout stays a clean audio stream. Exit codes: `0` = success, `1` = argument or parser error, `2` = I/O error.
+
+A self-contained binary for distribution:
+
+```bash
+swift build -c release --product vicious-sid --static-swift-stdlib
+```
+
+The WAV output is byte-identical between the macOS (arm64) and Linux (x86_64) builds — the emulation computes the same samples on both. Verified on Linux Mint 22.2 (Ubuntu 24.04 base), x86_64, Swift 6.0.3.
+
+---
+
 ## Technical background
 
 ### SID emulation

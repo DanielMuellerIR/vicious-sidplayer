@@ -1,7 +1,18 @@
 import Foundation
+
+// AVFoundation und Combine sind Apple-Frameworks und existieren unter Linux nicht.
+// Alles, was direkt darauf aufbaut (der ViciousCoordinator mit AVAudioEngine und
+// ObservableObject), wird deshalb weiter unten plattform-geguardet. Der Guard prueft
+// AVFoundation stellvertretend fuer beide Frameworks: Wo es AVFoundation gibt (macOS,
+// iOS), gibt es auch Combine.
+#if canImport(AVFoundation)
 import AVFoundation
 import Combine
+#endif
 
+// Bewusst AUSSERHALB des Guards: Der Puffer braucht nur Foundation (NSLock) und ist
+// damit plattformneutral. So kann ihn spaeterer Linux-Code (z. B. ein CLI-Player) mit
+// einem eigenen Audio-Backend weiterverwenden.
 public final class RealtimeVisualsBuffer: @unchecked Sendable {
     private let lock = NSLock()
     private var _envelopes: (Float, Float, Float) = (0.0, 0.0, 0.0)
@@ -48,6 +59,10 @@ public final class RealtimeVisualsBuffer: @unchecked Sendable {
     }
 }
 
+// Der Coordinator selbst ist Apple-only: Er haengt an AVAudioEngine (Audioausgabe) und
+// an Combine/ObservableObject (@Published fuer die SwiftUI-Bindung). Beides gibt es unter
+// Linux nicht, deshalb faellt die ganze Klasse dort aus der Uebersetzung heraus.
+#if canImport(AVFoundation)
 @MainActor
 public final class ViciousCoordinator: ObservableObject {
     @Published public var isPlaying = false
@@ -350,3 +365,4 @@ public final class ViciousCoordinator: ObservableObject {
         self.elapsedSeconds = b.playtime
     }
 }
+#endif

@@ -8,7 +8,7 @@ SidPlayer.app/
 build/
 vicious-sid-player.html
 sidplayer.html
-audio/*.sid
+/audio/*.sid
 *.sid
 *.wav
 *.aiff
@@ -19,4 +19,9 @@ audio/*.sid
 *.zip
 *.tar
 *.tar.gz
-audio/
+# Der lokale Sammlungsordner — bewusst an die Repo-Wurzel verankert ("/audio/").
+# Ohne den fuehrenden Schraegstrich greift das Muster in JEDER Tiefe und schluckt
+# auch Quellcode-Verzeichnisse wie Sources/ViciousSIDPlayerCore/Audio/ (auf macOS
+# zusaetzlich case-insensitiv, auf Linux nicht — die Regel wirkte also je nach
+# Plattform unterschiedlich).
+/audio/
