@@ -5,6 +5,29 @@ CLI-Player, optional später mehr. Kein separates Repo, kein Fork: der portable 
 (`ViciousSIDPlayerCore`) wird plattformübergreifend genutzt, macOS-App/Quick-Look bleiben
 unverändert.
 
+## Stand 2026-07-15: Phase 2 abgeschlossen (v1.7.0)
+
+Tastatursteuerung im CLI über `RawTerminal` (termios-Rohmodus, macOS + Linux):
+Leertaste = Pause/Weiter, n/p = Subtune vor/zurück, q bzw. Strg-C = Ende. Nur aktiv,
+wenn stdin an einem Terminal hängt (`isatty`) — in Skripten/CI entfällt sie.
+
+- `ISIG` ist im Rohmodus abgeschaltet. Folge: Strg-C kommt als Byte 0x03 herein statt
+  als Signal, und die Tastaturschleife MUSS darauf reagieren — sonst hängt der Player
+  unkündbar. Der Gegenwert: das Terminal bleibt nie im Rohmodus zurück.
+- Subtune-Wechsel greift direkt in den laufenden Processor. Sicher, weil `initSubtune`
+  dieselbe `NSLock` nimmt wie `playStereo()` im Audio-Thread.
+- `PCMSink` verlangt jetzt `Sendable` (vorher offener Punkt). Ein Sink wird von Natur
+  aus über Thread-Grenzen benutzt — hier konkret, weil `waitUntilFinished()` auf einem
+  eigenen Warte-Thread läuft, damit der Haupt-Thread Tasten lesen kann.
+
+**Erfolgskriterium erfüllt** („Start/Pause/Subtune-Wechsel ohne Knackser auf Linux"):
+über ein Pseudoterminal echte Tasten geschickt, Ausgabe über echtes ALSA in eine
+PipeWire-Null-Senke, Mitschnitt per `parec` ausgewertet. Der Pegelverlauf zeigt Musik
+bei ~10500, während der Pause **exakt 0** (ALSA hört auf zu liefern, statt zu
+wiederholen oder zu rauschen), danach sauberen Wiedereinstieg und beim Subtune-Wechsel
+den erwarteten Pegelsprung. Keine Aussetzer während der Wiedergabe. Nicht belegbar
+bleibt, ob die Übergangskante minimal knackst — das hört nur ein Mensch.
+
 ## Stand 2026-07-15: Phase 0 und 1 erledigt, ALSA aus Phase 2 erledigt (v1.6.0)
 
 Verifiziert auf dem lokalen Linux-Testrechner (Mint 22.2, x86_64) im Container
@@ -25,15 +48,15 @@ Verifiziert auf dem lokalen Linux-Testrechner (Mint 22.2, x86_64) im Container
 
 ### Noch offen
 
-- **Phase 2, Rest:** Tastatursteuerung im CLI (Pause, Subtune +/-, Quit) über
-  Terminal-Raw-Mode. Damit auch ein sauberer Strg-C-Abbruch statt Prozess-Kill.
 - **Phase 3:** MPRIS2, .desktop-Datei, AppImage — weiterhin optional.
 - **CI:** GitHub-Actions-Job `ubuntu-latest` fehlt noch (Build + Tests +
   Determinismus-Check). Nur nach ausdrücklichem Auftrag, da GitHub-Bezug.
-- **`AVAudioEnginePCMSink` deklariert als einziger Sink kein `Sendable`.** Die anderen
-  beiden sind `@unchecked Sendable`. Ein Sink ist naturgemäß ein Objekt über
-  Thread-Grenzen; `PCMSink: AnyObject, Sendable` wäre der ehrlichere Vertrag. Bewusst
-  verschoben, um nicht in laufende Arbeit zu greifen.
+- **Kein Determinismus-Test in der Testsuite.** Die Byte-Parität wurde von Hand
+  zwischen macOS und Linux geprüft, nicht automatisiert. Ein Test bräuchte eine
+  SID-Datei; die darf nicht ins Repo. Denkbar: eine winzige PSID zur Laufzeit im Test
+  erzeugen (selbstgeschriebene 6502-Routine) und deren Render-Hash festnageln.
+- **Pfeiltasten** werden nicht ausgewertet: `readKey()` liefert bewusst ein Byte,
+  Escape-Sequenzen (`0x1B [ A`) bräuchten das Einsammeln der Folgebytes.
 - **Ehrlichkeitslücke in `ALSAPCMSink`:** wird `waitUntilFinished()` aus dem
   Renderblock heraus gerufen, kann es nicht warten und liefert `.notStarted`, obwohl
   gerade gespielt wird. Im Code benannt.

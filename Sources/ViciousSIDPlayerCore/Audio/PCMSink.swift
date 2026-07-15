@@ -110,13 +110,20 @@ public typealias PCMRenderBlock = @Sendable (UnsafeMutableBufferPointer<Float>, 
 /// `pause()` haelt nur an und erhaelt den Stand, `stop()` baut ab. Das Zuruecksetzen
 /// der Emulation ist NICHT Sache des Sinks — er kennt sie nicht.
 ///
+/// **`Sendable` ist Teil des Vertrags**, nicht bloss Beiwerk: Ein Sink wird von Natur
+/// aus ueber Thread-Grenzen hinweg benutzt. `start()` kommt vom Haupt-Thread, der
+/// Renderblock laeuft auf dem Audio-Thread, und `stop()` kommt womoeglich aus einer
+/// Tastaturschleife oder einem Signal-Handler. Jede Implementierung muss ihren
+/// Zustand also selbst absichern (alle drei hier tun das mit einem Lock und
+/// dokumentieren, warum ihr `@unchecked Sendable` gedeckt ist).
+///
 /// **Lautstaerke ist bewusst nicht Teil dieses Vertrags.** Sie gehoert der Quelle:
 /// wer die Samples erzeugt, skaliert sie auch (beim SID-Player macht das
 /// `ViciousProcessor.setVolume`, in der macOS-App zusaetzlich der Mixer mit seiner
 /// psychoakustischen Kurve). Ein Sink, der zusaetzlich am Pegel dreht, wuerde die
 /// Lautstaerke doppelt anwenden — genau der Fehler, vor dem der Kommentar in
 /// ViciousCoordinator.play() warnt.
-public protocol PCMSink: AnyObject {
+public protocol PCMSink: AnyObject, Sendable {
     /// Das Format, in dem dieser Sink Samples erwartet.
     var format: PCMFormat { get }
 

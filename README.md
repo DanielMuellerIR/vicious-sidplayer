@@ -160,6 +160,8 @@ vicious-sid tune.sid --wav out.wav      # render faster than real time
 vicious-sid tune.sid --stdout | aplay -f S16_LE -r 44100 -c 2
 ```
 
+While a tune is playing at a terminal, single keys control it: **space** pauses and resumes, **n** and **p** step through subtunes, **q** or **Ctrl-C** quits. When stdin is not a terminal — in a script or a CI job — the keyboard handling is skipped and the player simply plays.
+
 Playback goes through ALSA and therefore works with PipeWire and PulseAudio too. Everything human-readable — title, author, errors — goes to stderr, so stdout stays a clean audio stream. Exit codes: `0` = success, `1` = argument or parser error, `2` = I/O error.
 
 A self-contained binary for distribution:

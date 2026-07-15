@@ -73,7 +73,12 @@ private struct RenderPointers: @unchecked Sendable {
     let didFinish: UnsafeMutablePointer<Bool>
 }
 
-public final class AVAudioEnginePCMSink: PCMSink {
+// `@unchecked Sendable` wie bei den Schwester-Sinks und aus demselben Grund ehrlich:
+// Der veraenderliche Zustand (`state`) liegt vollstaendig hinter `lock`, `didFinish`
+// wird nur vom Realtime-Thread geschrieben und erst nach dem Semaphor gelesen (siehe
+// RenderPointers oben), und alles Uebrige ist `let`. Der Compiler kann das nicht
+// nachweisen, der Code drumherum haelt es ein.
+public final class AVAudioEnginePCMSink: PCMSink, @unchecked Sendable {
 
     /// Zustand der Wiedergabe. Bewusst identisch zum Vertrag in `PCMSink` und zu
     /// StdoutPCMSink: `pause()` haelt nur an, `stop()` beendet endgueltig, und

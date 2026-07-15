@@ -160,6 +160,8 @@ vicious-sid tune.sid --wav out.wav      # schneller als Echtzeit rendern
 vicious-sid tune.sid --stdout | aplay -f S16_LE -r 44100 -c 2
 ```
 
+Läuft ein Tune am Terminal, steuern ihn einzelne Tasten: **Leertaste** pausiert und setzt fort, **n** und **p** blättern durch die Subtunes, **q** oder **Strg-C** beendet. Hängt stdin nicht an einem Terminal — in einem Skript oder CI-Job —, entfällt die Tastatursteuerung und der Player spielt einfach.
+
 Die Wiedergabe läuft über ALSA und funktioniert damit auch mit PipeWire und PulseAudio. Alles Menschenlesbare — Titel, Autor, Fehler — geht nach stderr, damit stdout ein sauberer Audiostrom bleibt. Exit-Codes: `0` = Erfolg, `1` = Argument- oder Parser-Fehler, `2` = I/O-Fehler.
 
 Ein eigenständiges Binary zur Weitergabe:

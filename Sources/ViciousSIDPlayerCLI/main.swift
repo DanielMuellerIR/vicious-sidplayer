@@ -32,6 +32,12 @@ Optionen:
   --stdout        Rohes PCM (s16le, interleaved) nach stdout statt an die Soundkarte
   -h, --help      Diese Hilfe
 
+Tasten während der Wiedergabe (nur am Terminal):
+  Leertaste       Pause / Weiter
+  n / +           nächster Subtune
+  p / -           vorheriger Subtune
+  q / Strg-C      beenden
+
 Beispiele:
   vicious-sid tune.sid --subtune 2
   vicious-sid tune.sid --stdout | aplay -f S16_LE -r 44100 -c 2      # Linux
@@ -227,14 +233,126 @@ if useStdout {
 }
 note(seconds.map { "Dauer:    \(Int($0)) s" } ?? "Dauer:    endlos (Strg-C beendet)")
 
+// MARK: - Tastatursteuerung
+
+/// Nimmt den Endgrund vom Warte-Thread entgegen.
+///
+/// Warum ueberhaupt ein zweiter Thread: `waitUntilFinished()` blockiert bis zum
+/// Ende des Stuecks. Wuerde der Haupt-Thread darin haengen, koennte er keine Tasten
+/// lesen. Also wartet ein eigener Thread, und der Haupt-Thread pollt hier, ob schon
+/// ein Grund vorliegt.
+final class FinishBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: PCMSinkFinishReason?
+
+    /// `nil` = laeuft noch.
+    var reason: PCMSinkFinishReason? {
+        lock.lock()
+        defer { lock.unlock() }
+        return stored
+    }
+
+    func set(_ value: PCMSinkFinishReason) {
+        lock.lock()
+        stored = value
+        lock.unlock()
+    }
+}
+
+/// Spielt mit Tastatursteuerung und liefert den Endgrund.
+///
+/// Der Subtune-Wechsel greift direkt in den laufenden Processor. Das ist sicher,
+/// weil `initSubtune` dieselbe Sperre nimmt wie `playStereo()` im Audio-Thread —
+/// die beiden koennen sich also nicht in die Quere kommen.
+func runInteractive(sink: PCMSink,
+                    processor: ViciousProcessor,
+                    startSubtune: Int,
+                    subtunesCount: Int) -> PCMSinkFinishReason {
+    let box = FinishBox()
+    let waiter = Thread { box.set(sink.waitUntilFinished()) }
+    waiter.name = "vicious-sid.waiter"
+    waiter.start()
+
+    let terminal = RawTerminal()
+    terminal.enter()
+    // Egal wie diese Funktion verlassen wird: das Terminal MUSS zurueckgesetzt
+    // werden, sonst bleibt die Shell des Nutzers ohne Echo und Zeilenpufferung
+    // zurueck — also praktisch unbenutzbar.
+    defer { terminal.restore() }
+
+    var currentSubtune = startSubtune
+    var isPaused = false
+
+    /// Wechselt den Subtune und meldet es.
+    func switchSubtune(to next: Int) {
+        guard subtunesCount > 1 else {
+            note("Diese Datei hat nur einen Subtune.")
+            return
+        }
+        currentSubtune = next
+        processor.initSubtune(sub: currentSubtune)
+        note("Subtune \(currentSubtune + 1)/\(subtunesCount)")
+    }
+
+    // Solange kein Endgrund vorliegt: Tasten lesen. readKey() wartet hoechstens
+    // ~100 ms und liefert dann nil — dadurch bleibt die Schleife reaktionsfaehig
+    // und merkt auch, wenn das Stueck von selbst zu Ende geht.
+    while box.reason == nil {
+        guard let key = terminal.readKey() else { continue }
+
+        switch key {
+        case UInt8(ascii: " "):
+            do {
+                if isPaused {
+                    try sink.resume()
+                    note("Weiter.")
+                } else {
+                    try sink.pause()
+                    note("Pause.")
+                }
+                isPaused.toggle()
+            } catch {
+                note("Pause/Weiter nicht möglich: \(error.localizedDescription)")
+            }
+        case UInt8(ascii: "n"), UInt8(ascii: "+"):
+            switchSubtune(to: (currentSubtune + 1) % subtunesCount)
+        case UInt8(ascii: "p"), UInt8(ascii: "-"):
+            switchSubtune(to: (currentSubtune - 1 + subtunesCount) % subtunesCount)
+        case UInt8(ascii: "q"), 0x03:
+            // 0x03 ist Strg-C. Weil der Rohmodus ISIG abschaltet, kommt es als
+            // ganz normales Byte herein statt als Signal — genau deshalb koennen
+            // wir hier sauber aufraeumen, statt hart abgeschossen zu werden.
+            sink.stop()
+        default:
+            break
+        }
+    }
+
+    return box.reason ?? .stopped
+}
+
 do {
     try sink.start(render: render)
 } catch {
     fail("Fehler: Audio-Ausgabe konnte nicht starten — \(error.localizedDescription)", code: 2)
 }
 
-// Warten, bis die Wiedergabe endet — und den Grund in einen Exit-Code uebersetzen.
-switch sink.waitUntilFinished() {
+// Tastatursteuerung nur, wenn stdin wirklich an einem Terminal haengt. Laeuft das
+// CLI aus einem Skript oder mit umgeleiteter Eingabe, gibt es niemanden, der Tasten
+// druecken koennte — dann einfach warten.
+let finishReason: PCMSinkFinishReason
+if RawTerminal.isInteractive {
+    note("Tasten:   [Leer] Pause · [n]/[p] Subtune vor/zurück · [q] Ende")
+    finishReason = runInteractive(sink: sink,
+                                  processor: processor,
+                                  startSubtune: subtune,
+                                  subtunesCount: sid.metadata.subtunesCount)
+} else {
+    finishReason = sink.waitUntilFinished()
+}
+
+// Den Grund in einen Exit-Code uebersetzen.
+switch finishReason {
 case .sourceFinished:
     note("Fertig.")
     exit(0)
