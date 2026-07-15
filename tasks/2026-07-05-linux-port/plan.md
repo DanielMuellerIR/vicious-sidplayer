@@ -51,10 +51,13 @@ Verifiziert auf dem lokalen Linux-Testrechner (Mint 22.2, x86_64) im Container
 - **Phase 3:** MPRIS2, .desktop-Datei, AppImage — weiterhin optional.
 - **CI:** GitHub-Actions-Job `ubuntu-latest` fehlt noch (Build + Tests +
   Determinismus-Check). Nur nach ausdrücklichem Auftrag, da GitHub-Bezug.
-- **Kein Determinismus-Test in der Testsuite.** Die Byte-Parität wurde von Hand
-  zwischen macOS und Linux geprüft, nicht automatisiert. Ein Test bräuchte eine
-  SID-Datei; die darf nicht ins Repo. Denkbar: eine winzige PSID zur Laufzeit im Test
-  erzeugen (selbstgeschriebene 6502-Routine) und deren Render-Hash festnageln.
+- ~~Kein Determinismus-Test in der Testsuite.~~ **Erledigt 2026-07-16** (`d965aac`):
+  `Tests/ViciousSIDPlayerTests/DeterminismTests.swift` baut eine synthetische PSID
+  zur Laufzeit (handgeschriebene 6502-Routine, keine Datei im Repo) und nagelt den
+  MD5 einer Sekunde 16-Bit-PCM fest. Auf macOS-arm64 ermittelt, auf Linux-x86_64
+  unverändert bestätigt. Schlägt er fehl, ist entweder die Emulation bewusst geändert
+  (Hash nur nach Abgleich mit den SID-Referenzfällen neu setzen!) oder die
+  Plattform-Unabhängigkeit kaputt — dann NICHT den Hash anpassen.
 - **Pfeiltasten** werden nicht ausgewertet: `readKey()` liefert bewusst ein Byte,
   Escape-Sequenzen (`0x1B [ A`) bräuchten das Einsammeln der Folgebytes.
 - **Ehrlichkeitslücke in `ALSAPCMSink`:** wird `waitUntilFinished()` aus dem
