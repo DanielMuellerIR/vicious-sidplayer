@@ -1,0 +1,54 @@
+# Linux-CI fuer den portablen Kern und das CLI.
+#
+# Warum nur Linux: Die macOS-Seite entsteht ohnehin auf einem Mac und faellt dort
+# sofort auf. Der Linux-Pfad dagegen wuerde still verrotten — genau dagegen laeuft
+# dieser Job. Er baut im selben Container, in dem der Port entwickelt und geprueft
+# wurde (swift:6.0), damit CI und Handarbeit dasselbe sehen.
+#
+# `swift test` enthaelt den Determinismus-Test: Er rendert eine synthetisch
+# erzeugte SID und vergleicht den Hash gegen den auf macOS ermittelten Wert. Faellt
+# er hier um, hat entweder jemand die Emulation geaendert oder die
+# Plattform-Unabhaengigkeit ist kaputt.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Erlaubt einen Lauf von Hand ueber die Actions-Oberflaeche.
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: Linux (Swift 6.0)
+    runs-on: ubuntu-latest
+    container: swift:6.0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ALSA fuer die Audioausgabe, D-Bus fuer MPRIS2. Beides sind Header-Pakete;
+      # ohne sie scheitern die systemLibrary-Targets CALSA und CDBus.
+      - name: Systembibliotheken installieren
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq libasound2-dev libdbus-1-dev
+
+      # Ohne Sonderflags: Package.swift laesst die Apple-Targets auf Linux per
+      # `#if os(macOS)` gar nicht erst ins Paket.
+      - name: Bauen
+        run: swift build
+
+      - name: Testen
+        run: swift test
+
+      # Das Artefakt, das ausgeliefert wird — wenn der Release-Build bricht, soll
+      # das hier auffallen und nicht erst beim Paketieren.
+      - name: Release-Binary bauen (statisch)
+        run: swift build -c release --product vicious-sid --static-swift-stdlib
+
+      # Rauchprobe: Laeuft das gebaute Binary ueberhaupt an? Wiedergabe laesst sich
+      # hier nicht pruefen (kein Audiogeraet, kein Session-Bus im Runner) — und es
+      # gibt bewusst keine SID-Datei im Repo, gegen die man spielen koennte.
+      - name: Binary laeuft an
+        run: ./.build/release/vicious-sid --help

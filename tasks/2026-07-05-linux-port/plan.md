@@ -24,7 +24,7 @@ und `.deb`-Paketierung (`build_deb.sh`).
   die man nicht schließen darf → `dbus_bus_get_private`. Und libdbus beendet den
   Prozess per Voreinstellung bei Bus-Verlust → `set_exit_on_disconnect(conn, 0)`,
   sonst stirbt der Player mitten im Stück.
-- **AppImage bewusst verworfen** (Entscheidung Daniel, 2026-07-16): AppImage bündelt
+- **AppImage bewusst verworfen** (Projektentscheidung, 2026-07-16): AppImage bündelt
   GUI-Apps mit ihren Bibliotheken; unser CLI ist mit `--static-swift-stdlib` ohnehin
   eigenständig. AppImage bräuchte FUSE, gehört schlecht in `$PATH` und ist in einer
   Pipe sperrig. `.deb` ist auf Mint/Ubuntu das idiomatische Mittel.
@@ -116,7 +116,7 @@ Beim Angehen von Phase 0 gefunden, im Ist-Stand unten noch nicht enthalten:
 
 - **CryptoKit-Blocker:** `Songlength.swift` importiert `CryptoKit` (`Insecure.MD5`) für
   den MD5-Schlüssel des HVSC-Lookups. Auf Linux nicht verfügbar — blockiert den
-  gesamten Core-Build, nicht nur den Coordinator. Entscheidung (Daniel, 2026-07-15):
+  gesamten Core-Build, nicht nur den Coordinator. Projektentscheidung (2026-07-15):
   **eigene MD5 im Core**, keine Fremdabhängigkeit; das Repo bleibt abhängigkeitsfrei.
   MD5 ist hier kein Sicherheitsmerkmal, sondern nur ein Lookup-Schlüssel. Abgesichert
   über RFC-1321-Vektoren plus Kreuzvergleich gegen CryptoKit auf macOS.
