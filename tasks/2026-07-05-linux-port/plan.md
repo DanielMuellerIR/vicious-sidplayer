@@ -90,10 +90,13 @@ Verifiziert auf dem lokalen Linux-Testrechner (Mint 22.2, x86_64) im Container
 
 ### Noch offen
 
-- **CI:** GitHub-Actions-Job `ubuntu-latest` fehlt noch (Build + Tests +
-  Determinismus-Check). Nur nach ausdrücklichem Auftrag, da GitHub-Bezug. Das ist
-  der einzige verbliebene Punkt mit echtem Schutzwert — bis dahin hängt der
-  Linux-Schutz an einem manuellen `swift test`.
+- ~~CI: GitHub-Actions-Job fehlt noch.~~ **Erledigt 2026-07-16** (`cfda302`):
+  `.github/workflows/ci.yml` baut und testet bei jedem Push im Container `swift:6.0`
+  — demselben, in dem der Port entwickelt wurde. Enthält den Determinismus-Test,
+  den statischen Release-Build und eine Rauchprobe des Binaries. Erster Lauf grün
+  (1m16s). Bewusst nur Linux: die macOS-Seite entsteht ohnehin auf einem Mac.
+  Kleinigkeit: `actions/checkout@v4` zielt auf das abgekündigte Node 20 und läuft
+  vorerst auf Node 24 weiter — irgendwann auf `@v5` heben.
 - ~~Kein Determinismus-Test in der Testsuite.~~ **Erledigt 2026-07-16** (`d965aac`):
   `Tests/ViciousSIDPlayerTests/DeterminismTests.swift` baut eine synthetische PSID
   zur Laufzeit (handgeschriebene 6502-Routine, keine Datei im Repo) und nagelt den
