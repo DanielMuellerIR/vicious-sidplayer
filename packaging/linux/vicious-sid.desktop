@@ -1,0 +1,21 @@
+[Desktop Entry]
+Type=Application
+Name=Vicious SID Player
+GenericName=SID Music Player
+Comment=Play Commodore 64 SID tunes
+Comment[de]=Commodore-64-SID-Musik abspielen
+Exec=vicious-sid %f
+Icon=vicious-sid
+Terminal=true
+Categories=AudioVideo;Audio;Player;
+MimeType=audio/prs.sid;
+Keywords=SID;C64;Commodore;chiptune;
+# Absichtlich kein Menue-Eintrag: Der Player ist ein Kommandozeilenprogramm und
+# braucht zwingend eine Datei. Aus dem Anwendungsmenue heraus gestartet, haette er
+# nichts abzuspielen und wuerde nur die Hilfe in ein sich sofort schliessendes
+# Terminal schreiben. Diese Datei existiert fuer die Dateizuordnung — damit ein
+# Doppelklick (bzw. "Oeffnen mit") auf eine .sid im Dateimanager funktioniert.
+#
+# Der MIME-Typ audio/prs.sid wird NICHT von uns definiert: shared-mime-info kennt
+# ihn bereits systemweit (audio/prs.sid:*.sid). Wir verweisen nur darauf.
+NoDisplay=true

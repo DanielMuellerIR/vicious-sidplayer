@@ -5,6 +5,48 @@ CLI-Player, optional später mehr. Kein separates Repo, kein Fork: der portable 
 (`ViciousSIDPlayerCore`) wird plattformübergreifend genutzt, macOS-App/Quick-Look bleiben
 unverändert.
 
+## Stand 2026-07-16: Phase 3 abgeschlossen (v1.8.0) — der Port ist durch
+
+MPRIS2 über libdbus-1 (`Sources/CDBus/` + `MPRISServer.swift`), `.desktop`-Eintrag
+und `.deb`-Paketierung (`build_deb.sh`).
+
+- **Refactor vorweg:** `PlayerController` besitzt Sink, Processor und Subtune-Zustand.
+  Tastatur und MPRIS sind nur noch Bedienfelder davor — sonst hätte jedes davon
+  dieselbe Pause-/Subtune-Logik nachgebaut. Zugleich das Fundament für Backlog #4
+  (HTTP-Remote), falls der kommt.
+- **libdbus statt sd-bus:** sd-bus baut seine Objekt-Tabellen über C-Makros
+  (`SD_BUS_METHOD`), und Makros kommen in Swift nicht an — dieselbe Falle wie
+  `snd_pcm_hw_params_alloca` bei ALSA. libdbus ist makrofrei und aus Swift ansprechbar.
+- **Gelernt:** Cast-Makros (`#define DBUS_TYPE_STRING ((int) 's')`) importiert Swift
+  NICHT, einfache Integer-Makros (`DBUS_NAME_FLAG_REPLACE_EXISTING`) schon. Die
+  Typ-Codes sind deshalb selbst definiert, mit Begründung im Kopf der Datei.
+- **Zwei Fallstricke von libdbus:** `dbus_bus_get` liefert eine geteilte Verbindung,
+  die man nicht schließen darf → `dbus_bus_get_private`. Und libdbus beendet den
+  Prozess per Voreinstellung bei Bus-Verlust → `set_exit_on_disconnect(conn, 0)`,
+  sonst stirbt der Player mitten im Stück.
+- **AppImage bewusst verworfen** (Entscheidung Daniel, 2026-07-16): AppImage bündelt
+  GUI-Apps mit ihren Bibliotheken; unser CLI ist mit `--static-swift-stdlib` ohnehin
+  eigenständig. AppImage bräuchte FUSE, gehört schlecht in `$PATH` und ist in einer
+  Pipe sperrig. `.deb` ist auf Mint/Ubuntu das idiomatische Mittel.
+- **Kein eigener MIME-Typ:** `shared-mime-info` kennt `audio/prs.sid:*.sid` bereits
+  systemweit. Der `.desktop`-Eintrag verweist nur darauf.
+- `.desktop` hat `NoDisplay=true`: Der Player braucht zwingend eine Datei, ein
+  Menü-Eintrag wäre irreführend. Er existiert für die Dateizuordnung.
+
+**Verifiziert:** `.deb` auf blankem Ubuntu 24.04 **ohne Swift-Toolchain** installiert —
+Abhängigkeiten lösen sich auf, Dateien landen richtig, Binary läuft, Deinstallation
+rückstandsfrei. MPRIS am **echten Session-Bus** des Linux-Testrechners: Bus-Name
+beansprucht, Identity korrekt, Play/Pause/Next über D-Bus schalten wirklich um,
+Metadata liefert Track-ID und Subtune-Titel, `Quit` beendet sauber mit exit 0.
+Gegen eine synthetisch erzeugte PSID getestet — keine geschützte Datei nötig.
+
+### Nicht belegt
+
+Ein echter Medientastendruck und die Darstellung im Sound-Applet. Das braucht einen
+Desktop mit Sitzung; `csd-media-keys` läuft dort, die Voraussetzung stimmt also.
+Ebenso ungeprüft: ob der Dateimanager `NoDisplay=true`-Einträge trotzdem unter
+„Öffnen mit" anbietet.
+
 ## Stand 2026-07-15: Phase 2 abgeschlossen (v1.7.0)
 
 Tastatursteuerung im CLI über `RawTerminal` (termios-Rohmodus, macOS + Linux):
@@ -48,9 +90,10 @@ Verifiziert auf dem lokalen Linux-Testrechner (Mint 22.2, x86_64) im Container
 
 ### Noch offen
 
-- **Phase 3:** MPRIS2, .desktop-Datei, AppImage — weiterhin optional.
 - **CI:** GitHub-Actions-Job `ubuntu-latest` fehlt noch (Build + Tests +
-  Determinismus-Check). Nur nach ausdrücklichem Auftrag, da GitHub-Bezug.
+  Determinismus-Check). Nur nach ausdrücklichem Auftrag, da GitHub-Bezug. Das ist
+  der einzige verbliebene Punkt mit echtem Schutzwert — bis dahin hängt der
+  Linux-Schutz an einem manuellen `swift test`.
 - ~~Kein Determinismus-Test in der Testsuite.~~ **Erledigt 2026-07-16** (`d965aac`):
   `Tests/ViciousSIDPlayerTests/DeterminismTests.swift` baut eine synthetische PSID
   zur Laufzeit (handgeschriebene 6502-Routine, keine Datei im Repo) und nagelt den

@@ -37,6 +37,17 @@ var targets: [Target] = [
                 .apt(["libasound2-dev"])
             ]
         ),
+        // D-Bus-Systembibliothek (nur Linux; siehe Sources/CDBus/module.modulemap).
+        // Fuer MPRIS2: Medientasten und Sound-Applet des Desktops. Braucht auf dem
+        // Build-Rechner das Paket libdbus-1-dev.
+        .systemLibrary(
+            name: "CDBus",
+            path: "Sources/CDBus",
+            pkgConfig: "dbus-1",
+            providers: [
+                .apt(["libdbus-1-dev"])
+            ]
+        ),
         .target(
             name: "ViciousSIDPlayerCore",
             dependencies: [
@@ -50,7 +61,11 @@ var targets: [Target] = [
         // Linux-Ausgabepfad schon auf dem Mac entwickel- und testbar.
         .executableTarget(
             name: "ViciousSIDPlayerCLI",
-            dependencies: ["ViciousSIDPlayerCore"],
+            dependencies: [
+                "ViciousSIDPlayerCore",
+                // MPRIS2 gibt es nur auf Linux — auf macOS wird CDBus nie angefasst.
+                .target(name: "CDBus", condition: .when(platforms: [.linux]))
+            ],
             path: "Sources/ViciousSIDPlayerCLI"
         ),
         // Headless-Crash-Checker (siehe Tools/sidcheck/main.swift) — findet harte

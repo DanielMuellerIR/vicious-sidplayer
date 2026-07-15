@@ -16,6 +16,7 @@ sidplayer.html
 *.mp3
 *.flac
 *.dmg
+*.deb
 *.zip
 *.tar
 *.tar.gz

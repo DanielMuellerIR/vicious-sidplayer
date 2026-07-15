@@ -166,65 +166,23 @@ if let wavPath {
 
 // MARK: - Wiedergabe
 
-/// Zaehlt mit, wie viele Frames schon gerendert wurden, und deckelt sie auf die
-/// per --seconds gewuenschte Dauer.
-///
-/// `@unchecked Sendable` ist hier ehrlich und kein Trick: nach `start()` fasst
-/// AUSSCHLIESSLICH der Audio-Thread dieses Objekt an. Es gibt keinen zweiten
-/// Zugriff, also auch kein Datenrennen — und ein Lock im Renderpfad waere sogar
-/// schaedlich (siehe Echtzeit-Hinweis am `PCMRenderBlock`).
-final class FrameBudget: @unchecked Sendable {
-    private let limit: Int?
-    private var rendered = 0
-
-    /// - Parameter limit: Maximale Frame-Anzahl; `nil` = unbegrenzt.
-    init(limit: Int?) {
-        self.limit = limit
-    }
-
-    /// Gibt zurueck, wie viele der `requested` Frames noch erlaubt sind.
-    /// Ein Wert kleiner als angefordert bedeutet fuer den Sink „Quelle erschoepft".
-    func take(_ requested: Int) -> Int {
-        guard let limit else { return requested }
-        let remaining = max(0, limit - rendered)
-        let granted = min(requested, remaining)
-        rendered += granted
-        return granted
-    }
-}
-
-// Das Format zuerst bestimmen, DANN den Processor damit bauen — er muss seine
-// Samplerate von Anfang an kennen (siehe PCMSinkFactory.preferredFormat).
+// Das Format zuerst bestimmen, DANN den Controller damit bauen — der Processor
+// muss seine Samplerate von Anfang an kennen (siehe PCMSinkFactory.preferredFormat).
 let format = useStdout
     ? PCMFormat(sampleRate: 44100.0, channels: 2)   // Pipe: wir geben die Rate vor
     : PCMSinkFactory.preferredFormat(channels: 2)
 
-let processor = ViciousProcessor(sampleRate: format.sampleRate)
-_ = processor.loadSID(sidFile: sid)
-processor.initSubtune(sub: subtune)
-// Volle Lautstaerke: die Skalierung ist Sache der Quelle, nicht des Sinks
-// (siehe Vertragskommentar in PCMSink.swift). Ein CLI hat keinen Mixer davor.
-processor.setVolume(vol: 1.0)
-
-let budget = FrameBudget(limit: seconds.map { Int($0 * format.sampleRate) })
-
-// Der Renderblock. Laeuft auf dem Audio-/Pump-Thread: nichts allozieren,
-// nichts loggen, nicht blockieren.
-let render: PCMRenderBlock = { [processor, budget] buffer, frames in
-    let granted = budget.take(frames)
-    for frame in 0..<granted {
-        // Immer stereo ziehen: bei 1 SID sind beide Kanaele identisch, bei
-        // 2SID/3SID pannt der Processor die Chips selbst (playStereo).
-        let sample = processor.playStereo()
-        buffer[frame * 2] = Float(sample.left)
-        buffer[frame * 2 + 1] = Float(sample.right)
-    }
-    return granted
-}
-
 let sink: PCMSink = useStdout
     ? StdoutPCMSink(format: format)
     : PCMSinkFactory.makeDefault(format: format)
+
+// Ab hier fasst niemand mehr Sink oder Processor direkt an — alles laeuft ueber
+// den Controller. Tastatur und (auf Linux) MPRIS2 sind nur Bedienfelder davor.
+let controller = PlayerController(sid: sid,
+                                  sink: sink,
+                                  format: format,
+                                  startSubtune: subtune,
+                                  seconds: seconds)
 
 if useStdout {
     note("Ausgabe:  rohes PCM auf stdout (s16le, \(Int(format.sampleRate)) Hz, \(format.channels) Kanäle)")
@@ -261,15 +219,12 @@ final class FinishBox: @unchecked Sendable {
 
 /// Spielt mit Tastatursteuerung und liefert den Endgrund.
 ///
-/// Der Subtune-Wechsel greift direkt in den laufenden Processor. Das ist sicher,
-/// weil `initSubtune` dieselbe Sperre nimmt wie `playStereo()` im Audio-Thread —
-/// die beiden koennen sich also nicht in die Quere kommen.
-func runInteractive(sink: PCMSink,
-                    processor: ViciousProcessor,
-                    startSubtune: Int,
-                    subtunesCount: Int) -> PCMSinkFinishReason {
+/// Die Tastatur ist hier nur ein Bedienfeld: Sie sagt dem Controller, WAS
+/// passieren soll, und weiss nicht, WIE. Genau deshalb kann auf Linux MPRIS2
+/// parallel dasselbe tun, ohne dass sich die beiden ins Gehege kommen.
+func runInteractive(controller: PlayerController) -> PCMSinkFinishReason {
     let box = FinishBox()
-    let waiter = Thread { box.set(sink.waitUntilFinished()) }
+    let waiter = Thread { box.set(controller.waitUntilFinished()) }
     waiter.name = "vicious-sid.waiter"
     waiter.start()
 
@@ -280,18 +235,15 @@ func runInteractive(sink: PCMSink,
     // zurueck — also praktisch unbenutzbar.
     defer { terminal.restore() }
 
-    var currentSubtune = startSubtune
-    var isPaused = false
-
-    /// Wechselt den Subtune und meldet es.
-    func switchSubtune(to next: Int) {
-        guard subtunesCount > 1 else {
+    /// Meldet den Subtune nach einem Wechsel. Die Nummer kommt vom Controller,
+    /// nicht aus einer eigenen Zaehlung — sonst liefen Anzeige und Wirklichkeit
+    /// auseinander, sobald MPRIS ebenfalls weiterschaltet.
+    func reportSubtune() {
+        guard controller.subtunesCount > 1 else {
             note("Diese Datei hat nur einen Subtune.")
             return
         }
-        currentSubtune = next
-        processor.initSubtune(sub: currentSubtune)
-        note("Subtune \(currentSubtune + 1)/\(subtunesCount)")
+        note("Subtune \(controller.currentSubtune + 1)/\(controller.subtunesCount)")
     }
 
     // Solange kein Endgrund vorliegt: Tasten lesen. readKey() wartet hoechstens
@@ -302,27 +254,19 @@ func runInteractive(sink: PCMSink,
 
         switch key {
         case UInt8(ascii: " "):
-            do {
-                if isPaused {
-                    try sink.resume()
-                    note("Weiter.")
-                } else {
-                    try sink.pause()
-                    note("Pause.")
-                }
-                isPaused.toggle()
-            } catch {
-                note("Pause/Weiter nicht möglich: \(error.localizedDescription)")
-            }
+            controller.playPause()
+            note(controller.state == .paused ? "Pause." : "Weiter.")
         case UInt8(ascii: "n"), UInt8(ascii: "+"):
-            switchSubtune(to: (currentSubtune + 1) % subtunesCount)
+            controller.next()
+            reportSubtune()
         case UInt8(ascii: "p"), UInt8(ascii: "-"):
-            switchSubtune(to: (currentSubtune - 1 + subtunesCount) % subtunesCount)
+            controller.previous()
+            reportSubtune()
         case UInt8(ascii: "q"), 0x03:
             // 0x03 ist Strg-C. Weil der Rohmodus ISIG abschaltet, kommt es als
             // ganz normales Byte herein statt als Signal — genau deshalb koennen
             // wir hier sauber aufraeumen, statt hart abgeschossen zu werden.
-            sink.stop()
+            controller.stop()
         default:
             break
         }
@@ -332,10 +276,25 @@ func runInteractive(sink: PCMSink,
 }
 
 do {
-    try sink.start(render: render)
+    try controller.start()
 } catch {
     fail("Fehler: Audio-Ausgabe konnte nicht starten — \(error.localizedDescription)", code: 2)
 }
+
+// MPRIS2 anmelden, damit Medientasten und das Sound-Applet des Desktops den
+// Player finden. Nur auf Linux, und nur als Zugabe: klappt es nicht (kein
+// Session-Bus, etwa via SSH oder in einem Container), spielt der Player normal
+// weiter — dafuer ist es kein Grund abzubrechen.
+#if os(Linux)
+let mpris = MPRISServer(controller: controller)
+do {
+    try mpris.start()
+    note("MPRIS2:   angemeldet (Medientasten und Sound-Applet steuern mit)")
+} catch {
+    note("MPRIS2:   nicht verfügbar (\(error.localizedDescription)) — Wiedergabe läuft trotzdem")
+}
+defer { mpris.stop() }
+#endif
 
 // Tastatursteuerung nur, wenn stdin wirklich an einem Terminal haengt. Laeuft das
 // CLI aus einem Skript oder mit umgeleiteter Eingabe, gibt es niemanden, der Tasten
@@ -343,12 +302,9 @@ do {
 let finishReason: PCMSinkFinishReason
 if RawTerminal.isInteractive {
     note("Tasten:   [Leer] Pause · [n]/[p] Subtune vor/zurück · [q] Ende")
-    finishReason = runInteractive(sink: sink,
-                                  processor: processor,
-                                  startSubtune: subtune,
-                                  subtunesCount: sid.metadata.subtunesCount)
+    finishReason = runInteractive(controller: controller)
 } else {
-    finishReason = sink.waitUntilFinished()
+    finishReason = controller.waitUntilFinished()
 }
 
 // Den Grund in einen Exit-Code uebersetzen.

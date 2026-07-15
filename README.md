@@ -162,15 +162,22 @@ vicious-sid tune.sid --stdout | aplay -f S16_LE -r 44100 -c 2
 
 While a tune is playing at a terminal, single keys control it: **space** pauses and resumes, **n** and **p** step through subtunes, **q** or **Ctrl-C** quits. When stdin is not a terminal — in a script or a CI job — the keyboard handling is skipped and the player simply plays.
 
+The player also registers with **MPRIS2** on the session bus, so media keys and the desktop's sound applet can control it like any other player. If there is no session bus — over SSH, or in a container — playback simply continues without it.
+
 Playback goes through ALSA and therefore works with PipeWire and PulseAudio too. Everything human-readable — title, author, errors — goes to stderr, so stdout stays a clean audio stream. Exit codes: `0` = success, `1` = argument or parser error, `2` = I/O error.
 
-A self-contained binary for distribution:
+### Packaging
+
+`build_deb.sh` produces a `.deb` with the statically linked binary, the desktop entry for the `audio/prs.sid` file association, and the icon:
 
 ```bash
-swift build -c release --product vicious-sid --static-swift-stdlib
+./build_deb.sh
+sudo apt install ./vicious-sid_<version>_amd64.deb
 ```
 
-The WAV output is byte-identical between the macOS (arm64) and Linux (x86_64) builds — the emulation computes the same samples on both. Verified on Linux Mint 22.2 (Ubuntu 24.04 base), x86_64, Swift 6.0.3.
+Because the Swift runtime is linked in statically, the package only depends on `libasound2` and `libdbus-1-3` — no Swift toolchain is needed on the target machine.
+
+The WAV output is byte-identical between the macOS (arm64) and Linux (x86_64) builds — the emulation computes the same samples on both, and a test pins this down. Verified on Linux Mint 22.2 (Ubuntu 24.04 base), x86_64, Swift 6.0.3.
 
 ---
 

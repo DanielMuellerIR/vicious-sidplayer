@@ -1,0 +1,13 @@
+// Bruecke von Swift zur D-Bus-Bibliothek (Linux-Desktop-Integration, MPRIS2).
+//
+// Gleiches Muster wie Sources/CALSA: "[system]" markiert Systemcode, dessen
+// Warnungen nicht uns gehoeren, `link "dbus-1"` haengt beim Linken -ldbus-1 an.
+//
+// Auf macOS gibt es diesen Bus nicht (dort erledigen MPRemoteCommandCenter und
+// MPNowPlayingInfoCenter dieselbe Aufgabe). Deshalb haengt in Package.swift nur
+// der Linux-Build von diesem Modul ab.
+module CDBus [system] {
+    header "shim.h"
+    link "dbus-1"
+    export *
+}

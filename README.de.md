@@ -162,15 +162,22 @@ vicious-sid tune.sid --stdout | aplay -f S16_LE -r 44100 -c 2
 
 Läuft ein Tune am Terminal, steuern ihn einzelne Tasten: **Leertaste** pausiert und setzt fort, **n** und **p** blättern durch die Subtunes, **q** oder **Strg-C** beendet. Hängt stdin nicht an einem Terminal — in einem Skript oder CI-Job —, entfällt die Tastatursteuerung und der Player spielt einfach.
 
+Der Player meldet sich außerdem per **MPRIS2** am Session-Bus an, sodass Medientasten und das Sound-Applet des Desktops ihn wie jeden anderen Player steuern. Gibt es keinen Session-Bus — über SSH oder in einem Container —, läuft die Wiedergabe schlicht ohne ihn weiter.
+
 Die Wiedergabe läuft über ALSA und funktioniert damit auch mit PipeWire und PulseAudio. Alles Menschenlesbare — Titel, Autor, Fehler — geht nach stderr, damit stdout ein sauberer Audiostrom bleibt. Exit-Codes: `0` = Erfolg, `1` = Argument- oder Parser-Fehler, `2` = I/O-Fehler.
 
-Ein eigenständiges Binary zur Weitergabe:
+### Paketierung
+
+`build_deb.sh` erzeugt ein `.deb` mit dem statisch gelinkten Binary, dem Desktop-Eintrag für die Dateizuordnung `audio/prs.sid` und dem Icon:
 
 ```bash
-swift build -c release --product vicious-sid --static-swift-stdlib
+./build_deb.sh
+sudo apt install ./vicious-sid_<version>_amd64.deb
 ```
 
-Die WAV-Ausgabe ist zwischen dem macOS- (arm64) und dem Linux-Build (x86_64) byteidentisch — die Emulation rechnet auf beiden dieselben Samples. Geprüft auf Linux Mint 22.2 (Ubuntu-24.04-Basis), x86_64, Swift 6.0.3.
+Weil die Swift-Laufzeit statisch eingebunden ist, hängt das Paket nur an `libasound2` und `libdbus-1-3` — auf dem Zielrechner braucht es keine Swift-Toolchain.
+
+Die WAV-Ausgabe ist zwischen dem macOS- (arm64) und dem Linux-Build (x86_64) byteidentisch — die Emulation rechnet auf beiden dieselben Samples, und ein Test nagelt das fest. Geprüft auf Linux Mint 22.2 (Ubuntu-24.04-Basis), x86_64, Swift 6.0.3.
 
 ---
 
