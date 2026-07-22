@@ -1,4 +1,9 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 // Headless-WAV-Export: rendert einen Subtune schneller als Echtzeit (die
 // Emulation ist nicht an die Audio-Hardware gebunden) in eine WAV-Datei.
@@ -127,15 +132,36 @@ public enum WavRenderer {
             try opened.close()
             handle = nil
 
-            if fm.fileExists(atPath: url.path) {
-                _ = try fm.replaceItemAt(url, withItemAt: temporaryURL)
-            } else {
-                try fm.moveItem(at: temporaryURL, to: url)
-            }
+            try replaceAtomically(temporaryURL, at: url)
         } catch {
             try? handle?.close()
             try? fm.removeItem(at: temporaryURL)
             throw error
+        }
+    }
+
+    /// POSIX `rename` ersetzt eine vorhandene Datei atomar, solange Quelle und
+    /// Ziel auf demselben Dateisystem liegen. Die Temp-Datei liegt deshalb
+    /// bewusst direkt neben dem Ziel. Foundation `replaceItemAt` ist hier nicht
+    /// portabel: swift-corelibs-foundation kann unter Linux Erfolg melden und
+    /// dabei die Zieldatei entfernen.
+    private static func replaceAtomically(_ source: URL, at destination: URL) throws {
+        let errorCode: Int32 = source.withUnsafeFileSystemRepresentation { sourcePath in
+            destination.withUnsafeFileSystemRepresentation { destinationPath in
+                guard let sourcePath, let destinationPath else { return EINVAL }
+                if rename(sourcePath, destinationPath) == 0 { return 0 }
+                return errno
+            }
+        }
+        guard errorCode == 0 else {
+            throw NSError(
+                domain: NSPOSIXErrorDomain,
+                code: Int(errorCode),
+                userInfo: [
+                    NSFilePathErrorKey: destination.path,
+                    NSURLErrorKey: destination
+                ]
+            )
         }
     }
 
