@@ -27,10 +27,34 @@ public struct SonglengthDB: Sendable {
         return parse(text: text)
     }
 
+    /// Variante fuer verwaltete Hintergrund-Tasks. Bei grossen HVSC-Dateien
+    /// wird nicht nur vor/nach dem Dateizugriff, sondern auch waehrend des
+    /// Parsens regelmaessig auf Task-Abbruch reagiert.
+    public static func loadCancellable(url: URL) throws -> SonglengthDB {
+        try Task.checkCancellation()
+        let text = try String(contentsOf: url, encoding: .utf8)
+        try Task.checkCancellation()
+        return try parseCancellable(text: text)
+    }
+
     // Parser separat und pur — headless testbar ohne Dateisystem.
     public static func parse(text: String) -> SonglengthDB {
+        // Die synchrone API bleibt fuer Tests und kleine Eingaben bequem.
+        // Ohne aktiven Task kann diese Variante nicht abbrechen.
+        (try? parse(text: text, cancellationCheck: {})) ?? SonglengthDB(entries: [:])
+    }
+
+    private static func parseCancellable(text: String) throws -> SonglengthDB {
+        try parse(text: text, cancellationCheck: { try Task.checkCancellation() })
+    }
+
+    private static func parse(
+        text: String,
+        cancellationCheck: () throws -> Void
+    ) throws -> SonglengthDB {
         var entries: [String: [Double]] = [:]
-        for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
+        for (index, line) in text.split(separator: "\n", omittingEmptySubsequences: true).enumerated() {
+            if index.isMultiple(of: 256) { try cancellationCheck() }
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             // Kommentare (Datei-Pfade) und Sektions-Kopf ueberspringen.
             if trimmed.isEmpty || trimmed.hasPrefix(";") || trimmed.hasPrefix("[") { continue }

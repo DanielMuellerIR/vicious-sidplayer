@@ -999,7 +999,26 @@ public final class ViciousProcessor: Sendable {
         return (l * activeVol, r * activeVol)
     }
 
-    public func loadSID(sidFile: SidFileData) -> SidMetadata {
+    public struct LoadResult: Sendable {
+        public let metadata: SidMetadata
+        public let diagnostics: [String]
+    }
+
+    /// Beschreibt reparierbare Probleme beim Laden, ohne selbst auf stdout oder
+    /// stderr zu schreiben. So entscheidet der jeweilige Aufrufer, wohin eine
+    /// Diagnose gehoert (beim CLI immer stderr, bei GUI/Quick Look ins Log).
+    public static func loadDiagnostics(for sidFile: SidFileData) -> [String] {
+        let count = sidFile.binaryData.count
+        let endAddr = Int(sidFile.loadAddr) + count
+        guard endAddr > 0x10000 else { return [] }
+        let dropped = endAddr - 0x10000
+        return [
+            "SID-Ladeadresse \(String(format: "$%04X", sidFile.loadAddr)) + \(count) Byte(s) "
+                + "ueberschreitet das 64-KB-C64-RAM — \(dropped) Byte(s) werden nicht geladen."
+        ]
+    }
+
+    public func loadSID(sidFile: SidFileData) -> LoadResult {
         lock.lock()
         defer { lock.unlock() }
         
@@ -1026,12 +1045,6 @@ public final class ViciousProcessor: Sendable {
         // Die Kopierschleife klemmt sie ohnehin sicher ab (targetIdx-Check), aber wir
         // warnen zusaetzlich — sonst liefe ein solcher Tune unbemerkt nur teilweise
         // geladen, und die CPU spraenge spaeter in genullten (statt echten) Speicher.
-        let endAddr = Int(loadaddr) + count
-        if endAddr > memory.count {
-            let dropped = endAddr - memory.count
-            print("Warnung: SID-Ladeadresse \(String(format: "$%04X", loadaddr)) + \(count) Byte(s) "
-                + "ueberschreitet das 64-KB-C64-RAM — \(dropped) Byte(s) werden nicht geladen.")
-        }
         for i in 0..<count {
             let targetIdx = Int(loadaddr) + i
             if targetIdx < memory.count {
@@ -1050,7 +1063,10 @@ public final class ViciousProcessor: Sendable {
         SIDamount = 1 + (SID_address[1] > 0 ? 1 : 0) + (SID_address[2] > 0 ? 1 : 0)
         loaded = true
 
-        return sidFile.metadata
+        return LoadResult(
+            metadata: sidFile.metadata,
+            diagnostics: Self.loadDiagnostics(for: sidFile)
+        )
     }
 
     public func initSubtune(sub: Int) {

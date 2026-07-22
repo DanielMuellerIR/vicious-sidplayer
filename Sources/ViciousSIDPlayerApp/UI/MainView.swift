@@ -109,6 +109,14 @@ public struct MainView: View {
     @State private var currentTrackLengths: [Double]? = nil
     @State private var computedLength: Double? = nil
     @State private var currentMD5: String? = nil
+    // Genau je ein verwalteter DB-Lade- und Schaetz-Task. Generationen verhindern,
+    // dass ein langsames altes Ergebnis einen inzwischen gewaehlten Pfad/Track
+    // ueberschreibt; der Key dedupliziert identische Schaetz-Anfragen.
+    @State private var songlengthLoadTask: Task<Void, Never>? = nil
+    @State private var songlengthLoadGeneration = 0
+    @State private var lengthEstimateTask: Task<Void, Never>? = nil
+    @State private var lengthEstimateGeneration = 0
+    @State private var lengthEstimateKey: String? = nil
     private let lengthCache = SongLengthCache.defaultCache()
     // Pfad zur Songlengths.md5 aus den Einstellungen ("" = automatisch suchen).
     @AppStorage("songlengthsPath") private var songlengthsPath = ""
@@ -679,30 +687,34 @@ public struct MainView: View {
         return (currentTrackIdx + 1) % count
     }
 
-    private func loadTrack(index: Int, autoplay: Bool) {
-        guard !isTransitioning else { return }
+    @discardableResult
+    private func loadTrack(index: Int, autoplay: Bool) -> Bool {
+        guard !isTransitioning else { return false }
+        guard index >= 0 && index < allTracks.count else { return false }
+
         isTransitioning = true
+        var didLoad = false
         defer {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                self.isTransitioning = false
+            if didLoad {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                    self.isTransitioning = false
+                }
+            } else {
+                // Ein kaputter Restore-Track darf den sofortigen Fallback auf den
+                // naechsten Playlist-Eintrag nicht durch die Debounce sperren.
+                isTransitioning = false
             }
         }
-        
-        guard index >= 0 && index < allTracks.count else { return }
-        
+
         self.errorMessage = nil
-        self.currentTrackIdx = index
         let track = allTracks[index]
-        
-        // Stop current play
-        coordinator.stop()
-        
+
         // User-Tracks tragen immer ihre Datei-URL. Built-in-Tracks gibt es in
         // diesem Player bewusst nicht (es werden keine SIDs gebuendelt), daher
         // ist der fileURL == nil-Fall nur eine defensive Absicherung.
         guard let fileURL = track.fileURL else {
             self.errorMessage = "Track ohne Datei-URL: \(track.name)"
-            return
+            return false
         }
 
         // codereview-ok: defer haelt Scope ueber den Read; ausserdem App nicht sandboxed (2026-07-01)
@@ -716,6 +728,13 @@ public struct MainView: View {
             // Reihenfolge-Risiko ohne Nutzen (2026-07-08)
             let data = try Data(contentsOf: fileURL)
             let sidFile = try SidParser.parse(data: data)
+
+            // Erst nach erfolgreichem Read/Parse den laufenden Track und seine
+            // Session-Auswahl ersetzen. Ein defekter Restore-Eintrag hinterlaesst
+            // damit keinen halb aktualisierten Zustand.
+            cancelLengthEstimate()
+            coordinator.stop()
+            currentTrackIdx = index
             coordinator.setSid(sidFile)
             coordinator.setVolume(volume)
             // Songlaenge aufloesen: MD5 der Datei ist der Schluessel der HVSC-DB.
@@ -728,9 +747,12 @@ public struct MainView: View {
             if autoplay {
                 coordinator.play()
             }
+            didLoad = true
+            return true
         } catch {
             loadLog.error("loadTrack[\(index, privacy: .public)] Parser-Fehler: \(error.localizedDescription, privacy: .public)")
             self.errorMessage = "Parser-Fehler: \(error.localizedDescription)"
+            return false
         }
     }
 
@@ -826,13 +848,16 @@ public struct MainView: View {
                let restoreIdx = allTracks.firstIndex(where: { $0.fileURL?.path == lastTrackPath }) {
                 let sub = lastSubtune
                 let pos = lastPosition
-                loadTrack(index: restoreIdx, autoplay: true)
-                // Nach setSid ist subtunesCount gesetzt -> Subtune/Position gezielt
-                // wiederherstellen (setSubtune prueft den Bereich selbst).
-                if sub > 0 { coordinator.setSubtune(sub: sub) }
-                if pos > 1.0 { coordinator.seek(seconds: pos) }
-                loadLog.info("Session-Restore: \(lastTrackPath, privacy: .public), Subtune \(sub, privacy: .public), Position \(Int(pos), privacy: .public) s")
-                return
+                if loadTrack(index: restoreIdx, autoplay: true) {
+                    // Nach setSid ist subtunesCount gesetzt -> Subtune/Position gezielt
+                    // wiederherstellen (setSubtune prueft den Bereich selbst).
+                    if sub > 0 { coordinator.setSubtune(sub: sub) }
+                    if pos > 1.0 { coordinator.seek(seconds: pos) }
+                    resolveComputedLengthIfNeeded()
+                    loadLog.info("Session-Restore: \(lastTrackPath, privacy: .public), Subtune \(sub, privacy: .public), Position \(Int(pos), privacy: .public) s")
+                    return
+                }
+                loadLog.error("Session-Restore fehlgeschlagen; starte mit einem anderen lesbaren Playlist-Eintrag")
             }
             let playIdx: Int
             if isStartupLoad && shuffle && allTracks.count > 1 {
@@ -840,12 +865,31 @@ public struct MainView: View {
             } else {
                 playIdx = firstTrackToPlayIdx
             }
-            loadTrack(index: playIdx, autoplay: true)
+            if isStartupLoad {
+                _ = loadFirstPlayableTrack(startingAt: playIdx, autoplay: true)
+            } else {
+                loadTrack(index: playIdx, autoplay: true)
+            }
         }
+    }
+
+    /// Probiert beim Start alle Playlist-Eintraege zyklisch. So blockiert weder
+    /// ein kaputter gespeicherter Track noch ein kaputter erster Ordner-Eintrag
+    /// die Wiedergabe der danach folgenden gueltigen Datei.
+    @discardableResult
+    private func loadFirstPlayableTrack(startingAt index: Int, autoplay: Bool) -> Bool {
+        guard !allTracks.isEmpty else { return false }
+        let start = max(0, min(index, allTracks.count - 1))
+        for offset in 0..<allTracks.count {
+            let candidate = (start + offset) % allTracks.count
+            if loadTrack(index: candidate, autoplay: autoplay) { return true }
+        }
+        return false
     }
 
     private func clearPlaylist() {
         coordinator.stop()
+        cancelLengthEstimate()
         userTracks.removeAll()
         currentTrackIdx = -1
         errorMessage = nil
@@ -906,25 +950,48 @@ public struct MainView: View {
     // Einstellungen oder Auto-Fund (DOCUMENTS/Songlengths.md5 im/ueber dem
     // Autoplay-Ordner). Danach die Laengen des aktuellen Tracks nachziehen.
     private func loadSonglengthDB() {
+        songlengthLoadTask?.cancel()
+        songlengthLoadGeneration &+= 1
+        let generation = songlengthLoadGeneration
         let configured = songlengthsPath
         let autoplayPath = autoplayFolderPath
-        Task.detached(priority: .utility) {
-            let fm = FileManager.default
-            let url: URL?
-            if !configured.isEmpty {
-                url = URL(fileURLWithPath: (configured as NSString).expandingTildeInPath)
-            } else {
-                let folder = AutoplayFolder.resolve(configuredPath: autoplayPath, fm: fm)
-                url = folder.flatMap { SonglengthDB.autodetect(nearFolder: $0, fm: fm) }
-            }
-            let db = url.flatMap { try? SonglengthDB.load(url: $0) }
-            await MainActor.run {
-                songlengthDB = db
-                if let md5 = currentMD5 {
-                    currentTrackLengths = db?.lengths(forMD5: md5)
-                    resolveComputedLengthIfNeeded()
+        songlengthLoadTask = Task.detached(priority: .utility) {
+            do {
+                try Task.checkCancellation()
+                let fm = FileManager.default
+                let url: URL?
+                if !configured.isEmpty {
+                    url = URL(fileURLWithPath: (configured as NSString).expandingTildeInPath)
+                } else {
+                    let folder = AutoplayFolder.resolve(configuredPath: autoplayPath, fm: fm)
+                    url = folder.flatMap { SonglengthDB.autodetect(nearFolder: $0, fm: fm) }
                 }
-                if let db { loadLog.info("Songlengths-DB geladen: \(db.count, privacy: .public) Eintraege") }
+                let db: SonglengthDB?
+                if let url {
+                    db = try? SonglengthDB.loadCancellable(url: url)
+                } else {
+                    db = nil
+                }
+                try Task.checkCancellation()
+                await MainActor.run {
+                    guard songlengthLoadGeneration == generation else { return }
+                    songlengthLoadTask = nil
+                    songlengthDB = db
+                    if let md5 = currentMD5 {
+                        currentTrackLengths = db?.lengths(forMD5: md5)
+                        resolveComputedLengthIfNeeded()
+                    }
+                    if let db { loadLog.info("Songlengths-DB geladen: \(db.count, privacy: .public) Eintraege") }
+                }
+            } catch is CancellationError {
+                // Erwartet bei Pfad-/Autoplay-Wechsel; die neuere Generation ist
+                // bereits unterwegs und allein schreibberechtigt.
+            } catch {
+                await MainActor.run {
+                    if songlengthLoadGeneration == generation {
+                        songlengthLoadTask = nil
+                    }
+                }
             }
         }
     }
@@ -937,11 +1004,20 @@ public struct MainView: View {
     private func resolveComputedLengthIfNeeded() {
         computedLength = nil
         // DB-Laenge vorhanden? Dann ist nichts zu berechnen.
-        if let lengths = currentTrackLengths, coordinator.currentSubtune < lengths.count { return }
+        if let lengths = currentTrackLengths, coordinator.currentSubtune < lengths.count {
+            cancelLengthEstimate()
+            return
+        }
         guard let md5 = currentMD5,
               currentTrackIdx >= 0, currentTrackIdx < allTracks.count,
               let fileURL = allTracks[currentTrackIdx].fileURL else { return }
         let subtune = coordinator.currentSubtune
+        let estimateKey = "\(md5.lowercased()):\(subtune)"
+
+        // Derselbe Track/Subtune ist bereits in Arbeit (z.B. zwei unmittelbar
+        // aufeinanderfolgende SwiftUI-onChange-Ereignisse): nicht doppelt starten.
+        if lengthEstimateKey == estimateKey, lengthEstimateTask != nil { return }
+        cancelLengthEstimate()
 
         if let cached = lengthCache.length(md5: md5, subtune: subtune) {
             // -1 = frueher berechnet, kein Ende gefunden (Loop) -> Fallback behalten.
@@ -950,18 +1026,46 @@ public struct MainView: View {
         }
 
         let cache = lengthCache
-        Task.detached(priority: .utility) {
-            guard let data = try? Data(contentsOf: fileURL),
-                  let sid = try? SidParser.parse(data: data) else { return }
-            let result = SongLengthEstimator.estimate(sidFile: sid, subtune: subtune)
-            cache.store(md5: md5, subtune: subtune, seconds: result ?? -1)
-            await MainActor.run {
-                // Nur uebernehmen, wenn immer noch derselbe Track/Subtune laeuft.
-                if currentMD5 == md5 && coordinator.currentSubtune == subtune, let result {
-                    computedLength = result
+        lengthEstimateGeneration &+= 1
+        let generation = lengthEstimateGeneration
+        lengthEstimateKey = estimateKey
+        lengthEstimateTask = Task.detached(priority: .utility) {
+            do {
+                try Task.checkCancellation()
+                let data = try Data(contentsOf: fileURL)
+                let sid = try SidParser.parse(data: data)
+                let result = try SongLengthEstimator.estimate(sidFile: sid, subtune: subtune)
+                try Task.checkCancellation()
+                cache.store(md5: md5, subtune: subtune, seconds: result ?? -1)
+                await MainActor.run {
+                    guard lengthEstimateGeneration == generation,
+                          lengthEstimateKey == estimateKey else { return }
+                    lengthEstimateTask = nil
+                    lengthEstimateKey = nil
+                    // Nur uebernehmen, wenn immer noch derselbe Track/Subtune laeuft.
+                    if currentMD5 == md5 && coordinator.currentSubtune == subtune, let result {
+                        computedLength = result
+                    }
+                }
+            } catch is CancellationError {
+                // Track/Subtune wurde gewechselt; kein negatives Cache-Ergebnis
+                // fuer eine absichtlich abgebrochene Analyse speichern.
+            } catch {
+                await MainActor.run {
+                    if lengthEstimateGeneration == generation {
+                        lengthEstimateTask = nil
+                        lengthEstimateKey = nil
+                    }
                 }
             }
         }
+    }
+
+    private func cancelLengthEstimate() {
+        lengthEstimateTask?.cancel()
+        lengthEstimateTask = nil
+        lengthEstimateKey = nil
+        lengthEstimateGeneration &+= 1
     }
 
     private func formatTime(_ sec: Double) -> String {

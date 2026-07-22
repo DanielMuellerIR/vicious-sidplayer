@@ -13,9 +13,15 @@ import Foundation
 // nur einmal anfaellt.
 public enum SongLengthEstimator {
 
+    public enum EstimateError: Error {
+        case invalidConfiguration
+    }
+
     // Rendert den Subtune headless (ohne Audio-Ausgabe) und sucht das Ende:
-    // haelt die Stille laenger als `silenceSeconds` an, gilt der letzte hoerbare
-    // Moment (+ kurzer Ausklang-Puffer) als Songende.
+    // am ENDE des gesamten Analysefensters haelt die Stille laenger als
+    // `silenceSeconds` an, gilt der letzte hoerbare Moment (+ kurzer
+    // Ausklang-Puffer) als Songende. Eine lange Pause in der Mitte reicht nicht:
+    // spaeter wieder einsetzende Musik muss noch gesehen werden.
     //
     // Rueckgabe nil = kein Ende innerhalb `maxSeconds` gefunden (Tune loopt oder
     // ist komplett still) -> Aufrufer behaelt sein Fallback-Limit.
@@ -24,35 +30,57 @@ public enum SongLengthEstimator {
                                 maxSeconds: Double = 360.0,
                                 sampleRate: Double = 44100.0,
                                 silenceThreshold: Double = 0.00001,
-                                silenceSeconds: Double = 3.0) -> Double? {
+                                silenceSeconds: Double = 3.0) throws -> Double? {
+        guard maxSeconds.isFinite,
+              sampleRate.isFinite,
+              silenceThreshold.isFinite,
+              silenceThreshold >= 0,
+              silenceSeconds.isFinite,
+              silenceSeconds > 0 else {
+            throw EstimateError.invalidConfiguration
+        }
+        let totalSamples: Int
+        do {
+            totalSamples = try WavRenderer.frameCount(seconds: maxSeconds, sampleRate: sampleRate)
+        } catch {
+            throw EstimateError.invalidConfiguration
+        }
+        let silenceValue = silenceSeconds * sampleRate
+        guard silenceValue.isFinite,
+              silenceValue >= 1,
+              silenceValue <= Double(Int.max) else {
+            throw EstimateError.invalidConfiguration
+        }
+        let silenceSamples = Int(silenceValue.rounded(.down))
+
         let processor = ViciousProcessor(sampleRate: sampleRate)
         _ = processor.loadSID(sidFile: sidFile)
         let sub = max(0, min(subtune, sidFile.metadata.subtunesCount - 1))
         processor.initSubtune(sub: sub)
         processor.setVolume(vol: 1.0)
 
-        let totalSamples = Int(maxSeconds * sampleRate)
-        let silenceSamples = Int(silenceSeconds * sampleRate)
         var lastAudible = -1          // Sample-Index des letzten hoerbaren Samples
-        var samplesSinceAudible = 0
 
         for i in 0..<totalSamples {
+            // Nicht bei jedem Sample den Task-Status abfragen; ein Block bleibt
+            // dennoch klein genug, damit ein Trackwechsel die CPU-Arbeit binnen
+            // weniger Millisekunden beendet.
+            if i.isMultiple(of: 4096) {
+                try Task.checkCancellation()
+            }
             if abs(processor.play()) > silenceThreshold {
                 lastAudible = i
-                samplesSinceAudible = 0
-            } else {
-                samplesSinceAudible += 1
-                // Genug Stille am Stueck: Ende gefunden (sofern je etwas zu
-                // hoeren war — ein komplett stiller Tune liefert nil).
-                if samplesSinceAudible >= silenceSamples {
-                    guard lastAudible >= 0 else { return nil }
-                    // + 0,5 s Ausklang-Puffer, damit Auto-Next nicht ins letzte
-                    // Release-Ende hineinschneidet.
-                    return Double(lastAudible) / sampleRate + 0.5
-                }
             }
         }
-        return nil
+
+        try Task.checkCancellation()
+        guard lastAudible >= 0,
+              totalSamples - lastAudible - 1 >= silenceSamples else {
+            return nil
+        }
+        // + 0,5 s Ausklang-Puffer, damit Auto-Next nicht ins letzte Release-Ende
+        // hineinschneidet.
+        return Double(lastAudible) / sampleRate + 0.5
     }
 }
 

@@ -27,7 +27,7 @@ usage: vicious-sid <datei.sid> [optionen]
 
 Optionen:
   --subtune N     Subtune N abspielen (0-basiert, Default: 0)
-  --seconds S     Nach S Sekunden beenden (Default: endlos bzw. 180 bei --wav)
+  --seconds S     Nach S Sekunden beenden (max. 3600; Default: endlos bzw. 180 bei --wav)
   --wav <datei>   Statt abzuspielen als WAV-Datei rendern (schneller als Echtzeit)
   --stdout        Rohes PCM (s16le, interleaved) nach stdout statt an die Soundkarte
   -h, --help      Diese Hilfe
@@ -90,8 +90,11 @@ while argIndex < args.count {
         subtune = parsed
     case "--seconds":
         let raw = value(for: "--seconds")
-        guard let parsed = Double(raw), parsed.isFinite, parsed > 0 else {
-            fail("Fehler: --seconds erwartet eine positive Zahl, bekam '\(raw)'.", code: 1)
+        guard let parsed = Double(raw),
+              parsed.isFinite,
+              parsed > 0,
+              parsed <= WavRenderer.maximumDurationSeconds else {
+            fail("Fehler: --seconds erwartet eine Zahl zwischen 0 und \(Int(WavRenderer.maximumDurationSeconds)) Sekunden, bekam '\(raw)'.", code: 1)
         }
         seconds = parsed
     case "--wav":
@@ -149,6 +152,9 @@ note("Autor:    \(sid.metadata.author)")
 note("Info:     \(sid.metadata.info)")
 note("Subtune:  \(subtune + 1) von \(sid.metadata.subtunesCount)")
 note("Modell:   \(sid.prefModel)")
+for diagnostic in ViciousProcessor.loadDiagnostics(for: sid) {
+    note("Warnung: \(diagnostic)")
+}
 
 // MARK: - WAV-Export
 
@@ -178,11 +184,16 @@ let sink: PCMSink = useStdout
 
 // Ab hier fasst niemand mehr Sink oder Processor direkt an — alles laeuft ueber
 // den Controller. Tastatur und (auf Linux) MPRIS2 sind nur Bedienfelder davor.
-let controller = PlayerController(sid: sid,
-                                  sink: sink,
-                                  format: format,
-                                  startSubtune: subtune,
-                                  seconds: seconds)
+let controller: PlayerController
+do {
+    controller = try PlayerController(sid: sid,
+                                      sink: sink,
+                                      format: format,
+                                      startSubtune: subtune,
+                                      seconds: seconds)
+} catch {
+    fail("Fehler: ungültige Wiedergabedauer — \(error.localizedDescription)", code: 1)
+}
 
 if useStdout {
     note("Ausgabe:  rohes PCM auf stdout (s16le, \(Int(format.sampleRate)) Hz, \(format.channels) Kanäle)")

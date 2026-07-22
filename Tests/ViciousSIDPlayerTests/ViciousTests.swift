@@ -297,7 +297,9 @@ final class ViciousTests: XCTestCase {
         XCTAssertEqual(sid.binaryData.count, 4)
 
         let processor = ViciousProcessor(sampleRate: 44100.0)
-        _ = processor.loadSID(sidFile: sid) // klemmt die 2 ueberstehenden Bytes ab
+        let loadResult = processor.loadSID(sidFile: sid) // klemmt die 2 ueberstehenden Bytes ab
+        XCTAssertEqual(loadResult.diagnostics.count, 1)
+        XCTAssertTrue(loadResult.diagnostics[0].contains("2 Byte(s)"))
         processor.initSubtune(sub: 0)
         processor.setVolume(vol: 1.0)
         for _ in 0..<1000 { _ = processor.play() }
@@ -433,7 +435,7 @@ final class ViciousTests: XCTestCase {
         bytes += [0x00, 0x10] + binary       // eingebettete Ladeadresse $1000
 
         let sid = try SidParser.parse(data: Data(bytes))
-        let length = SongLengthEstimator.estimate(sidFile: sid, subtune: 0, maxSeconds: 10.0)
+        let length = try SongLengthEstimator.estimate(sidFile: sid, subtune: 0, maxSeconds: 10.0)
         let unwrapped = try XCTUnwrap(length, "Endender Tune muss eine Laenge liefern")
         // ~0,5 s Musik + 0,5 s Ausklang-Puffer, mit Toleranz fuer Envelope-Release.
         XCTAssertGreaterThan(unwrapped, 0.4)
@@ -450,7 +452,83 @@ final class ViciousTests: XCTestCase {
         silentBytes[17] = 0x01
         silentBytes += [0x00, 0x10, 0x60]    // Ladeadresse + RTS
         let silent = try SidParser.parse(data: Data(silentBytes))
-        XCTAssertNil(SongLengthEstimator.estimate(sidFile: silent, subtune: 0, maxSeconds: 5.0))
+        XCTAssertNil(try SongLengthEstimator.estimate(sidFile: silent, subtune: 0, maxSeconds: 5.0))
+
+        // Regression: Nach mehr als drei Sekunden Pause setzt die Musik wieder
+        // ein. Die alte Heuristik brach in der Pause ab und cachete ~0,5 s als
+        // vermeintliches Ende; nur terminale Stille am Analyseende darf zaehlen.
+        var pauseBinary = [UInt8](repeating: 0x60, count: 0x60)
+        for (i, b) in initCode.enumerated() { pauseBinary[i] = b }
+        let pauseThenResume: [UInt8] = [
+            0xE6, 0x02,                         // INC $02
+            0xA5, 0x02, 0xC9, 0x19, 0xD0, 0x05, // bei Frame 25 ...
+            0xA9, 0x00, 0x8D, 0x18, 0xD4,       // ... Volume aus
+            0xA5, 0x02, 0xC9, 0xE1, 0xD0, 0x05, // bei Frame 225 (~4,5 s) ...
+            0xA9, 0x0F, 0x8D, 0x18, 0xD4,       // ... Volume wieder an
+            0x60
+        ]
+        for (i, b) in pauseThenResume.enumerated() { pauseBinary[0x40 + i] = b }
+        var pauseBytes = Array(bytes.prefix(0x7C))
+        pauseBytes += [0x00, 0x10] + pauseBinary
+        let pauseSID = try SidParser.parse(data: Data(pauseBytes))
+        XCTAssertNil(
+            try SongLengthEstimator.estimate(sidFile: pauseSID, subtune: 0, maxSeconds: 6.0),
+            "Musik nach einer langen Zwischenpause darf nicht als beendeter Tune gelten"
+        )
+    }
+
+    func testSongLengthEstimatorHonorsTaskCancellation() async throws {
+        let sid = try makeSilentSID()
+        let task = Task.detached {
+            try SongLengthEstimator.estimate(sidFile: sid, subtune: 0, maxSeconds: 360.0)
+        }
+        task.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("Abgebrochene Schaetzung muss CancellationError liefern")
+        } catch is CancellationError {
+            // Erwartet: abgebrochene Jobs duerfen insbesondere kein -1 cachen.
+        }
+    }
+
+    func testWavRendererStreamsAndValidatesBounds() throws {
+        let sid = try makeSilentSID()
+        let fm = FileManager.default
+        let directory = fm.temporaryDirectory.appendingPathComponent("vicious-wav-\(UUID().uuidString)")
+        let destination = directory.appendingPathComponent("out.wav")
+        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: directory) }
+
+        // Vorhandenes Ziel wird erst nach komplettem Render ersetzt.
+        try Data("alt".utf8).write(to: destination)
+        let seconds = 0.1
+        try WavRenderer.render(sidFile: sid, seconds: seconds, to: destination)
+        let rendered = try Data(contentsOf: destination)
+        let frames = try WavRenderer.frameCount(seconds: seconds, sampleRate: 44100)
+        XCTAssertEqual(rendered.count, 44 + frames * 2)
+        XCTAssertEqual(String(data: rendered.prefix(4), encoding: .ascii), "RIFF")
+
+        // Unvertretbar grosse bzw. nicht in Frames darstellbare Werte werden vor
+        // jeder Ausgabe abgelehnt und lassen eine bestehende Datei unveraendert.
+        let sentinel = Data("behalten".utf8)
+        try sentinel.write(to: destination)
+        XCTAssertThrowsError(
+            try WavRenderer.render(
+                sidFile: sid,
+                seconds: WavRenderer.maximumDurationSeconds + 1,
+                to: destination
+            )
+        )
+        XCTAssertThrowsError(try WavRenderer.frameCount(seconds: 1e300, sampleRate: 44100))
+        XCTAssertThrowsError(
+            try WavRenderer.render(
+                sidFile: sid,
+                seconds: 0.000000001,
+                sampleRate: Double(UInt32.max),
+                to: destination
+            )
+        )
+        XCTAssertEqual(try Data(contentsOf: destination), sentinel)
     }
 
     // Seek-Geschwindigkeit (UX-Smoke-Test): der Sprung ans Ende eines langen
@@ -558,5 +636,18 @@ final class ViciousTests: XCTestCase {
         XCTAssertEqual(ThemeMode(storedValue: "light"), .light)
         XCTAssertEqual(ThemeMode(storedValue: nil), .auto)
         XCTAssertEqual(ThemeMode(storedValue: "kaputt"), .auto)
+    }
+
+    private func makeSilentSID() throws -> SidFileData {
+        var bytes = [UInt8](repeating: 0, count: 0x7C)
+        bytes[0] = 0x50; bytes[1] = 0x53; bytes[2] = 0x49; bytes[3] = 0x44
+        bytes[5] = 0x02
+        bytes[7] = 0x7C
+        bytes[10] = 0x10
+        bytes[12] = 0x10
+        bytes[15] = 1
+        bytes[17] = 0x01
+        bytes += [0x00, 0x10, 0x60]
+        return try SidParser.parse(data: Data(bytes))
     }
 }

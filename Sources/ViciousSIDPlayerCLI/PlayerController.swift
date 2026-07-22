@@ -84,7 +84,7 @@ final class PlayerController: @unchecked Sendable {
     ///   - format: das Format, mit dem der Processor gebaut wurde.
     ///   - startSubtune: 0-basiert, vom Aufrufer bereits geprueft.
     ///   - seconds: Spieldauer, `nil` = endlos.
-    init(sid: SidFileData, sink: PCMSink, format: PCMFormat, startSubtune: Int, seconds: Double?) {
+    init(sid: SidFileData, sink: PCMSink, format: PCMFormat, startSubtune: Int, seconds: Double?) throws {
         self.metadata = sid.metadata
         self.subtunesCount = max(1, sid.metadata.subtunesCount)
         self.sink = sink
@@ -98,7 +98,9 @@ final class PlayerController: @unchecked Sendable {
         processor.setVolume(vol: 1.0)
         self.processor = processor
 
-        self.budget = FrameBudget(limit: seconds.map { Int($0 * format.sampleRate) })
+        self.budget = FrameBudget(
+            limit: try seconds.map { try WavRenderer.frameCount(seconds: $0, sampleRate: format.sampleRate) }
+        )
     }
 
     // MARK: - Beobachtung

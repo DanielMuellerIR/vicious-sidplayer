@@ -139,10 +139,10 @@ swift build -c release          # builds .build/release/sidcheck
 
 The emulation core is platform-neutral, so the player also runs on Linux — as a command-line player named `vicious-sid`. There is no native Linux GUI; the HTML5 player covers that need.
 
-**Requirements:** Swift 6.0 and `libasound2-dev` to build, `libasound2` at runtime. The binary always links against `libasound.so.2`, even for WAV export.
+**Requirements:** Swift 6.0 plus `libasound2-dev` and `libdbus-1-dev` to build; `libasound2` and `libdbus-1-3` are needed at runtime. The binary uses ALSA for audio and D-Bus for MPRIS2 media controls.
 
 ```bash
-sudo apt install libasound2-dev
+sudo apt install libasound2-dev libdbus-1-dev
 
 swift build     # no special flags needed: the Apple-only targets (app, Quick Look)
 swift test      # are left out of the package on Linux
