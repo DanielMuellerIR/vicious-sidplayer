@@ -9,6 +9,11 @@
    bereits der primäre Headless-Weg.
 5. Filter-Cutoff-Tuning für 6581. Ersetzt dauerhaft einen vollständigen reSIDfp-Port
    (Entscheidung 2026-07-15): holt den hörbaren Teil des Gewinns ohne Engine-Umbau.
+6. Öffnen-Dialog auf `.sid` filtern (`MainView.swift:532`): `fileImporter` nutzt
+   `allowedContentTypes: [.data]` und zeigt daher jede Datei. Den in der Info.plist
+   deklarierten UTI `com.viben.sid-tune` (bzw. `UTType(filenameExtension: "sid")`) als
+   zentrale Konstante nutzen, dann filtert macOS nativ. Quelle: Code-Review-Triage
+   2026-07-24.
 
 In Arbeit: Linux-Port (CLI + Audio-Backend) nach `tasks/2026-07-05-linux-port/plan.md`.
 
