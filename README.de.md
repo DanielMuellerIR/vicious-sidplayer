@@ -232,20 +232,37 @@ Die Quick-Look-Erweiterung wird als Teil des App-Bundles gebaut
 (`Contents/PlugIns/ViciousSIDQuickLook.appex`) und ist damit automatisch in
 jedem App-Build und DMG enthalten.
 
-### DMG (für Releases)
+### Installieren und Release bauen
+
+Drei Einstiegspunkte, bewusst getrennt:
+
+```bash
+bash build_app.sh                 # baut nur, bleibt im Projektverzeichnis
+./install.sh                      # baut, notarisiert, installiert nach /Applications
+./release.sh                      # baut, notarisiert, packt das DMG — installiert nie
+```
+
+`install.sh` und `release.sh` notarisieren zuerst die **App selbst** und heften
+ihr das Ticket an. Das ist der Punkt: Eine App, die nur im notarisierten
+Disk-Image steckt, verliert ihre Garantie in dem Moment, in dem jemand sie
+herauszieht. `release.sh` notarisiert danach zusätzlich das Image.
+
+Das DMG enthält ein Retina-kompatibles Hintergrundbild (1x/2x TIFF via
+`tiffutil`). Für feinere Steuerung lässt sich `build_dmg.sh` weiterhin direkt
+aufrufen:
 
 ```bash
 bash build_dmg.sh                 # → build/Vicious SID Player.dmg
-NOTARY_PROFILE=<profil> bash build_dmg.sh --notarize   # DMG signieren, notarisieren und stapeln
+bash build_dmg.sh --notarize      # DMG signieren, notarisieren und stapeln
 ```
 
-Das DMG enthält ein Retina-kompatibles Hintergrundbild (1x/2x TIFF via `tiffutil`).
-Für die Notarisierung wird ein notarytool-Keychain-Profil erwartet, übergeben
-über die Umgebungsvariable `NOTARY_PROFILE`. Es kann einmalig interaktiv
-angelegt werden:
+Für die Notarisierung wird ein notarytool-Keychain-Profil gebraucht. Solche
+Profile sind pro Mac lokal und werden nie synchronisiert, deshalb kommt der Name
+aus `NOTARY_PROFILE` oder aus der Konfiguration dieses Clones:
 
 ```bash
-xcrun notarytool store-credentials <profil>
+git config --local viciousSidPlayer.notaryProfile <profil>
+xcrun notarytool store-credentials <profil> --apple-id <apple-id> --team-id <team-id>
 ```
 
 ### Tests

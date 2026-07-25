@@ -95,6 +95,11 @@ bash build_dmg.sh
 `build_dmg.sh --notarize` ist ein externer Release-Schritt und läuft nur nach Auftrag
 und Secret-/Signatur-Preflight. Testanzahlen nicht in Daueranweisungen festschreiben.
 
+Drei Einstiegspunkte: `build_app.sh` baut nur, `./install.sh` installiert
+notarisiert nach `/Applications`, `./release.sh` packt das DMG (installiert nie).
+Beide heften zuerst der App selbst ein Ticket an. Profilname aus `NOTARY_PROFILE`
+oder `git config viciousSidPlayer.notaryProfile`.
+
 Änderungsspezifische Gates:
 
 - DSP/Parser/6502: Swift-Tests plus bekannte SID-Referenzfälle; HTML5 und native

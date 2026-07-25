@@ -10,9 +10,10 @@ FINAL_DMG="${BUILD_DIR}/${DMG_NAME}.dmg"
 MOUNT_DIR="/Volumes/${VOL_NAME}"
 NOTARIZE=0
 FINDER_LAYOUT=1
-# Kein Default: der Profilname ist umgebungsspezifisch (Keychain des Build-Macs)
-# und gehoert nicht ins public Repo. --notarize verlangt NOTARY_PROFILE als Env.
-NOTARY_PROFILE="${NOTARY_PROFILE:-}"
+# Kein fester Default: der Profilname ist umgebungsspezifisch (Keychain des
+# Build-Macs) und gehoert nicht ins public Repo. Umgebung schlaegt clone-lokale
+# Git-Konfiguration; install.sh/release.sh setzen NOTARY_PROFILE ohnehin selbst.
+NOTARY_PROFILE="${NOTARY_PROFILE:-$(git config --local --get viciousSidPlayer.notaryProfile 2>/dev/null || true)}"
 APPLE_TEAM_ID="${APPLE_TEAM_ID:-9QSWKSR4NQ}"
 CODESIGN_IDENTITY="${CODESIGN_IDENTITY:-Developer ID Application: Daniel Mueller ($APPLE_TEAM_ID)}"
 SIGN_DMG="${SIGN_DMG:-auto}"
@@ -26,6 +27,7 @@ Usage: bash build_dmg.sh [--notarize] [--no-finder-layout]
 
 Environment:
   NOTARY_PROFILE      Keychain profile for notarytool (required for --notarize).
+                      Falls back to \`git config viciousSidPlayer.notaryProfile\`.
   SIGN_DMG            auto/1/0, controls Developer ID signing of the DMG.
 EOF
 }
@@ -58,6 +60,7 @@ done
 if [[ "$NOTARIZE" == "1" && -z "$NOTARY_PROFILE" ]]; then
     echo "ABBRUCH: --notarize braucht NOTARY_PROFILE (Name des notarytool-Keychain-Profils)." >&2
     echo "Beispiel: NOTARY_PROFILE=MeinNotaryProfil bash build_dmg.sh --notarize" >&2
+    echo "Oder einmalig fuer diesen Clone: git config --local viciousSidPlayer.notaryProfile <profil>" >&2
     exit 1
 fi
 
