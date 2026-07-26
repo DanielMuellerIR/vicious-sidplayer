@@ -153,6 +153,20 @@ public struct MainView: View {
         UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark"
     }
 
+    // Was der Oeffnen-Dialog anbieten darf: `.sid`-Dateien und Ordner.
+    //
+    // Der exportierte UTI ist der genauere Filter, steht dem System aber erst
+    // zur Verfuegung, wenn das App-Bundle registriert ist — in `swift run` also
+    // nicht. Deshalb der Rueckfall auf die Endung; findet das System auch die
+    // nicht, bleibt `.data` (alles anzeigen) besser als ein Dialog, der gar
+    // nichts mehr zeigt.
+    static let openPanelContentTypes: [UTType] = {
+        let sid = UTType(SidFileType.uti)
+            ?? UTType(filenameExtension: SidFileType.fileExtension)
+            ?? .data
+        return [sid, .folder]
+    }()
+
     public init() {}
 
     public var body: some View {
@@ -529,7 +543,12 @@ public struct MainView: View {
         }
         .fileImporter(
             isPresented: $showFileImporter,
-            allowedContentTypes: [.data],
+            // Vorher stand hier `.data` — das heisst „jede Datei" und machte den
+            // Dialog nutzlos, weil er auch Bilder und Textdateien anbot.
+            // `SidFileType` (Core) haelt Endung und UTI an genau einer Stelle;
+            // ueber den exportierten Typ filtert macOS selbst. Ordner bleiben
+            // erlaubt, weil die App auch ganze Sammlungen aufnimmt.
+            allowedContentTypes: MainView.openPanelContentTypes,
             allowsMultipleSelection: true
         ) { result in
             switch result {

@@ -7,9 +7,15 @@ Look und als Single-File-HTML5-App. Keine SID-Musikdateien bündeln oder committ
 
 - `Sources/ViciousSIDPlayerCore/`: Parser, SID/6502-DSP, Audio-Koordinator,
   Songlängen, WAV-Renderer und testbare Konfigurationslogik.
+  `Library/` enthält Bibliotheksindex, Import und Zurücksetzen — plattformneutral
+  und von beiden Apps nutzbar.
 - `Sources/ViciousSIDPlayerApp/`: SwiftUI-App, Einstellungen, Playlist,
   Oszilloskop, Media-Tasten und Sessionzustand.
 - `Sources/ViciousSIDQuickLook/`: Quick-Look-Extension.
+- `ios/`: native iPhone-App (eingechecktes `.xcodeproj`, iOS 17 Minimum).
+  `ViciousSIDPlayer/Player/` ist das App-Modell samt Audio-Session und Now
+  Playing, `UI/` und `Library/` sind SwiftUI, `ViciousSIDPlayerTests/` sind die
+  Simulator-Tests, `scripts/` die Buildskripte.
 - `Tests/ViciousSIDPlayerTests/`: SwiftPM-Tests.
 - `src/`, `sidplayer.js`, `sid-player-worklet.js`: HTML5-Player; `build.py`
   erzeugt die gitignored Single-File-Ausgabe.
@@ -42,6 +48,36 @@ Releaseartefakte bleiben unversioniert.
   nicht restaurieren; zufälliger Start ist beabsichtigt.
 - Playlist-Deduplikation nach Dateiname und Favoriten-/Suchverhalten dürfen beim
   Nachladen des Autoplay-Ordners nicht auseinanderlaufen.
+
+### iOS
+
+- Die Bibliothek liegt auf iOS fest in `Documents/`, weil nur dieser Ordner über
+  Finder-Dateifreigabe und Dateien-App erreichbar ist. Index und Caches gehören
+  bewusst **nicht** dorthin, sonst sieht der Nutzer sie zwischen seiner Musik.
+  Einzige Wahrheit über beide Orte ist `MusicLibraryLocation`.
+- Titel-IDs sind **relative Pfade**, nie absolute URLs: der App-Container bekommt
+  bei jeder Neuinstallation eine neue UUID. Favoriten und Session-Restore hängen
+  daran.
+- Der Index ist nie die einzige Wahrheit. Von außen abgelegte oder gelöschte
+  Dateien müssen beim Wechsel in den Vordergrund erkannt werden.
+- Audio läuft im Hintergrund weiter, gezeichnet wird dort nicht. Der Zeichentakt
+  hängt an `isSceneActive`; zusätzlich fällt `ViciousCoordinator.setUIUpdateInterval`
+  im Hintergrund auf 1 Hz. Auto-Next und Sperrbildschirm laufen über einen eigenen
+  1-Hz-Task, der **nicht** an der Szenenphase hängt — sonst endet die Wiedergabe am
+  ersten Songende.
+- Kopfhörer abziehen (`.oldDeviceUnavailable`) pausiert. Niemals laut über den
+  Lautsprecher weiterspielen. Nach einer Unterbrechung nur bei `.shouldResume`
+  fortsetzen.
+- `MPNowPlayingInfoCenter` bekommt die verstrichene Zeit nur bei Zustandswechseln
+  und höchstens im Sekundentakt — jeder Schreibvorgang ist ein IPC-Aufruf.
+- Die Sitzungswiederherstellung bereitet den Titel vor, **spielt aber nicht von
+  selbst los** (bewusster Unterschied zur Mac-App). Bei aktivem Shuffle wird wie
+  dort gar nicht wiederhergestellt.
+- Die Mini-Player-Leiste hängt per `safeAreaInset` am **Tab-Inhalt**, nicht an der
+  `TabView`. An der TabView verdeckt sie die Tab-Leiste vollständig und die App
+  ist ab dem ersten Titel nicht mehr umschaltbar.
+- Keine privaten APIs, Privacy-Manifest gepflegt: der Weg in den App Store bleibt
+  offen. Die Team-ID kommt ausschließlich aus dem gitignorierten `ios/.env`.
 
 ## Quick Look, Signatur und Release
 
@@ -90,6 +126,8 @@ python3 build.py --no-min
 swift test
 bash build_app.sh
 bash build_dmg.sh
+bash ios/scripts/build-simulator.sh
+bash ios/scripts/run-tests.sh
 ```
 
 `build_dmg.sh --notarize` ist ein externer Release-Schritt und läuft nur nach Auftrag
@@ -115,6 +153,14 @@ oder `git config viciousSidPlayer.notaryProfile`.
   und Stop beim Schließen prüfen.
 - HTML: Build reproduzierbar, Single-File startet unter `file://`, Drag & Drop von
   Datei und Ordner funktioniert.
+- iOS: `ios/scripts/build-simulator.sh` ohne Warnungen im eigenen Code und
+  `ios/scripts/run-tests.sh` grün. Core-Änderungen zusätzlich gegen
+  `generic/platform=iOS Simulator` bauen — `swift test` allein übersetzt den Core
+  nie für iOS und übersieht genau die Foundation-Lücken, die dort auftreten.
+- Hintergrundwiedergabe, Sperrbildschirm, AirPods, Anruf und Kopfhörerabziehen sind
+  **im Simulator nicht belegbar**. Diese Abnahme läuft ausschließlich über
+  [`ios/GERAETETEST.md`](ios/GERAETETEST.md) auf echter Hardware; niemals als geprüft
+  ausgeben, wenn nur der Simulator lief.
 
 ## Code- und Git-Regeln
 
@@ -158,5 +204,7 @@ Anweisung.
 - `Package.swift`: Swift-Paket, Targets und Abhängigkeiten.
 - `sidplayer.js`, `sid-player-worklet.js`, `vicious-sid-player.html`: Web-Player.
 - `build.py`, `build_app.sh`, `build_dmg.sh`: Build- und Paketwerkzeuge.
+- `ios/`: iPhone-App; [`ios/GERAETETEST.md`](ios/GERAETETEST.md) ist die
+  Prüfliste für die Abnahme auf echter Hardware.
 - [`backlog.md`](backlog.md): verifizierte offene Arbeit.
 - [`docs/archive/agent-context-legacy-2026-07-14.md`](docs/archive/agent-context-legacy-2026-07-14.md): frühere Chronik, nicht autoritativ.

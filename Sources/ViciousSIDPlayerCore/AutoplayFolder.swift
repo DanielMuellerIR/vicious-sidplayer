@@ -35,9 +35,20 @@ public enum AutoplayFolder {
 
     // Bequemer Aufruf mit echtem FileManager (Produktions-Pfad der App).
     public static func resolve(configuredPath: String, fm: FileManager = .default) -> URL? {
-        resolve(configuredPath: configuredPath, home: fm.homeDirectoryForCurrentUser) { url in
+        #if os(iOS)
+        // iOS kennt kein Home-Verzeichnis im Mac-Sinn (`homeDirectoryForCurrentUser`
+        // ist dort gar nicht erst verfuegbar) und erst recht kein ~/Music: die App
+        // darf ausschliesslich in ihren eigenen Container schreiben. Die Bibliothek
+        // liegt deshalb fest in dessen `Documents/` — genau der Ordner, den die
+        // Finder-Dateifreigabe und die iOS-Dateien-App sichtbar machen. Ein vom
+        // Nutzer konfigurierter Pfad hat hier keine Bedeutung und wird ignoriert.
+        _ = configuredPath
+        return MusicLibraryLocation.root(fm: fm)
+        #else
+        return resolve(configuredPath: configuredPath, home: fm.homeDirectoryForCurrentUser) { url in
             var isDir: ObjCBool = false
             return fm.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
         }
+        #endif
     }
 }

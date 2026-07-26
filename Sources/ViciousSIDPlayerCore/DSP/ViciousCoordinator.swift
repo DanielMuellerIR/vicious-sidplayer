@@ -100,6 +100,9 @@ public final class ViciousCoordinator: ObservableObject {
     private var engineProcessor: ViciousProcessor?
     private let visualsBuffer = RealtimeVisualsBuffer()
     private var uiUpdateTimer: Timer?
+    // Taktrate, mit der Oszilloskop-Daten und Laufzeit aus dem Realtime-Puffer
+    // in die @Published-Felder gespiegelt werden. Siehe setUIUpdateInterval().
+    private var uiUpdateInterval: TimeInterval = 0.02
     private var currentVolume: Float = 0.3
     // Zielposition eines Seeks, der im gestoppten Zustand angefordert wurde (dann
     // gibt es noch keinen Processor). play() wendet sie beim Aufbau an, damit die
@@ -335,12 +338,36 @@ public final class ViciousCoordinator: ObservableObject {
         }
     }
 
+    // Taktrate der UI-Aktualisierung setzen.
+    //
+    // Wozu: die Audioausgabe laeuft auf einem eigenen Realtime-Thread und ist
+    // von diesem Timer voellig unabhaengig. Der Timer spiegelt nur Messwerte
+    // ins UI. Auf iOS spielt die App im gesperrten Zustand weiter — dort waeren
+    // 50 Aktualisierungen pro Sekunde fuer einen ausgeschalteten Bildschirm
+    // reine Batterieheizung. Die App schaltet deshalb im Hintergrund auf einen
+    // langsamen Takt (etwa 1 s) und im Vordergrund zurueck auf 0,02 s.
+    //
+    // Bewusst nicht "aus": die verstrichene Zeit wird auch im Hintergrund
+    // gebraucht — fuer Auto-Next und fuer die Anzeige auf dem Sperrbildschirm.
+    //
+    // Die Mac-App ruft das nie auf und behaelt den Standardtakt von 0,02 s.
+    public func setUIUpdateInterval(_ seconds: TimeInterval) {
+        let clamped = (seconds.isFinite && seconds > 0) ? seconds : 0.02
+        guard clamped != uiUpdateInterval else { return }
+        uiUpdateInterval = clamped
+        // Laeuft gerade ein Timer, mit der neuen Taktrate neu aufsetzen.
+        if uiUpdateTimer != nil {
+            stopUIUpdates()
+            startUIUpdates()
+        }
+    }
+
     private func startUIUpdates() {
         // Im .common-Modus in die RunLoop haengen, damit der Timer AUCH waehrend
         // eines Slider-Drags feuert. Slider-Tracking laeuft im Event-Tracking-Modus;
         // ein Timer im Default-Modus pausiert dann und das Oszilloskop wuerde beim
         // Ziehen des Volume-/Positions-Reglers einfrieren.
-        let timer = Timer(timeInterval: 0.02, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: uiUpdateInterval, repeats: true) { [weak self] _ in
             guard let self = self else { return }
             Task { @MainActor in
                 self.updateUI()

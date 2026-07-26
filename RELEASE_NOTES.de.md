@@ -1,50 +1,66 @@
-Vicious SID Player 1.8.1 bringt den Emulationskern als nativen
-Kommandozeilen-Player nach Linux und härtet Songlängenanalyse, Rendering und
-skriptgesteuerte Ausgabe. Die notarisierte macOS-App samt Quick-Look-Erweiterung
-bleibt im DMG enthalten.
+Vicious SID Player 1.9.0 bringt eine native iPhone-App, die sich den vorhandenen
+Emulationskern teilt, und verlagert die Musikbibliothek — Index, rekursiver
+Import, Zurücksetzen — in genau diesen Kern, damit beide Plattformen dieselbe,
+getestete Logik benutzen. Die notarisierte macOS-App samt Quick-Look-Erweiterung
+bleibt im DMG enthalten; am Verhalten unter macOS ändert sich nichts.
 
-## Linux-Kommandozeilen-Player
+## iOS-App (iPhone)
 
-- `vicious-sid` spielt SID-Dateien in Echtzeit über ALSA und funktioniert damit
-  auch mit PipeWire und PulseAudio.
-- Rohes 16-Bit-PCM lässt sich über stdout in Pipelines streamen, während
-  Diagnosen ausschließlich nach stderr gehen.
-- Die Terminalsteuerung bietet Pause/Fortsetzen, Subtune-Wechsel und sauberes
-  Beenden; nicht-interaktives stdin wird automatisch erkannt.
-- Die MPRIS2-Integration stellt Wiedergabe, Metadaten und Subtune-Wechsel für
-  Medientasten und Sound-Steuerungen des Desktops bereit. Ohne
-  D-Bus-Session läuft die Wiedergabe normal weiter.
-- `build_deb.sh` erzeugt ein Debian-Paket mit statisch gelinktem CLI,
-  Desktop-Eintrag, Dateizuordnung und Icon.
-- Linux-Build und -Tests laufen jetzt bei jedem Push im festgelegten
-  Swift-6-Container.
+- Eine native SwiftUI-App unter `ios/`, aus den Quellen gebaut und mit dem
+  eigenen Apple-Developer-Team per Sideload installiert. Keine privaten APIs, ein
+  Privacy-Manifest und saubere UTIs — der Weg in den App Store bleibt offen.
+- Hintergrundwiedergabe mit Steuerung über Sperrbildschirm, Kontrollzentrum und
+  AirPods via `MPRemoteCommandCenter` und `MPNowPlayingInfoCenter`.
+- Behandlung der Audio-Sitzung für genau die Fälle, die eine Musik-App richtig
+  machen muss: Ein eingehender Anruf pausiert und setzt nur dann fort, wenn das
+  System es freigibt; abgezogene Kopfhörer pausieren, statt auf den Lautsprecher
+  umzuschalten; ein Neustart der Media Services baut die Engine neu auf.
+- Rekursiver Ordner-Import, der die Unterordnerstruktur erhält, inhaltsgleiche
+  Dateien überspringt, Fortschritt meldet, sich abbrechen lässt und Fehler pro
+  Datei sammelt, statt den ganzen Lauf abzubrechen. Platzhalter von
+  File-Providern wie iCloud Drive oder Nextcloud werden vor dem Kopieren
+  materialisiert.
+- Finder-Dateifreigabe: iPhone ans Kabel und ganze Ordner in die App ziehen. Von
+  außen hinzugefügte oder gelöschte Dateien werden selbstständig abgeglichen.
+- Bibliothek zurücksetzen, zweistufig bestätigt, mit Schalter für das Behalten
+  der Favoriten.
+- Oszilloskop, Subtunes, Voice-Mute, Filter-Bypass, SID-Modellwahl, Songlängen,
+  Suche, Favoriten, Shuffle, Session-Restore, Theme und WAV-Export.
+- Oszilloskop und alle UI-Timer laufen nur im Vordergrund; im Hintergrund spielt
+  das Audio weiter und die Visualisierung steht still.
+- Deutsch und Englisch, der Systemsprache folgend.
 
-## Zuverlässigkeit und Sicherheit
+## Gemeinsamer Kern
 
-- Songlängen-Datenbank und Hintergrundschätzung sind abbrechbar und
-  generationssicher; ein älteres asynchrones Ergebnis kann den aktuell
-  gewählten Titel nicht mehr überschreiben.
-- Zwischenzeitliche Stille führt nicht mehr dazu, dass ein später fortgesetzter
-  Titel mit einem zu frühen Ende gespeichert wird.
-- Berechnete Songlängen werden atomar gespeichert; veraltete oder ungültige
-  Cache-Daten ersetzen keinen gültigen Zustand.
-- WAV- und CLI-Dauern werden vor Frame-Berechnung oder Ausgabe geprüft;
-  übergroße und nicht-endliche Werte scheitern kontrolliert.
-- Der WAV-Export streamt in eine temporäre Datei und ersetzt das Ziel erst nach
-  erfolgreichem Rendering. Dadurch entfallen eine vollständige Speicherkopie
-  und unvollständige Zieldateien.
-- Das Kürzen eines zu großen SID-Payloads wird als Diagnose gemeldet, statt
-  still zu bleiben.
+- Die Musikbibliothek ist nach `ViciousSIDPlayerCore` gewandert: Index,
+  rekursiver Scan mit Abgleich, Importer und Zurücksetzen sind plattformneutral
+  und durch Tests abgedeckt.
+- Die Identität eines Titels ist ein Pfad relativ zur Bibliothekswurzel statt
+  einer absoluten URL — dadurch überleben Favoriten und Session-Restore eine
+  Neuinstallation.
+- Das Zurücksetzen kann ausschließlich unterhalb der Bibliothekswurzel löschen;
+  die Prüfung vergleicht Pfadbestandteile, keine Zeichenketten-Präfixe.
+- `SidFileType` hält die Endung `.sid` und den UTI `com.viben.sid-tune` an einer
+  Stelle. Der Öffnen-Dialog unter macOS filtert jetzt darüber, statt jede
+  beliebige Datei anzubieten.
+- Der Kern baut zusätzlich für iOS; zwei dort nicht vorhandene
+  Foundation-Aufrufe wurden ersetzt, ohne das Verhalten unter macOS zu ändern.
 
-## Verifikation und Kompatibilität
+## Prüfung
 
-- Die vollständige Swift-Suite, deterministisches Rendering einer synthetischen
-  SID, der signierte App-/Quick-Look-Build und die Linux-CI decken die
-  Releasepfade ab.
-- Das macOS-DMG ist mit Developer ID signiert, von Apple notarisiert und für die
-  Offline-Gatekeeper-Prüfung gestapelt.
-- Es werden keine SID-Musikdateien mitgeliefert. Der HTML5-Player wird mit
-  `python3 build.py` lokal aus den Repository-Quellen erzeugt.
+- Die Swift-Suite deckt die neue Bibliothekslogik ab, einschließlich
+  strukturerhaltendem Import, Deduplikation, Abbruch, Abgleich gegen Änderungen
+  von außen und der Pfadprüfung beim Zurücksetzen.
+- Eine Simulator-Suite deckt das App-Modell, den Info.plist-Vertrag, das
+  Privacy-Manifest und einen vollständigen Import-Durchlauf gegen einen
+  synthetischen, verschachtelten Testbaum ab.
+- Hintergrundwiedergabe, Sperrbildschirm-Steuerung, AirPods, eingehende Anrufe
+  und das Abziehen der Kopfhörer sind **im Simulator nicht belegbar** und werden
+  deshalb nicht als geprüft ausgegeben. Die Prüfliste für echte Hardware steht in
+  `ios/GERAETETEST.md`.
+- Es werden keine SID-Musikdateien mitgeliefert. Der HTML5-Player wird lokal mit
+  `python3 build.py` aus den Repo-Quellen erzeugt.
 
-Die native App benötigt macOS 13 oder neuer. Das Linux-CLI benötigt die
-Laufzeitbibliotheken für ALSA und D-Bus.
+Voraussetzungen: macOS 13 oder neuer für die native App, iOS 17 oder neuer und
+Xcode 16 oder neuer für die iPhone-App. Das Linux-CLI benötigt die
+Laufzeitbibliotheken von ALSA und D-Bus.

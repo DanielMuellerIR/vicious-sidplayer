@@ -102,13 +102,23 @@ public final class SongLengthCache: @unchecked Sendable {
         }
     }
 
-    // Standard-Ablageort: ~/Library/Application Support/Vicious SID Player/
+    // Dateiname des Caches im Support-Ordner. Oeffentlich, weil das
+    // Zuruecksetzen der Bibliothek (LibraryReset) diese Datei mit wegwerfen
+    // muss — sonst haette die frisch befuellte Bibliothek Laengen von Dateien,
+    // die es gar nicht mehr gibt. Der Name steht deshalb genau einmal hier.
+    public static let defaultCacheFileName = "computed-songlengths.json"
+
+    // Standard-Ablageort: ~/Library/Application Support/Vicious SID Player/,
+    // auf iOS der gleichnamige Ordner im App-Container. Beides liefert
+    // MusicLibraryLocation.support(fm:) — dort steht auch, warum der Cache
+    // bewusst NICHT neben der Musik liegt.
     public static func defaultCache(fm: FileManager = .default) -> SongLengthCache {
-        let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? fm.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
-        let dir = base.appendingPathComponent("Vicious SID Player", isDirectory: true)
-        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        return SongLengthCache(fileURL: dir.appendingPathComponent("computed-songlengths.json"))
+        // Notnagel, falls das System kein "Application Support" herausrueckt:
+        // temporaeres Verzeichnis. Dann geht der Cache beim naechsten Start
+        // verloren, aber nichts stuerzt ab.
+        let dir = MusicLibraryLocation.support(fm: fm)
+            ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        return SongLengthCache(fileURL: dir.appendingPathComponent(defaultCacheFileName))
     }
 
     private func key(md5: String, subtune: Int) -> String {

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Privacy-Manifest. Pflicht fuer den App Store, und auch beim Sideload
+         ein guter Nachweis, dass die App wirklich nichts sammelt.
+
+         Die App hat keine Netzwerkfunktion: sie spielt lokale Dateien ab.
+         Es gibt kein Tracking, keine Analytik, keinen Werbe-Identifikator und
+         keine Datenerhebung — alle drei Listen unten sind deshalb leer bzw.
+         ausdruecklich verneint. -->
+
+    <key>NSPrivacyTracking</key>
+    <false/>
+
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array/>
+
+    <!-- APIs, deren Nutzung Apple begruenden laesst („required reason APIs").
+         Beide werden ausschliesslich innerhalb des eigenen App-Containers
+         benutzt, nie um Geraete oder Nutzer wiederzuerkennen. -->
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+        <dict>
+            <!-- Datei-Zeitstempel: der Bibliotheks-Index vergleicht
+                 Aenderungsdatum und Groesse, um zu erkennen, ob jemand ueber
+                 die Finder-Dateifreigabe Dateien ausgetauscht hat. -->
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>C617.1</string>
+            </array>
+        </dict>
+        <dict>
+            <!-- UserDefaults: Einstellungen, Favoriten und der zuletzt
+                 gespielte Titel. Ausschliesslich in dieser App. -->
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>CA92.1</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>

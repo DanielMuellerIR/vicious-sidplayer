@@ -27,3 +27,11 @@ sidplayer.html
 # zusaetzlich case-insensitiv, auf Linux nicht — die Regel wirkte also je nach
 # Plattform unterschiedlich).
 /audio/
+
+# iOS-App (ios/): Buildartefakte, Xcode-Nutzerzustand und die lokale Team-ID.
+# Die Team-ID ist eine persoenliche Kennung und wird nie eingecheckt; Vorlage
+# ist ios/env.example, erzeugt wird daraus ios/Config/Local.xcconfig.
+ios/build/
+ios/.env
+ios/Config/Local.xcconfig
+*.xcuserstate

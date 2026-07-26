@@ -190,6 +190,35 @@ beweisen, dass `ViciousSIDPlayerCore` für `iphonesimulator` baut. Das Manifest
 enthält macOS-only-Targets hinter `#if os(macOS)`; falls Xcode daran scheitert,
 muss die Weiche vor allem anderen sitzen. Ergebnis dokumentieren.
 
+> **Ergebnis 2026-07-26 (erledigt).** Xcode 26.6, iOS-SDK 26.5.
+>
+> Die befürchtete Manifest-Weiche war *kein* Problem: `#if os(macOS)` wird auf
+> dem Bau-Rechner ausgewertet, die Mac-Targets stehen also auch bei einem
+> iOS-Build im Paket — Xcode übersetzt aber nur die tatsächlich verlangten
+> Produkte, und `ViciousSIDPlayerApp`/`ViciousSIDQuickLook` werden von einem
+> iOS-Ziel nie angefasst. Keine Änderung nötig.
+>
+> Gescheitert ist stattdessen genau das, was die Ausgangslage vorhergesagt hat:
+> `homeDirectoryForCurrentUser` ist auf iOS *unavailable*. Zwei Stellen, beide
+> gelöst, ohne das macOS-Verhalten anzufassen:
+>
+> - Neu `Sources/ViciousSIDPlayerCore/Library/MusicLibraryLocation.swift` als
+>   einzige Wahrheit über Bibliothekswurzel (iOS `Documents/`, macOS
+>   `~/Music/Vicious SID Player`) und Support-Ordner für Index und Caches.
+> - `AutoplayFolder.resolve(configuredPath:fm:)` bekommt einen `#if os(iOS)`-Zweig
+>   auf diese Wurzel. Die injizierbare, getestete `resolve(configuredPath:home:isDirectory:)`
+>   bleibt unangetastet, der macOS-Zweig ebenfalls.
+> - `SongLengthCache.defaultCache` benutzt denselben Support-Ordner statt des
+>   Home-Fallbacks.
+>
+> Ebenfalls in Phase 0 entstanden, weil mehrere Bereiche darauf aufbauen:
+> `Sources/ViciousSIDPlayerCore/SidFileType.swift` (Endung `sid`, UTI
+> `com.viben.sid-tune`) — erledigt zugleich Backlog-Punkt 6.
+>
+> Nachweis: `xcodebuild build -scheme ViciousSIDPlayerCore -destination
+> 'generic/platform=iOS Simulator'` und `… -destination 'generic/platform=iOS'`
+> jeweils **BUILD SUCCEEDED**, `swift test` unverändert grün.
+
 **Phase 1 — Projektgerüst.** `.xcodeproj` mit synchronized groups, lokale
 Package-Referenz auf das Repo-Wurzelpaket, drei Skripte, `.env.example`,
 `.gitignore`-Ergänzung. Erfolgskriterium: leere App startet im Simulator.

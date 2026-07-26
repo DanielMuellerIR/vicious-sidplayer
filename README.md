@@ -16,12 +16,13 @@
   <img src="src/Screenshot-light.png" width="760" alt="Vicious SID Player in light mode – the appearance follows the system setting automatically">
 </p>
 
-A self-contained Commodore 64 SID music player in two variants:
+A self-contained Commodore 64 SID music player in three variants:
 
 1. **HTML5 (`vicious-sid-player.html`)** — a single HTML file (~50 KB) that runs straight from the file system via double click, no web server required.
 2. **Native macOS app (`Vicious SID Player.app`)** — SwiftUI desktop application with `AVAudioEngine` and a real-time oscilloscope.
+3. **Native iOS app (`ios/`)** — SwiftUI iPhone app with background playback, lock-screen controls, and folder import. Built from source with your own developer team; see [iOS app](#ios-app-iphone).
 
-Neither variant ships any SID files. Tunes are loaded via drag & drop, file dialog, or (macOS app) by double-clicking a `.sid` file in Finder.
+None of the variants ship any SID files. Tunes are loaded via drag & drop, file dialog, (macOS app) by double-clicking a `.sid` file in Finder, or (iOS app) by importing a folder.
 
 ---
 
@@ -114,6 +115,64 @@ If no preview appears:
 - Test the preview directly from Terminal: `qlmanage -p /path/to/tune.sid`.
 
 Requires macOS 13 or later.
+
+---
+
+## iOS app (iPhone)
+
+A native SwiftUI iPhone app lives in `ios/`. It shares the entire emulation core
+with the macOS app — same parser, same 6502/SID emulation, same song-length
+resolution.
+
+There is no App Store build. You build and sideload it yourself with your own
+Apple Developer team; the project deliberately avoids private APIs and ships a
+privacy manifest, so the App Store route stays open.
+
+**What it does**
+
+- **Background playback**: music keeps running when the screen is locked, with
+  play/pause, previous/next and position control from the lock screen, the
+  Control Center and AirPods.
+- **Folder import**: pick a folder (iCloud Drive, Nextcloud, “On My iPhone”) and
+  the app walks it recursively, keeping the directory structure, skipping
+  duplicates, with progress and a cancel button.
+- **Finder file sharing**: connect the iPhone by cable, open Finder → Files, and
+  drag whole folders straight into the app. The library also shows up in the iOS
+  Files app under “On My iPhone”. Files added or deleted from outside are picked
+  up automatically.
+- **Reset library**: throw everything away and refill it — favorites optionally
+  kept.
+- Oscilloscope, subtunes, voice muting, filter bypass, SID model selection,
+  song lengths, search, favorites, shuffle, session restore, theme and WAV
+  export, as on the desktop.
+
+The oscilloscope and all UI timers only run while the app is in the foreground.
+In the background the audio keeps playing and the drawing stops — that is the
+single biggest battery saver here.
+
+**Build**
+
+Requires Xcode 16 or later (the project uses `objectVersion 77` with file-system
+synchronized groups, so new Swift files are picked up without editing the
+project file) and iOS 17 or later on the device.
+
+```bash
+# Simulator — no signing, no developer account needed
+bash ios/scripts/build-simulator.sh
+bash ios/scripts/run-tests.sh
+
+# Real device — needs your Apple Developer team ID
+cp ios/env.example ios/.env      # then fill in DEVELOPMENT_TEAM
+bash ios/scripts/apply-env.sh
+bash ios/scripts/build-device.sh
+```
+
+The team ID is never committed: `ios/.env` and the generated
+`ios/Config/Local.xcconfig` are both git-ignored.
+
+Background playback and lock-screen control **cannot be verified in the
+simulator** — it has no real lock screen, no AirPods and no incoming calls. The
+manual checklist for a real device is in `ios/GERAETETEST.md` (German).
 
 ---
 
@@ -266,8 +325,14 @@ xcrun notarytool store-credentials <profile> --apple-id <apple-id> --team-id <te
 
 ### Tests
 
+Two suites, and one does not replace the other:
+
 ```bash
+# Platform-neutral core: parser, 6502/SID emulation, song lengths, library logic
 swift test
+
+# iOS glue layer in the simulator: app model, Info.plist contract, privacy manifest
+bash ios/scripts/run-tests.sh
 ```
 
 ---

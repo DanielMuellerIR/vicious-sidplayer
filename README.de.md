@@ -16,12 +16,13 @@
   <img src="src/Screenshot-light.png" width="760" alt="Vicious SID Player im Light Mode – das Erscheinungsbild folgt automatisch der Systemeinstellung">
 </p>
 
-Ein eigenständiger Commodore-64-SID-Musikplayer in zwei Varianten:
+Ein eigenständiger Commodore-64-SID-Musikplayer in drei Varianten:
 
 1. **HTML5 (`vicious-sid-player.html`)** — Eine einzelne HTML-Datei (~50 KB), die ohne Webserver direkt per Doppelklick aus dem Dateisystem funktioniert.
 2. **Native macOS App (`Vicious SID Player.app`)** — SwiftUI-Desktop-Anwendung mit `AVAudioEngine` und Echtzeit-Oszilloskop.
+3. **Native iOS App (`ios/`)** — SwiftUI-iPhone-App mit Hintergrundwiedergabe, Sperrbildschirm-Steuerung und Ordner-Import. Wird mit einem eigenen Developer-Team aus den Quellen gebaut; siehe [iOS-App](#ios-app-iphone).
 
-Beide Varianten enthalten keine SID-Dateien. Musikstücke werden per Drag & Drop, Datei-Dialog oder (macOS-App) Doppelklick auf eine `.sid`-Datei im Finder geladen.
+Keine der Varianten enthält SID-Dateien. Musikstücke werden per Drag & Drop, Datei-Dialog, (macOS-App) Doppelklick auf eine `.sid`-Datei im Finder oder (iOS-App) per Ordner-Import geladen.
 
 ---
 
@@ -114,6 +115,67 @@ Falls keine Vorschau erscheint:
 - Vorschau direkt im Terminal testen: `qlmanage -p /pfad/zu/tune.sid`.
 
 Voraussetzung: macOS 13 oder neuer.
+
+---
+
+## iOS-App (iPhone)
+
+Unter `ios/` liegt eine native SwiftUI-iPhone-App. Sie teilt sich den kompletten
+Emulationskern mit der macOS-App — gleicher Parser, gleiche 6502/SID-Emulation,
+gleiche Songlängen-Auflösung.
+
+Es gibt keinen App-Store-Build. Die App wird selbst gebaut und mit einem eigenen
+Apple-Developer-Team per Sideload aufs Gerät gebracht; das Projekt verzichtet
+bewusst auf private APIs und liefert ein Privacy-Manifest, damit der Weg in den
+App Store offen bleibt.
+
+**Was sie kann**
+
+- **Hintergrundwiedergabe**: Die Musik läuft bei gesperrtem Display weiter, mit
+  Play/Pause, Vor/Zurück und Positionssteuerung über Sperrbildschirm,
+  Kontrollzentrum und AirPods.
+- **Ordner-Import**: Einen Ordner auswählen (iCloud Drive, Nextcloud, „Auf
+  meinem iPhone“) — die App läuft rekursiv hindurch, erhält die
+  Unterordnerstruktur, überspringt Duplikate, zeigt Fortschritt und lässt sich
+  abbrechen.
+- **Finder-Dateifreigabe**: iPhone ans Kabel, Finder → Dateien, ganze Ordner per
+  Drag & Drop hineinziehen. Die Bibliothek erscheint außerdem in der
+  iOS-Dateien-App unter „Auf meinem iPhone“. Von außen hinzugefügte oder
+  gelöschte Dateien erkennt die App selbstständig.
+- **Bibliothek zurücksetzen**: alles wegwerfen und neu befüllen — Favoriten auf
+  Wunsch behalten.
+- Oszilloskop, Subtunes, Voice-Mute, Filter-Bypass, SID-Modellwahl, Songlängen,
+  Suche, Favoriten, Shuffle, Session-Restore, Theme und WAV-Export wie auf dem
+  Desktop.
+
+Oszilloskop und alle UI-Timer laufen nur, solange die App im Vordergrund ist. Im
+Hintergrund spielt das Audio weiter und die Visualisierung steht still — das ist
+hier der mit Abstand größte Batteriehebel.
+
+**Bauen**
+
+Voraussetzung sind Xcode 16 oder neuer (das Projekt nutzt `objectVersion 77` mit
+dateisystem-synchronisierten Gruppen, damit neue Swift-Dateien ohne Eingriff in
+die Projektdatei erfasst werden) und iOS 17 oder neuer auf dem Gerät.
+
+```bash
+# Simulator — ohne Signatur, ohne Developer-Account
+bash ios/scripts/build-simulator.sh
+bash ios/scripts/run-tests.sh
+
+# Echtes Gerät — braucht die eigene Apple-Developer-Team-ID
+cp ios/env.example ios/.env      # dann DEVELOPMENT_TEAM eintragen
+bash ios/scripts/apply-env.sh
+bash ios/scripts/build-device.sh
+```
+
+Die Team-ID wird nie eingecheckt: `ios/.env` und die daraus erzeugte
+`ios/Config/Local.xcconfig` sind beide gitignoriert.
+
+Hintergrundwiedergabe und Sperrbildschirm-Steuerung sind **im Simulator nicht
+belegbar** — er hat keinen echten Sperrbildschirm, keine AirPods und keine
+eingehenden Anrufe. Die Prüfliste für den Test auf echter Hardware steht in
+`ios/GERAETETEST.md`.
 
 ---
 
@@ -267,8 +329,14 @@ xcrun notarytool store-credentials <profil> --apple-id <apple-id> --team-id <tea
 
 ### Tests
 
+Zwei Suiten, und die eine ersetzt die andere nicht:
+
 ```bash
+# Plattformneutraler Kern: Parser, 6502/SID-Emulation, Songlängen, Bibliothekslogik
 swift test
+
+# iOS-Glue-Schicht im Simulator: App-Modell, Info.plist-Vertrag, Privacy-Manifest
+bash ios/scripts/run-tests.sh
 ```
 
 ---

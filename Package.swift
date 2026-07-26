@@ -116,7 +116,13 @@ targets.append(
 let package = Package(
     name: "ViciousSIDPlayer",
     platforms: [
-        .macOS(.v13)
+        .macOS(.v13),
+        // iOS-Minimum der iPhone-App (siehe ios/). Nur der Core wird fuer iOS
+        // gebaut; die Mac-Targets oben stehen zwar im Manifest (das `#if
+        // os(macOS)` gilt fuer den BAU-Rechner, nicht fuer die Zielplattform),
+        // werden von einem iOS-Build aber nie angefasst, weil Xcode nur die
+        // tatsaechlich verlinkten Produkte uebersetzt.
+        .iOS(.v17)
     ],
     products: products,
     targets: targets
