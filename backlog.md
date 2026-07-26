@@ -1,5 +1,12 @@
 # Aktiver Backlog
 
+0. iOS-App fürs iPhone: Plan und Goal-Prompt liegen in
+   [tasks/2026-07-26-ios-app/](tasks/2026-07-26-ios-app/plan.md). Entschieden sind
+   Sideload mit offener App-Store-Option, eingechecktes `.xcodeproj` mit
+   synchronized groups, Import über rekursiven Ordner-Picker plus
+   Finder-Dateifreigabe und iOS 17 als Minimum. Blockierender erster Schritt ist
+   der Nachweis, dass der Core für `iphonesimulator` baut. Erledigt nebenbei die
+   Punkte 2 und 3 dieser Liste für iOS.
 1. STIL-Integration aus einer vom Nutzer bereitgestellten HVSC-`STIL.txt`; Auto-Fund
    nach dem vorhandenen Songlength-Muster, kein Bundling der Datenbank.
 2. HVSC-Browser/Bibliotheksansicht für große Sammlungen statt ausschließlich flacher
