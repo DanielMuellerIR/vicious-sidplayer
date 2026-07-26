@@ -1,9 +1,20 @@
 // Signatur-Konfiguration der iOS-App.
 //
-// Die Team-ID ist eine persoenliche Kennung und wird bewusst NICHT eingecheckt.
-// Sie steht in `ios/.env` (gitignoriert); `ios/scripts/apply-env.sh` erzeugt
-// daraus `ios/Config/Local.xcconfig` (ebenfalls gitignoriert). Vorlage fuer die
-// `.env` ist `ios/.env.example`.
+// Die Team-ID kann hier ueber `ios/.env` eingespeist werden: davon erzeugt
+// `ios/scripts/apply-env.sh` die Datei `ios/Config/Local.xcconfig` (beide
+// gitignoriert, Vorlage ist `ios/.env.example`). Das ist der Weg fuer einen
+// fremden Mac oder ein zweites Apple-Team.
+//
+// Ein Geheimnis ist die Team-ID dabei nicht — sie steht in diesem Repo ohnehin
+// im Klartext in README.md, README.de.md, build_app.sh und build_dmg.sh, und
+// seit die Xcode-GUI sie zusaetzlich in die pbxproj geschrieben hat, auch dort.
+// Frueher stand an dieser Stelle, sie werde „bewusst NICHT eingecheckt"; das
+// war nie durchgehalten und ist jetzt richtiggestellt, damit niemand die Regel
+// glaubt und danach handelt.
+//
+// Achtung bei der Reihenfolge: Ein Wert in den `buildSettings` der pbxproj
+// gewinnt gegen den aus einer xcconfig. Wer hier per Local.xcconfig ein anderes
+// Team setzen will, muss ihn deshalb zuerst aus der pbxproj entfernen.
 //
 // Das Fragezeichen in `#include?` heisst: fehlt die Datei, ist das kein Fehler.
 // Genau so soll es sein — ohne Team-ID baut der Simulator weiterhin (dort wird
@@ -11,10 +22,11 @@
 #include? "Local.xcconfig"
 
 // Simulator-Builds brauchen keine Signatur. Auf echter Hardware zieht der
-// Wert aus Local.xcconfig bzw. der Kommandozeile.
+// Wert aus der pbxproj bzw. Local.xcconfig oder der Kommandozeile.
 CODE_SIGN_IDENTITY[sdk=iphonesimulator*] =
 CODE_SIGNING_REQUIRED[sdk=iphonesimulator*] = NO
 CODE_SIGNING_ALLOWED[sdk=iphonesimulator*] = NO
 
-// Auf dem Geraet signiert Xcode automatisch mit dem Team aus Local.xcconfig.
+// Auf dem Geraet signiert Xcode automatisch mit dem Team aus der pbxproj —
+// oder, falls dort keins gesetzt ist, aus Local.xcconfig.
 CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Development

@@ -23,7 +23,8 @@ if [ -z "${DEVELOPMENT_TEAM:-}" ]; then
 FEHLER: DEVELOPMENT_TEAM ist nicht gesetzt.
 
 Ein Build fuer echte Hardware muss signiert werden, dafuer braucht Xcode die
-Apple-Developer-Team-ID. Sie ist bewusst nicht eingecheckt.
+Apple-Developer-Team-ID. Dieses Skript liest sie aus ios/.env, damit auch ein
+fremder Mac oder ein zweites Apple-Team bauen kann.
 
     cp ios/env.example ios/.env
     $EDITOR ios/.env          # DEVELOPMENT_TEAM eintragen
@@ -36,8 +37,9 @@ EOF
     exit 2
 fi
 
-# Die Team-ID wird bewusst NICHT ausgegeben — sie soll nicht in Logs oder
-# CI-Ausgaben landen.
+# Die Team-ID wird nicht ausgegeben — knappe Logs, und der Wert aus einer
+# fremden `.env` gehoert niemandem sonst. Ein Geheimnis ist sie nicht: in
+# diesem Repo steht sie ohnehin im Klartext (README, build_app.sh, pbxproj).
 echo "Baue $SCHEME fuer iOS-Geraet (Team-ID aus ios/.env, wird nicht geloggt) ..."
 
 BUILD_ARGS=(
