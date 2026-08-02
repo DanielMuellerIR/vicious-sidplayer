@@ -166,6 +166,13 @@ public final class MusicLibrary: @unchecked Sendable {
     public let fileManager: FileManager
 
     private let lock = NSLock()
+    // Serialisiert komplette `refresh()`-Durchlaeufe (Scan + Zuweisung +
+    // Speichern) gegeneinander. Der feingranulare `lock` schuetzt nur den
+    // Indexzugriff; ohne diese zweite Sperre koennte ein frueher gestarteter,
+    // aber spaeter fertig werdender Scan (App-Reload und Importer rufen
+    // `refresh()` aus verschiedenen Hintergrund-Tasks) einen neueren Index
+    // samt frisch importierter Dateien wieder ueberschreiben.
+    private let refreshLock = NSLock()
     private var storedIndex: MusicLibraryIndex
 
     /// - Parameters:
@@ -325,6 +332,13 @@ public final class MusicLibrary: @unchecked Sendable {
     /// legt der Nutzer Dateien ab, ohne dass die App etwas davon mitbekommt.
     @discardableResult
     public func refresh() throws -> MusicLibraryChanges {
+        // Ein Refresh ist erst mit dem Speichern fertig — Scan, Zuweisung und
+        // `saveIndex()` laufen deshalb als EINE exklusive Operation. Sonst
+        // koennte ein langsamer alter Scan das Ergebnis eines neueren
+        // ueberschreiben (Details am `refreshLock` oben).
+        refreshLock.lock()
+        defer { refreshLock.unlock() }
+
         let scanned = try scan()
 
         lock.lock()

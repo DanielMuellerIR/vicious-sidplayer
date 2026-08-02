@@ -373,7 +373,180 @@ final class LibraryTests: XCTestCase {
         XCTAssertEqual(library.entries.map(\.relativePath), ["a.sid", "b.sid"])
     }
 
+    // MARK: - Nebenlaeufige Refreshes
+
+    // Regression: App-Reload und Importer rufen refresh() aus verschiedenen
+    // Hintergrund-Tasks. Ein FRUEHER gestarteter, aber SPAETER fertig werdender
+    // Durchlauf darf den Index eines dazwischen gelaufenen, neueren nicht
+    // ueberschreiben. Der `GatedFileManager` haelt Durchlauf A zwischen Scan und
+    // Speichern an, damit der Test dieses Fenster deterministisch trifft.
+    func testStaleRefreshCannotOverwriteNewerRefresh() async throws {
+        let gatedFM = GatedFileManager()
+        let gatedRoot = base.appendingPathComponent("GatedLibrary")
+        let gatedSupport = base.appendingPathComponent("GatedSupport")
+        let gatedLibrary = MusicLibrary(root: gatedRoot, supportDirectory: gatedSupport, fileManager: gatedFM)
+        try writeFixture("old.sid", in: gatedRoot)
+        // Erst jetzt scharf schalten — die Initialisierung oben legt selbst
+        // Verzeichnisse an und soll nicht schon haengen bleiben.
+        gatedFM.arm()
+
+        // Durchlauf A: liest den alten Stand und haelt vor dem Speichern an.
+        let first = Task.detached { try gatedLibrary.refresh() }
+        try await waitUntil("Durchlauf A hat den Haltepunkt nie erreicht.") { gatedFM.hasPaused }
+
+        // Waehrend A haengt, aendert sich die Welt: alte Datei weg, neue da.
+        try fm.removeItem(at: gatedRoot.appendingPathComponent("old.sid"))
+        try writeFixture("new.sid", in: gatedRoot)
+
+        // Durchlauf B startet jetzt. Ist refresh() serialisiert, wartet er am
+        // Anfang und kommt bis zum Speichern gar nicht durch; ohne
+        // Serialisierung liefe er sofort komplett durch.
+        let second = Task.detached { try gatedLibrary.refresh() }
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(gatedFM.arrivalsAfterGate, 0,
+                       "Durchlauf B hat mitten in Durchlauf A gespeichert.")
+
+        gatedFM.release()
+        _ = try await first.value
+        _ = try await second.value
+
+        // Der neuere Stand gewinnt — im Speicher UND auf Platte.
+        XCTAssertEqual(gatedLibrary.entries.map(\.relativePath), ["new.sid"])
+        let reopened = MusicLibrary(root: gatedRoot, supportDirectory: gatedSupport, fileManager: fm)
+        XCTAssertEqual(reopened.entries.map(\.relativePath), ["new.sid"],
+                       "Der gespeicherte Index traegt den veralteten Stand.")
+    }
+
+    // MARK: - Fehlerpfade des Imports
+
+    // Ein Unterordner, den der Enumerator nicht betreten kann, darf nicht
+    // stillschweigend fehlen — er muss als Fehler im Bericht stehen.
+    func testImportReportsUnreadableSubtreeInsteadOfSilentlySkippingIt() async throws {
+        try writeFixture("ok/one.sid", in: source)
+        try writeFixture("blocked/two.sid", in: source)
+
+        let blockedPath = source.appendingPathComponent("blocked").path
+        try fm.setAttributes([.posixPermissions: 0], ofItemAtPath: blockedPath)
+        addTeardownBlock {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: blockedPath)
+        }
+
+        let report = try await LibraryImporter(library: library).importFolder(at: source)
+
+        XCTAssertEqual(report.imported, ["ok/one.sid"], "Der lesbare Teil muss durchlaufen.")
+        XCTAssertEqual(report.failed.map(\.sourceRelativePath), ["blocked"])
+        XCTAssertEqual(report.failed.map(\.reason), [.unreadable])
+        XCTAssertFalse(report.wasCancelled)
+    }
+
+    // Fehlt die Bibliothekswurzel und laesst sie sich nicht anlegen, ist der
+    // dokumentierte Gesamtfehler faellig — nicht ein "Erfolg" voller copyFailed.
+    func testImportThrowsWhenLibraryRootCannotBeCreated() async throws {
+        let lockedParent = base.appendingPathComponent("LockedParent")
+        let lockedRoot = lockedParent.appendingPathComponent("Library")
+        let lockedSupport = base.appendingPathComponent("LockedSupport")
+        // Der Initializer legt beide Ordner an; danach Wurzel entfernen und den
+        // Elternordner schreibschuetzen, damit sie sich nicht neu anlegen laesst.
+        let lockedLibrary = MusicLibrary(root: lockedRoot, supportDirectory: lockedSupport, fileManager: fm)
+        try writeFixture("a.sid", in: source)
+        try fm.removeItem(at: lockedRoot)
+        try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: lockedParent.path)
+        addTeardownBlock {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: lockedParent.path)
+        }
+
+        do {
+            _ = try await LibraryImporter(library: lockedLibrary).importFolder(at: source)
+            XCTFail("Ohne erreichbare Wurzel muss der Import werfen.")
+        } catch let error as LibraryImportError {
+            guard case .destinationUnavailable = error else {
+                return XCTFail("Falscher Fehler: \(error)")
+            }
+        }
+    }
+
+    // Abbruch WAEHREND der Zaehlphase: die Enumeration grosser Quellbaeume muss
+    // den Task-Abbruch bemerken, statt erst nach vollstaendigem Durchlauf zu
+    // reagieren — und liefert dann den normalen abgebrochenen Bericht.
+    func testCancellationDuringEnumerationStopsBeforeCopying() async throws {
+        // Mehr als 256 Dateien, denn genau alle 256 Eintraege prueft die
+        // Enumeration den Abbruchzustand.
+        for index in 0..<300 {
+            try writeFixture(String(format: "bulk-%03d.sid", index), in: source, payload: [0x60, UInt8(index % 251)])
+        }
+
+        let cancelledRoot = base.appendingPathComponent("CancelledLibrary")
+        let cancelledSupport = base.appendingPathComponent("CancelledSupport")
+        let cancelledLibrary = MusicLibrary(root: cancelledRoot,
+                                            supportDirectory: cancelledSupport,
+                                            fileManager: fm)
+        let importer = LibraryImporter(library: cancelledLibrary)
+        let sourceFolder = source!
+
+        // Deterministisch: der Import startet erst, wenn der Task schon
+        // abgebrochen ist — die Enumeration laeuft dann auf einem
+        // gecancelten Task.
+        let task = Task { () -> LibraryImportReport in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000)
+            }
+            return try await importer.importFolder(at: sourceFolder)
+        }
+        task.cancel()
+        let report = try await task.value
+
+        XCTAssertTrue(report.wasCancelled)
+        XCTAssertTrue(report.imported.isEmpty)
+        // Beweis, dass schon die ZAEHLPHASE ausgestiegen ist: die Kopierphase
+        // gleicht zum Schluss immer den Index ab und schreibt ihn dabei auf
+        // Platte. Ohne die Abbruchpruefung in der Enumeration liefe sie an —
+        // die Indexdatei gaebe es dann.
+        XCTAssertFalse(fm.fileExists(atPath: cancelledLibrary.indexFileURL.path),
+                       "Der Import ist bis in die Kopierphase gelaufen, statt beim Zaehlen abzubrechen.")
+    }
+
     // MARK: - Reset
+
+    // Ein Berechtigungs-/Dateisystemfehler beim Auflisten der Wurzel darf NICHT
+    // wie eine leere Bibliothek aussehen: sonst meldet der Reset Erfolg,
+    // loescht Index und Cache, und die Musikdateien bleiben liegen.
+    func testResetThrowsWhenRootContentsCannotBeListed() throws {
+        try writeFixture("one.sid", in: root)
+        try library.refresh()
+        XCTAssertTrue(fm.fileExists(atPath: library.indexFileURL.path))
+
+        // Pfad vorher festhalten: der Teardown-Block laeuft, wenn `root` schon
+        // aufgeraeumt ist, und darf den Test nicht mehr festhalten.
+        let rootPath = root.path
+        try fm.setAttributes([.posixPermissions: 0], ofItemAtPath: rootPath)
+        addTeardownBlock {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: rootPath)
+        }
+
+        XCTAssertThrowsError(try LibraryReset.run(library: library))
+
+        // Fail-closed: nichts wurde halb weggeraeumt.
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path)
+        XCTAssertTrue(fm.fileExists(atPath: library.indexFileURL.path),
+                      "Der Index darf bei einem gescheiterten Reset nicht verschwinden.")
+        XCTAssertFalse(library.isEmpty,
+                       "Der In-Memory-Index darf bei einem gescheiterten Reset nicht geleert werden.")
+        XCTAssertTrue(fm.fileExists(atPath: root.appendingPathComponent("one.sid").path))
+    }
+
+    // Eine FEHLENDE Wurzel ist dagegen kein Fehler: nichts zu loeschen,
+    // Wurzel wird wieder angelegt (Idempotenz).
+    func testResetTreatsMissingRootAsEmpty() throws {
+        try fm.removeItem(at: root)
+
+        let report = try LibraryReset.run(library: library)
+
+        XCTAssertEqual(report.removedFiles, 0)
+        XCTAssertEqual(report.removedTopLevelItems, 0)
+        var isDirectory: ObjCBool = false
+        XCTAssertTrue(fm.fileExists(atPath: root.path, isDirectory: &isDirectory))
+        XCTAssertTrue(isDirectory.boolValue, "Die Wurzel muss nach dem Reset wieder existieren.")
+    }
 
     func testResetIsIdempotentAndAllowsReimport() async throws {
         try writeFixture("Composer/one.sid", in: source)
@@ -453,6 +626,82 @@ final class LibraryTests: XCTestCase {
     }
 
     // MARK: - Kleine Helfer
+
+    /// Wartet, bis `condition` zutrifft (hoechstens `timeout` Sekunden), ohne
+    /// den Testthread zu blockieren. Schlaegt sonst mit `message` fehl.
+    private func waitUntil(_ message: String,
+                           timeout: TimeInterval = 10,
+                           file: StaticString = #filePath,
+                           line: UInt = #line,
+                           condition: () -> Bool) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() { return }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTFail(message, file: file, line: line)
+    }
+
+    /// FileManager, der den ersten Speichervorgang nach `arm()` anhaelt.
+    ///
+    /// Haltepunkt ist `createDirectory`, weil `MusicLibrary.refresh()` genau
+    /// dort zwischen Scan und Schreiben vorbeikommt: `saveIndex()` legt zuerst
+    /// Wurzel und Support-Ordner an und schreibt danach die Indexdatei. Der
+    /// Verzeichnis-Enumerator waere der naheliegendere Ort, laesst sich aber
+    /// nicht abfangen — `FileManager.enumerator(at:…)` ist in einer
+    /// Swift-Erweiterung deklariert und deshalb nicht ueberschreibbar.
+    private final class GatedFileManager: FileManager, @unchecked Sendable {
+        private let stateLock = NSLock()
+        private let proceed = DispatchSemaphore(value: 0)
+        private var isArmed = false
+        private var didGate = false
+        private var paused = false
+        private var otherArrivals = 0
+
+        /// Steht ein Aufrufer am Haltepunkt?
+        var hasPaused: Bool {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            return paused
+        }
+
+        /// Wie viele NICHT angehaltene Aufrufer kamen seit `arm()` vorbei?
+        var arrivalsAfterGate: Int {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            return otherArrivals
+        }
+
+        /// Scharf schalten. Erst nach dem Anlegen der Bibliothek aufrufen.
+        func arm() {
+            stateLock.lock()
+            isArmed = true
+            stateLock.unlock()
+        }
+
+        /// Aus dem Test heraus: den angehaltenen Aufrufer weiterlaufen lassen.
+        func release() { proceed.signal() }
+
+        override func createDirectory(at url: URL,
+                                      withIntermediateDirectories createIntermediates: Bool,
+                                      attributes: [FileAttributeKey: Any]? = nil) throws {
+            stateLock.lock()
+            let armed = isArmed
+            let shouldGate = armed && !didGate
+            if shouldGate {
+                didGate = true
+                paused = true
+            } else if armed {
+                otherArrivals += 1
+            }
+            stateLock.unlock()
+
+            if shouldGate { proceed.wait() }
+            try super.createDirectory(at: url,
+                                      withIntermediateDirectories: createIntermediates,
+                                      attributes: attributes)
+        }
+    }
 
     /// Handshake fuer den Abbruchtest: der Fortschritts-Callback (synchron, im
     /// Hintergrund-Task) haelt hier an, der Test merkt das und laesst ihn nach

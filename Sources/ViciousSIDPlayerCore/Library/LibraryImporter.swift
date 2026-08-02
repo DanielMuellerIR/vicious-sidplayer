@@ -166,8 +166,17 @@ public struct LibraryImporter: Sendable {
         let scoped = beginSecurityScope(sourceFolder)
         defer { endSecurityScope(sourceFolder, scoped) }
 
-        let jobs = try collectJobs(in: sourceFolder)
-        return await run(jobs: jobs, progress: progress)
+        // Ein Abbruch schon waehrend des Zaehlens ist kein Fehler, sondern der
+        // normale abgebrochene Bericht — genau wie ein Abbruch beim Kopieren.
+        let collected: (jobs: [Job], failures: [LibraryImportFailure])
+        do {
+            collected = try collectJobs(in: sourceFolder)
+        } catch is CancellationError {
+            return LibraryImportReport(wasCancelled: true)
+        }
+        return try await run(jobs: collected.jobs,
+                             traversalFailures: collected.failures,
+                             progress: progress)
     }
 
     /// Importiert einzelne Dateien (Mehrfachauswahl, "Oeffnen mit", AirDrop).
@@ -179,26 +188,57 @@ public struct LibraryImporter: Sendable {
         let jobs = urls
             .filter { SidFileType.matches($0) }
             .map { Job(source: $0, relativePath: $0.lastPathComponent) }
-        return await run(jobs: jobs, progress: progress)
+        return try await run(jobs: jobs, traversalFailures: [], progress: progress)
     }
 
     // MARK: - Ablauf
 
     /// Sammelt alle SID-Dateien unterhalb des Quellordners.
     /// Sortiert, damit ein Import reproduzierbar in derselben Reihenfolge laeuft.
-    private func collectJobs(in folder: URL) throws -> [Job] {
+    ///
+    /// Neben den Auftraegen kommen auch die Traversierungsfehler zurueck: ein
+    /// Unterordner, den der Enumerator nicht betreten kann (Rechte, Provider
+    /// kurz weg), darf nicht stillschweigend aus der Jobliste fehlen — sonst
+    /// saehe ein Import erfolgreich aus, dem ein ganzer Teilbaum fehlt.
+    ///
+    /// - Throws: `CancellationError` bei Task-Abbruch waehrend des Zaehlens
+    ///   (grosse File-Provider-Baeume koennen hier lange haengen), sonst
+    ///   `LibraryImportError.sourceUnreadable`, wenn gar nichts geht.
+    private func collectJobs(in folder: URL) throws -> (jobs: [Job], failures: [LibraryImportFailure]) {
         let fm = library.fileManager
+        let rootComponents = LibraryPath.normalizedComponents(folder)
+
+        // Fehler beim Betreten eines Unterordners landen hier statt im Nichts.
+        // Das Closure wird vom Enumerator synchron waehrend der Schleife unten
+        // gerufen; `true` heisst "weitermachen" — ein gesperrter Ast bricht
+        // nicht den ganzen Import ab (Grundsatz 1 oben).
+        var failures: [LibraryImportFailure] = []
         guard let enumerator = fm.enumerator(
             at: folder,
             includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
+            options: [.skipsHiddenFiles],
+            errorHandler: { url, error in
+                let relative = LibraryPath.relativePath(of: url, underRootComponents: rootComponents)
+                failures.append(LibraryImportFailure(
+                    sourceRelativePath: relative ?? url.lastPathComponent,
+                    reason: .unreadable,
+                    message: error.localizedDescription))
+                return true
+            }
         ) else {
             throw LibraryImportError.sourceUnreadable(folder.lastPathComponent)
         }
 
-        let rootComponents = LibraryPath.normalizedComponents(folder)
         var jobs: [Job] = []
+        var seen = 0
         for case let url as URL in enumerator {
+            seen += 1
+            // Wie beim Bibliotheks-Scan: nicht bei jeder Datei den Task-Status
+            // abfragen — alle 256 Eintraege reicht und kostet nichts. Ohne die
+            // Pruefung reagierte "Abbrechen" waehrend der Zaehlphase erst nach
+            // der kompletten Enumeration.
+            if seen.isMultiple(of: 256) { try Task.checkCancellation() }
+
             guard SidFileType.matches(url) else { continue }
             // Ordner, die zufaellig auf ".sid" enden, sind keine Dateien.
             if (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == false { continue }
@@ -208,18 +248,37 @@ public struct LibraryImporter: Sendable {
             jobs.append(Job(source: url, relativePath: relative))
         }
         jobs.sort { $0.relativePath < $1.relativePath }
-        return jobs
+        return (jobs, failures)
     }
 
-    private func run(jobs: [Job], progress: ProgressHandler?) async -> LibraryImportReport {
+    /// - Throws: nur `LibraryImportError.destinationUnavailable`, wenn die
+    ///   Bibliothekswurzel fehlt und sich nicht anlegen laesst. Ein Task-Abbruch
+    ///   wirft nicht, sondern liefert den Bericht mit `wasCancelled == true`.
+    private func run(jobs: [Job],
+                     traversalFailures: [LibraryImportFailure],
+                     progress: ProgressHandler?) async throws -> LibraryImportReport {
         let fm = library.fileManager
         // Die Wurzel kann zwischen zwei Importen verschwunden sein (Reset,
         // Nutzer hat sie im Finder geloescht) — deshalb hier noch einmal anlegen.
-        try? fm.createDirectory(at: library.root, withIntermediateDirectories: true)
+        // Schlaegt das fehl UND die Wurzel fehlt wirklich, kann kein einziger
+        // Auftrag gelingen: dann ist der dokumentierte Gesamtfehler faellig,
+        // statt jede Datei einzeln mit "copyFailed" scheitern zu lassen.
+        do {
+            try fm.createDirectory(at: library.root, withIntermediateDirectories: true)
+        } catch {
+            var isDirectory: ObjCBool = false
+            let rootExists = fm.fileExists(atPath: library.root.path, isDirectory: &isDirectory)
+                && isDirectory.boolValue
+            if !rootExists {
+                throw LibraryImportError.destinationUnavailable(error.localizedDescription)
+            }
+        }
 
         var imported: [String] = []
         var skipped: [LibraryImportSkip] = []
-        var failed: [LibraryImportFailure] = []
+        // Die beim Zaehlen eingesammelten Traversierungsfehler stehen mit im
+        // Bericht — der Nutzer sieht so, dass (und wo) ein Teilbaum fehlt.
+        var failed: [LibraryImportFailure] = traversalFailures
         var cancelled = false
 
         for (index, job) in jobs.enumerated() {
@@ -234,7 +293,17 @@ public struct LibraryImporter: Sendable {
                                             total: jobs.count,
                                             currentFileName: job.fileName))
 
-            switch await process(job) {
+            let outcome: Outcome
+            do {
+                outcome = try await process(job)
+            } catch {
+                // `process` wirft ausschliesslich `CancellationError` weiter:
+                // ein mitten im Materialisieren abgebrochener Auftrag ist kein
+                // Dateifehler, sondern derselbe Abbruch wie oben.
+                cancelled = true
+                break
+            }
+            switch outcome {
             case .imported(let destination):
                 imported.append(destination)
             case .skipped(let reason):
@@ -272,7 +341,9 @@ public struct LibraryImporter: Sendable {
         case failed(LibraryImportFailure.Reason, String)
     }
 
-    private func process(_ job: Job) async -> Outcome {
+    /// - Throws: nur `CancellationError` — jeder andere Fehler wird zum
+    ///   per-Datei-Ergebnis `.failed` (Grundsatz 1: Fehler pro Datei).
+    private func process(_ job: Job) async throws -> Outcome {
         let fm = library.fileManager
 
         // Einzeln gewaehlte Dateien bringen ihren eigenen Sicherheits-Scope mit.
@@ -285,6 +356,11 @@ public struct LibraryImporter: Sendable {
         let data: Data
         do {
             data = try await materializedData(at: job.source)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch is PlaceholderNotMaterializedError {
+            return .failed(.notMaterialized,
+                           "Der File Provider hat die Datei nicht innerhalb der Wartezeit bereitgestellt.")
         } catch let error as LibraryImportError {
             return .failed(.notMaterialized, String(describing: error))
         } catch {
@@ -381,6 +457,12 @@ public struct LibraryImporter: Sendable {
     ///
     /// Auf normalen lokalen Dateien (macOS-Tests, "Auf meinem iPhone") faellt
     /// der ganze Block einfach durch: `isUbiquitousItem` ist dort `false`.
+    ///
+    /// - Throws: `CancellationError` bei Task-Abbruch waehrend des Wartens,
+    ///   `PlaceholderNotMaterializedError` nach Ablauf der Wartezeit. In beiden
+    ///   Faellen wird bewusst NICHT mehr gelesen: der synchrone
+    ///   `coordinatedRead` koennte an einem Provider ohne Inhalt haengen oder
+    ///   eine leere Platzhalterdatei liefern.
     private func materializedData(at url: URL) async throws -> Data {
         #if canImport(Darwin)
         let keys: Set<URLResourceKey> = [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey]
@@ -388,28 +470,41 @@ public struct LibraryImporter: Sendable {
            values.isUbiquitousItem == true,
            values.ubiquitousItemDownloadingStatus != .current {
             try? library.fileManager.startDownloadingUbiquitousItem(at: url)
-            await waitForDownload(url)
+            guard try await waitForDownload(url) else {
+                throw PlaceholderNotMaterializedError()
+            }
         }
         #endif
         return try coordinatedRead(url)
     }
 
+    /// Der File Provider hat einen Platzhalter nicht rechtzeitig
+    /// heruntergeladen. Interner Marker; `process` uebersetzt ihn in das
+    /// per-Datei-Ergebnis `.failed(.notMaterialized, …)`.
+    private struct PlaceholderNotMaterializedError: Error {}
+
     #if canImport(Darwin)
     /// Wartet, bis der File Provider die Datei lokal bereitgestellt hat.
-    /// Bricht nach `timeout` Sekunden ab — dann scheitert der Lesevorgang
-    /// gleich darauf und die Datei landet mit klarer Begruendung im Bericht.
-    private func waitForDownload(_ url: URL, timeout: TimeInterval = 15) async {
+    ///
+    /// - Returns: `true`, sobald der Downloadstatus `.current` meldet;
+    ///   `false` nach Ablauf von `timeout` Sekunden. Die drei Ausgaenge
+    ///   (bereit / Timeout / Abbruch) sind bewusst unterscheidbar — frueher
+    ///   kehrte die Funktion in allen drei Faellen gleich zurueck, und der
+    ///   anschliessende Lesevorgang lief auch gegen nie gelieferte Inhalte.
+    /// - Throws: `CancellationError` bei Task-Abbruch.
+    private func waitForDownload(_ url: URL, timeout: TimeInterval = 15) async throws -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            if Task.isCancelled { return }
+            try Task.checkCancellation()
             if let values = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey]),
                values.ubiquitousItemDownloadingStatus == .current {
-                return
+                return true
             }
             // 100 ms Pause: haeufig genug fuer fluessige Fortschrittsanzeige,
             // selten genug, um nicht sinnlos CPU zu verbrennen.
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
+        return false
     }
     #endif
 

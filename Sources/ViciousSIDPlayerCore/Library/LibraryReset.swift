@@ -72,7 +72,9 @@ public enum LibraryReset {
     ///                              clearFavorites: wipeFavorites ? { store.removeAllFavorites() } : nil)
     ///
     /// - Throws: `ResetError.outsideRoot`, wenn die Pfadpruefung anschlaegt, oder
-    ///   den Dateisystemfehler, wenn etwas Vorhandenes sich nicht loeschen laesst.
+    ///   den Dateisystemfehler, wenn etwas Vorhandenes sich nicht loeschen oder
+    ///   der Wurzelinhalt sich nicht auflisten laesst. Eine FEHLENDE Wurzel ist
+    ///   dagegen kein Fehler — sie zaehlt als leer (Idempotenz).
     @discardableResult
     public static func run(library: MusicLibrary,
                            clearFavorites: (() -> Void)? = nil) throws -> Report {
@@ -81,11 +83,24 @@ public enum LibraryReset {
 
         // 1. Inhalt der Wurzel loeschen — die Wurzel selbst NICHT (siehe oben).
         //    Ohne `.skipsHiddenFiles`, damit auch `.DS_Store` und Konsorten gehen.
+        //
+        //    Als "leer" gilt AUSSCHLIESSLICH eine nachweislich fehlende Wurzel
+        //    (die legt Schritt 2 gleich wieder an — Idempotenz). Jeder andere
+        //    Fehler (Rechte, Dateisystem) fliegt weiter: wuerde er verschluckt,
+        //    meldete der Reset Erfolg, loeschte Index und Cache — und die
+        //    liegengebliebenen Musikdateien tauchten beim naechsten Abgleich
+        //    kommentarlos wieder auf.
         var removedFiles = 0
         var removedTopLevelItems = 0
-        let contents = (try? fm.contentsOfDirectory(at: root,
-                                                    includingPropertiesForKeys: [.isRegularFileKey],
-                                                    options: [])) ?? []
+        let contents: [URL]
+        do {
+            contents = try fm.contentsOfDirectory(at: root,
+                                                  includingPropertiesForKeys: [.isRegularFileKey],
+                                                  options: [])
+        } catch let error as NSError
+            where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError {
+            contents = []
+        }
         for item in contents {
             removedFiles += countFiles(under: item, fm: fm)
             try remove(item, under: root, fm: fm)

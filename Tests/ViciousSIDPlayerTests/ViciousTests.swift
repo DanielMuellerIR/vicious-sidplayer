@@ -394,6 +394,30 @@ final class ViciousTests: XCTestCase {
         XCTAssertEqual(reloaded.length(md5: "abc", subtune: 0), 123.5)
     }
 
+    // "Bibliothek zuruecksetzen" leert auch die lebende Cache-Instanz: nur die
+    // Datei zu loeschen reicht nicht, weil ein spaeterer store() sonst das
+    // komplette alte Dictionary wieder auf Platte schriebe.
+    func testSongLengthCacheClearEmptiesMemoryAndDisk() {
+        let fm = FileManager.default
+        let file = fm.temporaryDirectory.appendingPathComponent("vicious-cache-\(UUID().uuidString).json")
+        defer { try? fm.removeItem(at: file) }
+
+        let cache = SongLengthCache(fileURL: file)
+        cache.store(md5: "old", subtune: 0, seconds: 111)
+        XCTAssertTrue(fm.fileExists(atPath: file.path))
+
+        cache.clear()
+        XCTAssertNil(cache.length(md5: "old", subtune: 0))
+        XCTAssertFalse(fm.fileExists(atPath: file.path))
+
+        // Der naechste store() darf NUR den neuen Eintrag hinschreiben.
+        cache.store(md5: "new", subtune: 0, seconds: 222)
+        let reloaded = SongLengthCache(fileURL: file)
+        XCTAssertNil(reloaded.length(md5: "old", subtune: 0),
+                     "Alte Eintraege duerfen nach clear() nicht wieder auftauchen.")
+        XCTAssertEqual(reloaded.length(md5: "new", subtune: 0), 222)
+    }
+
     // Songlaengen-Berechnung: ein synthetischer Tune, der nach ~0,5 s die
     // Master-Lautstaerke auf 0 setzt (endet in Stille), muss eine Laenge um
     // 1 s liefern; ein komplett stiller Tune liefert nil (kein Ende erkennbar).

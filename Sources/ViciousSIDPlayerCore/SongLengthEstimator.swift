@@ -139,4 +139,18 @@ public final class SongLengthCache: @unchecked Sendable {
             try? data.write(to: fileURL, options: .atomic)
         }
     }
+
+    /// Leert den Cache vollstaendig — im Speicher UND auf Platte.
+    ///
+    /// Gehoert zu "Bibliothek zuruecksetzen": `LibraryReset` loescht zwar die
+    /// Cache-DATEI, aber die langlebige Instanz in der App behaelt ihr
+    /// Dictionary. Ohne diesen Aufruf schriebe der naechste `store` alle alten
+    /// Eintraege wieder auf Platte — der frisch importierte Bestand bekaeme
+    /// Laengen von Dateien, die es laengst nicht mehr gibt.
+    public func clear() {
+        lock.lock()
+        defer { lock.unlock() }
+        entries = [:]
+        try? FileManager.default.removeItem(at: fileURL)
+    }
 }
