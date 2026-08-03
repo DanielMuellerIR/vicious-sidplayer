@@ -167,8 +167,13 @@ bash ios/scripts/apply-env.sh
 bash ios/scripts/build-device.sh
 ```
 
-The team ID is never committed: `ios/.env` and the generated
-`ios/Config/Local.xcconfig` are both git-ignored.
+`ios/.env` and the generated `ios/Config/Local.xcconfig` are both git-ignored,
+but they are not the only source: the project file carries a committed
+`DEVELOPMENT_TEAM` and bundle ID so that a device build also works straight from
+the Xcode GUI. `build-device.sh` passes the values from `ios/.env` to
+`xcodebuild`, which overrides the project file; in the Xcode GUI you have to
+change them in the project file itself. Details are in
+`ios/Config/Signing.xcconfig`.
 
 Background playback and lock-screen control **cannot be verified in the
 simulator** — it has no real lock screen, no AirPods and no incoming calls. The

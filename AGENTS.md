@@ -77,7 +77,11 @@ Releaseartefakte bleiben unversioniert.
   `TabView`. An der TabView verdeckt sie die Tab-Leiste vollständig und die App
   ist ab dem ersten Titel nicht mehr umschaltbar.
 - Keine privaten APIs, Privacy-Manifest gepflegt: der Weg in den App Store bleibt
-  offen. Die Team-ID kommt ausschließlich aus dem gitignorierten `ios/.env`.
+  offen. Team-ID und Bundle-ID stehen bewusst eingecheckt in den Target-Settings
+  der pbxproj, damit der Geräte-Build direkt aus Xcode läuft. Der gitignorierte
+  `ios/.env`-Weg überschreibt sie nur beim Skript-Build, weil `build-device.sh`
+  sie an `xcodebuild` durchreicht — in der Xcode-GUI gewinnt die pbxproj.
+  Reihenfolge und Folgen für fremde Clones stehen in `ios/Config/Signing.xcconfig`.
 
 ## Quick Look, Signatur und Release
 

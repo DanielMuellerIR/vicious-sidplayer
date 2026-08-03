@@ -29,8 +29,10 @@ sidplayer.html
 /audio/
 
 # iOS-App (ios/): Buildartefakte, Xcode-Nutzerzustand und die lokale Team-ID.
-# Die Team-ID ist eine persoenliche Kennung und wird nie eingecheckt; Vorlage
-# ist ios/env.example, erzeugt wird daraus ios/Config/Local.xcconfig.
+# Vorlage ist ios/env.example, erzeugt wird daraus ios/Config/Local.xcconfig.
+# Achtung: das haelt nur diese beiden Dateien draussen — die Team-ID selbst steht
+# eingecheckt in der pbxproj und in den Build-Skripten (siehe
+# ios/Config/Signing.xcconfig).
 ios/build/
 ios/.env
 ios/Config/Local.xcconfig

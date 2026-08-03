@@ -169,8 +169,13 @@ bash ios/scripts/apply-env.sh
 bash ios/scripts/build-device.sh
 ```
 
-Die Team-ID wird nie eingecheckt: `ios/.env` und die daraus erzeugte
-`ios/Config/Local.xcconfig` sind beide gitignoriert.
+`ios/.env` und die daraus erzeugte `ios/Config/Local.xcconfig` sind beide
+gitignoriert, aber nicht die einzige Quelle: in der Projektdatei stehen
+`DEVELOPMENT_TEAM` und Bundle-ID eingecheckt, damit ein Geräte-Build auch direkt
+aus der Xcode-GUI läuft. `build-device.sh` reicht die Werte aus `ios/.env` an
+`xcodebuild` weiter und überschreibt die Projektdatei damit; in der Xcode-GUI muss
+man sie in der Projektdatei selbst ändern. Details stehen in
+`ios/Config/Signing.xcconfig`.
 
 Hintergrundwiedergabe und Sperrbildschirm-Steuerung sind **im Simulator nicht
 belegbar** — er hat keinen echten Sperrbildschirm, keine AirPods und keine
