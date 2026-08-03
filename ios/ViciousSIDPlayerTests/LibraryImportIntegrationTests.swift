@@ -266,6 +266,60 @@ final class LibraryImportIntegrationTests: XCTestCase {
         XCTAssertEqual(model.tracks.count, 3, "Nach dem Zuruecksetzen muss ein erneuter Import funktionieren.")
     }
 
+    // Regression: „Zuruecksetzen" ist eine EXKLUSIVE Bibliotheksoperation.
+    // Solange es laeuft, darf kein Import starten — er kopierte sonst in einen
+    // Ordner, den der Reset gerade leert, und waere sofort wieder weg.
+    //
+    // Der Test bleibt bewusst ohne `await` zwischen Reset-Start und
+    // Importversuch: `resetLibrary` setzt `resetTask` synchron, und ohne
+    // Unterbrechung bleibt der MainActor bis zur Pruefung in unserer Hand. So
+    // trifft der Importversuch garantiert das offene Reset-Fenster.
+    func testImportIsRefusedWhileResetIsRunning() async throws {
+        try write("A/one.sid", payload: [0x60, 0x61])
+        await importSource()
+        XCTAssertEqual(model.tracks.count, 1)
+
+        model.resetLibrary(keepFavorites: true)
+        XCTAssertNotNil(model.services.resetTask, "Das Zuruecksetzen laeuft noch nicht.")
+
+        model.importFolder(at: source)
+        XCTAssertNil(model.importTask, "Waehrend des Zuruecksetzens darf kein Import starten.")
+        XCTAssertNil(model.importProgress)
+        XCTAssertNotNil(model.errorMessage, "Der abgelehnte Import muss gemeldet werden.")
+
+        await waitForReset()
+        await waitForLibrary()
+        XCTAssertTrue(model.tracks.isEmpty, "Der Reset muss trotzdem sauber durchlaufen.")
+    }
+
+    // Regression: der Reset wartet das Ende eines laufenden Imports ab, statt
+    // ihm nur `cancel()` zuzurufen. Sonst schriebe der noch laufende
+    // Kopierauftrag nach dem Loeschen eine Datei zurueck — die Bibliothek waere
+    // nach dem Zuruecksetzen nicht leer.
+    func testResetWaitsForTheRunningImportAndLeavesNothingBehind() async throws {
+        for index in 0..<200 {
+            try write("Bulk/\(String(format: "%03d", index)).sid",
+                      payload: [0x60, UInt8(index % 251), UInt8(index / 251)])
+        }
+
+        model.importFolder(at: source)
+        // Kurz laufen lassen, damit der Reset wirklich mitten hineinfaellt.
+        try? await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertNotNil(model.importTask, "Der Import laeuft schon nicht mehr.")
+
+        model.resetLibrary(keepFavorites: true)
+        await waitForReset()
+
+        XCTAssertNil(model.importTask,
+                     "Der Reset war fertig, obwohl der Import noch lief — er hat nicht abgewartet.")
+        let root = try XCTUnwrap(model.libraryRoot)
+        let leftovers = (try? fm.contentsOfDirectory(atPath: root.path)) ?? []
+        XCTAssertTrue(leftovers.isEmpty, "Nach dem Zuruecksetzen liegt noch etwas in der Wurzel: \(leftovers)")
+
+        await waitForLibrary()
+        XCTAssertTrue(model.tracks.isEmpty)
+    }
+
     func testResetKeepsFavoritesWhenAsked() async throws {
         try write("A/one.sid", payload: [0x60, 0x41])
         await importSource()

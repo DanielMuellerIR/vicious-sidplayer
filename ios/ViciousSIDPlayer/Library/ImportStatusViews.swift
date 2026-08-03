@@ -86,7 +86,12 @@ struct ImportReportBanner: View {
                 DisclosureGroup(isExpanded: $showsFailures) {
                     VStack(alignment: .leading, spacing: 2) {
                         // Dateinamen kommen aus dem Import und bleiben unuebersetzt.
-                        ForEach(report.failed, id: \.self) { name in
+                        // Identifiziert wird ueber den Index, NICHT ueber den
+                        // String selbst: zusammengefuehrte Mehrfachimporte
+                        // koennen fuer denselben Dateinamen denselben Fehlertext
+                        // doppelt liefern, und doppelte IDs lassen SwiftUI
+                        // Zeilen auslassen oder falsch wiederverwenden.
+                        ForEach(Array(report.failed.enumerated()), id: \.offset) { _, name in
                             Text(name)
                                 .font(.caption2)
                                 .lineLimit(1)

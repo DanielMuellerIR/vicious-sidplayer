@@ -20,6 +20,15 @@ struct ViciousSIDPlayerApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(model)
+                // „Oeffnen mit", AirDrop und die Dateien-App liefern die Datei
+                // als URL hier ab — die Info.plist registriert den SID-Typ ja
+                // genau dafuer. Ohne diesen Handler wuerde die App zwar
+                // gestartet, die Datei aber kommentarlos ignoriert. Der Import
+                // haengt nicht an `start()`: auch beim Kaltstart ueber eine
+                // Datei ist die Bibliothek hier schon erreichbar.
+                .onOpenURL { url in
+                    model.handleIncomingFile(at: url)
+                }
         }
         .onChange(of: scenePhase) { _, newPhase in
             model.scenePhaseChanged(to: newPhase)

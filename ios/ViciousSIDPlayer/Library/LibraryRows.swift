@@ -122,7 +122,11 @@ struct FolderRowView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text("Ordner \(row.name)"))
-        .accessibilityValue(Text("\(row.trackCount) Titel"))
+        // Der Auf-/Zu-Zustand gehoert in den Wert: VoiceOver-Nutzer muessen vor
+        // dem Aktivieren wissen, ob der Ordner sich oeffnet oder schliesst.
+        .accessibilityValue(Text(row.isExpanded
+                                 ? "aufgeklappt, \(row.trackCount) Titel"
+                                 : "zugeklappt, \(row.trackCount) Titel"))
     }
 }
 

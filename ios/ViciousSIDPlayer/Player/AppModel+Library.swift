@@ -59,6 +59,11 @@ extension AppModel {
             errorMessage = "Der Musikordner der App ist nicht erreichbar."
             return
         }
+        // Waehrend "Bibliothek zuruecksetzen" laeuft, keinen Abgleich starten:
+        // der Scan liefe mitten durch das Loeschen und schriebe einen Index
+        // aus halb geloeschten Dateien zurueck. Der Reset ruft nach seinem
+        // Abschluss selbst `reloadLibrary` — dann ist `resetTask` schon `nil`.
+        guard services.resetTask == nil else { return }
         // Laeuft schon ein Abgleich, nicht noch einen danebenstellen. Das kommt
         // in der Praxis vor: App startet und wechselt sofort in den Vordergrund.
         guard services.libraryReloadTask == nil else { return }
@@ -74,8 +79,11 @@ extension AppModel {
             }.value
 
             services.libraryReloadTask = nil
+            // Hat ein zwischenzeitlich gestarteter Reset diesen Abgleich
+            // abgebrochen, ist das Ergebnis veraltet: die Ansicht ist bereits
+            // geleert und darf nicht mit dem alten Stand wiederbefuellt werden.
+            guard !Task.isCancelled else { return }
             applyLibrary(tracks: snapshot.tracks, folderTree: snapshot.folderTree)
-            services.didLoadLibraryOnce = true
 
             if restoreSession {
                 restoreSessionIfPossible()
@@ -91,14 +99,51 @@ extension AppModel {
     /// Core geoeffnet und geschlossen (`LibraryImporter.importFolder`), damit er
     /// genau so lange offen ist wie das Kopieren dauert. Hier nichts doppelt tun:
     /// die Zaehler des Systems muessen paarweise aufgehen.
-    func importFolder(at url: URL) {
+    /// - Returns: `false`, wenn der Auftrag gar nicht angenommen wurde (keine
+    ///   Bibliothek, oder ein Zuruecksetzen laeuft). Die Oberflaeche ignoriert
+    ///   das Ergebnis; `handleIncomingFile` braucht es.
+    @discardableResult
+    func importFolder(at url: URL) -> Bool {
         startImport(.folder(url))
     }
 
     /// Mehrfach-Dateiauswahl, „Oeffnen mit" und AirDrop. Diese Dateien landen
     /// flach in der Wurzel — es gibt keine Ordnerstruktur, die zu erhalten waere.
-    func importFiles(at urls: [URL]) {
+    @discardableResult
+    func importFiles(at urls: [URL]) -> Bool {
         startImport(.files(urls))
+    }
+
+    /// Eine von aussen an die App uebergebene Datei („Oeffnen mit", AirDrop,
+    /// Dateien-App). Kommt ueber `.onOpenURL` am App-Einstieg herein.
+    ///
+    /// Zwei Herkuenfte, ein Weg:
+    ///  - „Open in place" (Info.plist erlaubt es): die URL zeigt auf das
+    ///    Original beim Absender; der Importer oeffnet den Sicherheits-Scope
+    ///    und KOPIERT — das Original bleibt unangetastet.
+    ///  - System-Inbox: manche Uebergaben (z.B. AirDrop) legt iOS vorher als
+    ///    Kopie in `Documents/Inbox/` ab. Weil `Documents/` zugleich die
+    ///    Bibliothekswurzel ist, wuerde diese Kopie beim naechsten Abgleich
+    ///    als eigener „Inbox/…"-Titel doppelt auftauchen. Solche Quellen
+    ///    werden deshalb nach erfolgreichem Import aufgeraeumt
+    ///    (`cleanupImportedInboxFiles`).
+    func handleIncomingFile(at url: URL) {
+        guard SidFileType.matches(url) else {
+            // Sollte nicht vorkommen — die App registriert nur den SID-Typ.
+            // Trotzdem sauber melden statt still zu schlucken.
+            errorMessage = "\(url.lastPathComponent) ist keine SID-Datei."
+            return
+        }
+        let isInboxCopy = services.library.map {
+            LibraryReset.isContained(url, in: $0.root.appendingPathComponent("Inbox", isDirectory: true))
+        } ?? false
+
+        // Zum Aufraeumen erst vormerken, wenn der Import wirklich angenommen
+        // ist. Sonst bliebe die Vormerkung nach einem abgelehnten Auftrag
+        // liegen und ein spaeterer, ganz anderer Import loeschte die Datei,
+        // ohne sie je importiert zu haben.
+        guard importFiles(at: [url]) else { return }
+        if isInboxCopy { services.pendingInboxCleanup.append(url) }
     }
 
     /// Bricht einen laufenden Import ab. Was bis dahin kopiert wurde, bleibt
@@ -111,10 +156,20 @@ extension AppModel {
         importTask?.cancel()
     }
 
-    private func startImport(_ job: PendingImportJob) {
+    /// - Returns: `true`, wenn der Auftrag laeuft oder in der Warteschlange
+    ///   steht; `false`, wenn er abgelehnt wurde.
+    @discardableResult
+    private func startImport(_ job: PendingImportJob) -> Bool {
         guard let library = services.library else {
             errorMessage = "Der Musikordner der App ist nicht erreichbar."
-            return
+            return false
+        }
+        // Fail-closed: waehrend "Bibliothek zuruecksetzen" laeuft, startet kein
+        // Import. Sonst kopierte er in einen Ordner, den der Reset gerade
+        // leert — die frisch importierten Dateien waeren sofort wieder weg.
+        guard services.resetTask == nil else {
+            errorMessage = "Die Bibliothek wird gerade zurückgesetzt. Bitte danach erneut importieren."
+            return false
         }
         // Zwei Importe gleichzeitig waeren nicht falsch, aber unuebersichtlich:
         // ein Fortschrittsbalken, zwei Quellen. Ein zweiter Auftrag wird deshalb
@@ -124,7 +179,7 @@ extension AppModel {
         // erste durchgehen, verschwaende der Rest kommentarlos.
         guard importTask == nil else {
             services.pendingImportJobs.append(job)
-            return
+            return true
         }
 
         lastImportReport = nil
@@ -165,6 +220,7 @@ extension AppModel {
 
             await MainActor.run { self.finishImport(outcome) }
         }
+        return true
     }
 
     private func finishImport(_ outcome: PendingImportOutcome) {
@@ -191,6 +247,7 @@ extension AppModel {
         services.pendingImportJobs.removeAll()
 
         setImportProgress(nil)
+        cleanupImportedInboxFiles()
         if services.importTally.hasResult {
             lastImportReport = services.importTally.report
         }
@@ -199,6 +256,28 @@ extension AppModel {
         // Der Importer hat den Index bereits abgeglichen; hier wird nur noch die
         // Ansicht daraus neu aufgebaut.
         reloadLibrary(restoreSession: false)
+    }
+
+    /// Raeumt System-Inbox-Kopien auf, deren Import durch ist (siehe
+    /// `handleIncomingFile`). Fehlgeschlagene oder abgebrochene bleiben
+    /// liegen — sonst waere die Datei komplett verloren. Uebersprungene
+    /// (Duplikat) duerfen weg: ihr Inhalt liegt bereits in der Bibliothek.
+    private func cleanupImportedInboxFiles() {
+        let candidates = services.pendingInboxCleanup
+        services.pendingInboxCleanup = []
+        guard !candidates.isEmpty, let library = services.library else { return }
+
+        let tally = services.importTally
+        let inbox = library.root.appendingPathComponent("Inbox", isDirectory: true)
+        for url in candidates {
+            if tally.wasCancelled { continue }
+            // Die Fehlerliste traegt pro Datei "Quellpfad: Meldung"; bei
+            // Einzeldateien ist der Quellpfad der blosse Dateiname.
+            if tally.failed.contains(where: { $0.hasPrefix(url.lastPathComponent + ":") }) { continue }
+            // `LibraryReset.remove` prueft noch einmal, dass wirklich nur
+            // unterhalb von Inbox geloescht wird, und ist idempotent.
+            try? LibraryReset.remove(url, under: inbox, fm: fileManager)
+        }
     }
 
     /// Naechsten angestellten Auftrag starten, ohne die bisher gesammelten
@@ -224,8 +303,16 @@ extension AppModel {
         }
 
         // Erst alles anhalten, was noch auf die alten Dateien zugreift.
+        // `cancel()` ist dabei nur das Signal — WARTEN muss der Hintergrund-
+        // Task unten, sonst schreibt ein noch laufender Kopierauftrag nach dem
+        // Loeschen eine Datei zurueck oder ein laufender Scan speichert den
+        // alten Index wieder ab. Deshalb werden die Tasks hier eingesammelt.
         cancelImport()
         cancelLengthEstimate()
+        services.libraryReloadTask?.cancel()
+        let runningImport = importTask
+        let runningReload = services.libraryReloadTask
+        let runningEstimate = lengthEstimateTask
         stopPlaybackLoop()
         coordinator.stop()
         services.nowPlaying.clear()
@@ -246,7 +333,17 @@ extension AppModel {
         // Sammlung dauert es spuerbar. Der Task wird festgehalten, damit
         // ueberhaupt jemand erkennen kann, wann er fertig ist; ohne diesen
         // Griff waere „Zuruecksetzen" ein Vorgang ohne beobachtbares Ende.
+        // Solange er laeuft, blocken `startImport` und `reloadLibrary` neue
+        // Bibliotheksoperationen — Reset ist eine exklusive Operation.
+        let cache = lengthCache
         services.resetTask = Task.detached(priority: .utility) { [self] in
+            // Die oben abgebrochenen Tasks WIRKLICH zu Ende gehen lassen,
+            // bevor geloescht wird. `value` ist hier reines Warten — alle drei
+            // sind `Task<Void, Never>` und raeumen selbst hinter sich auf.
+            await runningImport?.value
+            await runningReload?.value
+            await runningEstimate?.value
+
             // `clearFavorites: nil` — die Favoriten liegen in den
             // Benutzereinstellungen und wurden oben schon auf dem MainActor
             // behandelt. Der Core soll sie nicht ein zweites Mal anfassen.
@@ -257,6 +354,11 @@ extension AppModel {
             } catch {
                 message = error.localizedDescription
             }
+            // Auch die langlebige Cache-INSTANZ leeren: `LibraryReset` loescht
+            // nur die Datei; das Dictionary im Speicher wuerde die alten
+            // Laengen beim naechsten `store` komplett wieder hinschreiben.
+            cache.clear()
+
             await MainActor.run {
                 self.services.resetTask = nil
                 if let message {

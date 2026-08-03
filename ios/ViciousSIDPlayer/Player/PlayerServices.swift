@@ -47,11 +47,6 @@ final class PlayerServices {
     /// Wechsel in den Vordergrund).
     var libraryReloadTask: Task<Void, Never>?
 
-    /// Wurde die Bibliothek seit dem Start schon einmal geladen? Erst danach
-    /// darf die Sitzungswiederherstellung greifen — vorher gibt es keine Titel,
-    /// gegen die sich die gespeicherte ID pruefen liesse.
-    var didLoadLibraryOnce = false
-
     /// Laufender Ladevorgang der HVSC-Songlaengen-Datenbank.
     var songlengthLoadTask: Task<Void, Never>?
 
@@ -70,6 +65,12 @@ final class PlayerServices {
     /// Noch nicht begonnene Import-Auftraege. Es laeuft immer nur einer;
     /// waehlt der Nutzer mehrere Ordner auf einmal, warten die uebrigen hier.
     var pendingImportJobs: [PendingImportJob] = []
+
+    /// Von aussen hereingereichte Dateien (`handleIncomingFile`), die iOS als
+    /// Kopie in `Documents/Inbox/` abgelegt hat. Nach erfolgreichem Import
+    /// werden genau diese Kopien wieder aufgeraeumt — sonst zaehlte der
+    /// naechste Bibliotheks-Abgleich sie als eigene „Inbox/…"-Titel doppelt.
+    var pendingInboxCleanup: [URL] = []
 
     /// Laufende Summe ueber alle Auftraege der aktuellen Import-Aktion.
     var importTally = ImportTally()

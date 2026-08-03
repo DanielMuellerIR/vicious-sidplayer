@@ -145,7 +145,14 @@ extension AppModel {
     }
 
     /// Springt an eine absolute Position, begrenzt auf [0, Songdauer].
+    ///
+    /// Ohne geladenen Titel gibt es nichts, worin man springen koennte — der
+    /// Aufruf wird dann verworfen. Sonst zeigte der Scrubber eine Position in
+    /// einem Titel, den es nicht gibt. (Seek im GESTOPPTEN Zustand eines
+    /// geladenen Titels bleibt dagegen erhalten und wird gepuffert — das ist
+    /// der Architekturvertrag.)
     func seek(to seconds: Double) {
+        guard currentTrackID != nil else { return }
         let target = min(max(0, seconds), currentDuration)
         coordinator.seek(seconds: target)
         services.lastSessionBucket = -1
@@ -259,6 +266,12 @@ extension AppModel {
             return
         }
         coordinator.stop()
+        // Der Takt oben hat gerade eine Position nahe dem Songende gesichert;
+        // `stop()` setzt die Laufzeit auf 0. Diesen Endzustand auch speichern —
+        // sonst stuende der Titel beim naechsten App-Start wieder kurz vor
+        // seinem Ende und stoppte nach dem ersten Takt gleich noch einmal.
+        services.lastSessionBucket = -1
+        saveSessionState()
         syncPlaybackLoop()
         updateNowPlaying(force: true)
     }
@@ -320,6 +333,12 @@ extension AppModel {
         guard loadTrack(id: id, autoplay: false) else { return }
         if subtune > 0 { coordinator.setSubtune(sub: subtune) }
         coordinator.seek(seconds: position)
+        // `loadTrack` hat die Laenge fuer Subtune 0 aufgeloest; nach dem
+        // direkten Subtune-Wechsel am Coordinator muss sie fuer den
+        // wiederhergestellten Subtune neu aufgeloest werden — sonst laufen
+        // Scrubber und Auto-Next mit der Dauer des falschen Subtunes
+        // (gleiches Muster wie in `restoreSessionIfPossible`).
+        resolveComputedLengthIfNeeded()
         if wasPlaying { startPlayback() }
         syncPlaybackLoop()
         updateNowPlaying(force: true)
@@ -598,6 +617,13 @@ extension AppModel {
         if subtune > 0 { coordinator.setSubtune(sub: subtune) }
         if position > 1.0 { coordinator.seek(seconds: position) }
         resolveComputedLengthIfNeeded()
+        // `loadTrack` hat oben bereits Subtune 0 / Position 0 gespeichert. Den
+        // wiederhergestellten Stand ausdruecklich zuruecksichern — der Titel
+        // steht nur pausiert bereit, es laeuft also kein Playback-Takt, der
+        // das nachholen wuerde. Ohne diese Zeile waere der Sitzungsstand nach
+        // einem harten Beenden auf 0/0 zurueckgefallen.
+        services.lastSessionBucket = -1
+        saveSessionState()
         updateNowPlaying(force: true)
     }
 
