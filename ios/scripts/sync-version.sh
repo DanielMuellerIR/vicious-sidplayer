@@ -22,14 +22,26 @@ if [ -z "$VERSION" ]; then
     exit 2
 fi
 
-CURRENT="$(grep -m1 -o 'MARKETING_VERSION = [^;]*' "$PBXPROJ" | sed 's/MARKETING_VERSION = //')"
+# Alle Vorkommen einsammeln (App- und Test-Target, jeweils Debug und Release).
+# `|| true`: unter `set -e` darf ein leerer grep-Treffer das Skript nicht beenden.
+ALL_VALUES="$(grep -o 'MARKETING_VERSION = [^;]*' "$PBXPROJ" | sed 's/MARKETING_VERSION = //' || true)"
+CURRENT="$(printf '%s\n' "$ALL_VALUES" | head -n1)"
 
 if [ "${1:-}" = "--check" ]; then
-    if [ "$CURRENT" = "$VERSION" ]; then
-        echo "OK: MARKETING_VERSION = $VERSION"
+    # JEDES Vorkommen muss exakt VERSION sein. Nur das erste zu pruefen liesse
+    # eine abweichende Release- oder Test-Konfiguration unbemerkt durchgehen —
+    # ein Release truege dann trotz gruenem Check eine andere App-Version.
+    if [ -z "$ALL_VALUES" ]; then
+        echo "FEHLER: keine MARKETING_VERSION in $PBXPROJ gefunden." >&2
+        exit 1
+    fi
+    MISMATCHES="$(printf '%s\n' "$ALL_VALUES" | grep -Fxv "$VERSION" | sort -u || true)"
+    if [ -z "$MISMATCHES" ]; then
+        COUNT="$(printf '%s\n' "$ALL_VALUES" | wc -l | tr -d ' ')"
+        echo "OK: MARKETING_VERSION = $VERSION (alle $COUNT Vorkommen)"
         exit 0
     fi
-    echo "FEHLER: VERSION ist $VERSION, im Projekt steht $CURRENT." >&2
+    echo "FEHLER: VERSION ist $VERSION, im Projekt steht abweichend: $(printf '%s' "$MISMATCHES" | tr '\n' ' ')" >&2
     echo "        Beheben mit: bash ios/scripts/sync-version.sh" >&2
     exit 1
 fi
