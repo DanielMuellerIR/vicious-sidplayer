@@ -128,6 +128,7 @@ Quick-Look-Controls auf macOS nicht zuverlässig sind, und stoppt beim Schließe
 python3 build.py
 python3 build.py --no-min
 swift test
+bash Tests/fleet-rules.sh
 bash build_app.sh
 bash build_dmg.sh
 bash ios/scripts/build-simulator.sh
@@ -141,6 +142,13 @@ Drei Einstiegspunkte: `build_app.sh` baut nur, `./install.sh` installiert
 notarisiert nach `/Applications`, `./release.sh` packt das DMG (installiert nie).
 Beide heften zuerst der App selbst ein Ticket an. Profilname aus `NOTARY_PROFILE`
 oder `git config viciousSidPlayer.notaryProfile`.
+
+`bash Tests/fleet-rules.sh` hält die beiden Fleet-Regeln vom 2026-08-03 fest: Nach
+`/Applications` gelangt nur ein Bundle mit angeheftetem Notary-Ticket (ad hoc gebaut wird
+nur im Projektverzeichnis), und kein absoluter Pfad des Build-Rechners darf im
+ausgelieferten Bundle landen. Der Test liest nur Quellen und baut, signiert und installiert
+nichts. Diese Prüfung nie dadurch „belegen", dass der echte Installationsweg gegen
+`/Applications` läuft — das ersetzt Daniels installierte App.
 
 Änderungsspezifische Gates:
 
