@@ -21,6 +21,20 @@
   nicht als kaputt, aber eben auch nicht als geprüft.
 - `setPreferredIOBufferDuration(10 ms)` ist ein Startwert aus dem Plan, kein
   Messergebnis. Auf dem Gerät nachmessen und gegebenenfalls anpassen.
+- Nach einem Media-Services-Reset (`mediaServicesWereReset`) baut die App den
+  Titel zwar neu auf, verwendet dabei aber weiterhin die einmal erzeugte
+  `AVAudioEngine` (`ViciousCoordinator` hält sie als `let`). Nach diesem
+  System-Reset sind Engine und abhängige Audio-Objekte laut Apple-Doku ungültig
+  und müssen neu erzeugt werden — sonst kann die Wiedergabe dauerhaft stumm
+  bleiben, obwohl Titel und Status restauriert aussehen. Umbau im Coordinator
+  (Engine neu erzeugbar machen, dann SID/Subtune/Position/Status
+  wiederherstellen); im Simulator nicht auslösbar, Abnahme nur auf echter
+  Hardware (Prüfliste [`ios/GERAETETEST.md`](ios/GERAETETEST.md)).
+- `tasks/2026-07-26-ios-app/goal-prompt.md` ist ein Sessionauftrag an einen
+  KI-Assistenten samt Subagenten-Steuerung und gehört nach den Projektregeln
+  nicht in ein öffentliches Repo. Der interne Remote-Name ist entfernt; offen
+  ist die Entscheidung, ob Auftrag und interner Arbeitsplan ganz herauskommen
+  und nur dauerhaft relevante Architekturentscheidungen bleiben.
 - Querformat funktioniert, ist aber nicht ausgereizt (Hochformat war die Vorgabe).
 - App-Icon ist programmatisch erzeugt und zweckmäßig, kein gestaltetes Motiv.
 - Offene Entscheidung: Die Sitzungswiederherstellung bereitet den Titel nur vor und

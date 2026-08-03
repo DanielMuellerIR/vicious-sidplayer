@@ -1,8 +1,9 @@
 Vicious SID Player 1.9.0 adds a native iPhone app that shares the existing
 emulation core, and moves the music library — index, recursive import, reset —
-into that core so both platforms use the same, tested logic. The notarized macOS
-app and Quick Look extension remain included in the DMG; macOS behaviour is
-unchanged.
+into that core as platform-neutral, tested logic. The iPhone app is its first
+user; the macOS app still runs on its previous playlist code and will migrate
+to the shared library later. The notarized macOS app and Quick Look extension
+remain included in the DMG; macOS behaviour is unchanged.
 
 ## iOS app (iPhone)
 

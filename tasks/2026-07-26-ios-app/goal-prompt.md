@@ -35,8 +35,8 @@ Zustand weiterläuft und dort bedienbar ist, und in die man ganze Ordner voller
 - **Team-ID** nur über gitignorierte `ios/.env`, dazu eine `.env.example`.
 - **jsSID- und WTFPL-Hinweise** erscheinen auch in der iOS-App (Über-Screen).
 - **Kein Push zu `github`, kein Release, keine Notarisierung.** Commits gehen
-  ausschließlich zum privaten Fleet-Remote `minipc`, und nur mit
-  aufgabenbezogenen Pfaden im Index. Kein `git add .`, kein Reset, kein Clean.
+  ausschließlich zum privaten Fleet-Remote, und nur mit aufgabenbezogenen
+  Pfaden im Index. Kein `git add .`, kein Reset, kein Clean.
 - Fremdes WIP und andere Worktrees bleiben unangetastet.
 
 ## Reihenfolge

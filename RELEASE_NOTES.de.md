@@ -1,8 +1,10 @@
 Vicious SID Player 1.9.0 bringt eine native iPhone-App, die sich den vorhandenen
 Emulationskern teilt, und verlagert die Musikbibliothek — Index, rekursiver
-Import, Zurücksetzen — in genau diesen Kern, damit beide Plattformen dieselbe,
-getestete Logik benutzen. Die notarisierte macOS-App samt Quick-Look-Erweiterung
-bleibt im DMG enthalten; am Verhalten unter macOS ändert sich nichts.
+Import, Zurücksetzen — als plattformneutrale, getestete Logik in genau diesen
+Kern. Erste Nutzerin ist die iPhone-App; die macOS-App läuft weiterhin mit ihrer
+bisherigen Playlist-Logik und zieht erst später auf die gemeinsame Bibliothek um.
+Die notarisierte macOS-App samt Quick-Look-Erweiterung bleibt im DMG enthalten;
+am Verhalten unter macOS ändert sich nichts.
 
 ## iOS-App (iPhone)
 

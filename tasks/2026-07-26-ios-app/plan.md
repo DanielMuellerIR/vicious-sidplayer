@@ -249,7 +249,7 @@ RELEASE_NOTES, AGENTS.md („iOS ist Ist-Zustand“), Backlog aufräumen.
 | iOS-Build | `ios/scripts/build-simulator.sh` ohne Warnungen im eigenen Code |
 | iOS-Logik | `ios/scripts/run-tests.sh` (Simulator, headless) |
 | Import | Simulator-Durchlauf mit synthetischem Ordnerbaum: Struktur, Dedupe, Abbruch, Reset |
-| Sperrbildschirm | **Nur auf echtem Gerät belegbar** — Daniels Schritt: Wiedergabe bei gesperrtem Display, Steuerung über Sperrbildschirm und AirPods, Verhalten bei Anruf und beim Abziehen der Kopfhörer |
+| Sperrbildschirm | **Nur auf echtem Gerät belegbar** — manueller Schritt: Wiedergabe bei gesperrtem Display, Steuerung über Sperrbildschirm und AirPods, Verhalten bei Anruf und beim Abziehen der Kopfhörer |
 | Öffentlichkeit | getrackter Diff frei von Musikdateien, privaten Pfaden, Team-ID und Assistentenformulierungen |
 
 Ein Simulator-Screenshot ersetzt keinen der headless Gates. Der echte Gerätetest
