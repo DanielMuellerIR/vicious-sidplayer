@@ -161,7 +161,7 @@ if [[ "$NOTARIZE" == "1" ]]; then
     echo "=== Notarizing DMG ==="
     # Fünf Versuche statt einem: `notarytool history` meldet gelegentlich
     # fälschlich „No Keychain password item found", obwohl das Profil da ist
-    # (2026-07-26 auf M3 belegt). Ein einzelner Fehlversuch würde sonst einen
+    # (2026-07-26 auf einem Apple-Silicon-Mac belegt). Ein einzelner Fehlversuch würde sonst einen
     # ganzen Lauf grundlos abbrechen; ein wirklich fehlendes Profil scheitert
     # auch nach fünf Versuchen.
     notary_profile_works() {

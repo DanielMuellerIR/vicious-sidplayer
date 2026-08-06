@@ -30,11 +30,9 @@
   (Engine neu erzeugbar machen, dann SID/Subtune/Position/Status
   wiederherstellen); im Simulator nicht auslösbar, Abnahme nur auf echter
   Hardware (Prüfliste [`ios/GERAETETEST.md`](ios/GERAETETEST.md)).
-- `tasks/2026-07-26-ios-app/goal-prompt.md` ist ein Sessionauftrag an einen
-  KI-Assistenten samt Subagenten-Steuerung und gehört nach den Projektregeln
-  nicht in ein öffentliches Repo. Der interne Remote-Name ist entfernt; offen
-  ist die Entscheidung, ob Auftrag und interner Arbeitsplan ganz herauskommen
-  und nur dauerhaft relevante Architekturentscheidungen bleiben.
+- Entschieden (2026-08-06): Der Sessionauftrag `goal-prompt.md` ist aus dem
+  Arbeitsstand entfernt; der Architekturplan `tasks/2026-07-26-ios-app/plan.md`
+  bleibt als dauerhaft relevante Entscheidungsgrundlage im Repo.
 - Querformat funktioniert, ist aber nicht ausgereizt (Hochformat war die Vorgabe).
 - App-Icon ist programmatisch erzeugt und zweckmäßig, kein gestaltetes Motiv.
 - Offene Entscheidung: Die Sitzungswiederherstellung bereitet den Titel nur vor und
