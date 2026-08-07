@@ -42,6 +42,31 @@ remain included in the DMG; macOS behaviour is unchanged.
 - The core builds for iOS as well; two Foundation calls that do not exist there
   were replaced without changing macOS behaviour.
 
+## Fixes from the 2026-08-07 code review
+
+All 16 findings of an in-depth review were verified against the code; 15 were
+fixed (one turned out to be partly incorrect and was corrected where it was
+right):
+
+- Resetting the library keeps favorites if the reset fails halfway, refuses to
+  start while another reset is running, and no longer treats a failed root
+  re-creation as success.
+- Files imported from the system share sheet are cleaned up from the app's
+  inbox after import, and the inbox no longer appears as a regular library
+  folder. Importing a track that already lives in the library no longer
+  creates a flat duplicate.
+- A library scan that hits unreadable folders reports a partial result with
+  errors instead of pretending the library is empty, and an unreadable source
+  root is reported as such rather than as a per-file error.
+- Import progress can no longer exceed its total (no more "8/7"), and the
+  running time estimate actually updates while importing.
+- The session state no longer falls back to track 0/0 after a system media
+  services reset, and the release notes no longer promise an engine rebuild
+  that does not happen.
+- Build hardening: a build with signing disabled can no longer produce an
+  unsigned app bundle unnoticed, and the symbol-strip step is checked
+  statically.
+
 ## Verification
 
 - The Swift suite covers the new library logic, including structure-preserving

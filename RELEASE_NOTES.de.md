@@ -48,6 +48,31 @@ am Verhalten unter macOS ändert sich nichts.
 - Der Kern baut zusätzlich für iOS; zwei dort nicht vorhandene
   Foundation-Aufrufe wurden ersetzt, ohne das Verhalten unter macOS zu ändern.
 
+## Korrekturen aus dem Code-Review vom 2026-08-07
+
+Alle 16 Funde eines gründlichen Reviews wurden am Code verifiziert; 15 wurden
+behoben (einer war teilweise unzutreffend und wurde dort korrigiert, wo er
+recht hatte):
+
+- Das Zurücksetzen der Bibliothek erhält die Favoriten, wenn es auf halbem Weg
+  scheitert, weist einen bereits laufenden zweiten Reset ab und wertet ein
+  fehlgeschlagenes Neuanlegen der Wurzel nicht mehr als Erfolg.
+- Über das System-Teilen importierte Dateien werden nach dem Import aus dem
+  Eingangsordner der App aufgeräumt, und dieser erscheint nicht mehr als
+  regulärer Bibliotheksordner. Der Import eines bereits vorhandenen Titels
+  erzeugt kein flaches Duplikat mehr.
+- Ein Scan mit unlesbaren Ordnern liefert ein Teilergebnis mit Fehlern, statt
+  eine leere Bibliothek vorzutäuschen; eine unlesbare Quellwurzel wird als
+  solche gemeldet statt als Dateifehler.
+- Der Import-Fortschritt kann sein Ziel nicht mehr überschreiten (kein „8/7"
+  mehr), und die Restzeitschätzung aktualisiert sich wirklich.
+- Der Sitzungsstand fällt nach einem Media-Services-Reset des Systems nicht
+  mehr auf Titel 0/0 zurück; die Release-Notes versprechen keinen
+  Engine-Neuaufbau mehr, der nicht stattfindet.
+- Build-Härtung: Ein Build mit abgeschalteter Signierung kann nicht mehr
+  unbemerkt ein unsigniertes Bundle erzeugen, und der Symbol-Strip-Schritt
+  wird statisch geprüft.
+
 ## Prüfung
 
 - Die Swift-Suite deckt die neue Bibliothekslogik ab, einschließlich
