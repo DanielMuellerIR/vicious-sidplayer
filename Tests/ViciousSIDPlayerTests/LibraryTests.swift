@@ -1,4 +1,9 @@
 import XCTest
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 @testable import ViciousSIDPlayerCore
 
 // Tests fuer die Bibliothek: Scan, Index, Import, Reset.
@@ -31,6 +36,19 @@ final class LibraryTests: XCTestCase {
         library = nil
         if let base { try? fm.removeItem(at: base) }
         try super.tearDownWithError()
+    }
+
+    /// Ueberspringt einen Test, der Unlesbarkeit ueber Dateirechte herstellt,
+    /// wenn der Testlauf als root laeuft.
+    ///
+    /// Root umgeht die Rechtebits: ein `chmod 000` bleibt fuer ihn lesbar, ein
+    /// nur-lesbarer Elternordner beschreibbar. Der Test scheiterte dann nicht am
+    /// Produktcode, sondern an einer Voraussetzung, die es gar nicht gibt. Genau
+    /// das ist der Fall im Linux-CI: der Job laeuft im Container `swift:6.0`
+    /// ohne `sudo`, also als UID 0 (Review-Fund 2026-08-07).
+    private func skipIfRootIgnoresFilePermissions() throws {
+        try XCTSkipIf(geteuid() == 0,
+                      "Laeuft als root: Dateirechte greifen nicht, die Voraussetzung dieses Tests fehlt.")
     }
 
     // MARK: - Synthetische Fixtures
@@ -296,6 +314,7 @@ final class LibraryTests: XCTestCase {
     }
 
     func testImportCollectsPerFileFailuresWithoutStopping() async throws {
+        try skipIfRootIgnoresFilePermissions()
         try writeFixture("a.sid", in: source)
         try writeFixture("locked.sid", in: source)
         try writeFixture("z.sid", in: source)
@@ -417,11 +436,54 @@ final class LibraryTests: XCTestCase {
                        "Der gespeicherte Index traegt den veralteten Stand.")
     }
 
+    // Ein unlesbarer Ast darf den Index NICHT durch ein halbes Ergebnis
+    // ersetzen: sonst verschwinden vorhandene Titel aus Ansicht und Index und
+    // gelten als von aussen geloescht (Review-Fund 2026-08-07).
+    func testScanThrowsInsteadOfReportingAnIncompleteLibrary() throws {
+        try skipIfRootIgnoresFilePermissions()
+        try writeFixture("one.sid", in: root)
+        try writeFixture("Sub/two.sid", in: root)
+        try library.refresh()
+        XCTAssertEqual(library.count, 2)
+
+        let blockedPath = root.appendingPathComponent("Sub").path
+        try fm.setAttributes([.posixPermissions: 0], ofItemAtPath: blockedPath)
+        addTeardownBlock {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: blockedPath)
+        }
+
+        XCTAssertThrowsError(try library.scan())
+        XCTAssertThrowsError(try library.refresh())
+        // Fail-closed: der zuletzt gueltige Stand bleibt stehen.
+        XCTAssertEqual(library.count, 2, "Ein gescheiterter Scan hat den Index geleert.")
+    }
+
+    // Die System-Inbox liegt auf iOS mitten in der Bibliothekswurzel. Was dort
+    // liegt, ist Zwischenablage und darf nicht als regulaerer Titel erscheinen.
+    func testScanSkipsExcludedTopLevelFolders() throws {
+        let inboxRoot = base.appendingPathComponent("InboxLibrary")
+        let inboxSupport = base.appendingPathComponent("InboxSupport")
+        let inboxLibrary = MusicLibrary(root: inboxRoot,
+                                        supportDirectory: inboxSupport,
+                                        fileManager: fm,
+                                        excludedFolderNames: [MusicLibraryLocation.inboxFolderName])
+        try writeFixture("real.sid", in: inboxRoot)
+        try writeFixture("Inbox/airdrop.sid", in: inboxRoot)
+        // Gleicher Name TIEFER im Baum bleibt normaler Nutzerinhalt.
+        try writeFixture("Composer/Inbox/deep.sid", in: inboxRoot)
+
+        try inboxLibrary.refresh()
+
+        XCTAssertEqual(inboxLibrary.entries.map(\.relativePath),
+                       ["Composer/Inbox/deep.sid", "real.sid"])
+    }
+
     // MARK: - Fehlerpfade des Imports
 
     // Ein Unterordner, den der Enumerator nicht betreten kann, darf nicht
     // stillschweigend fehlen — er muss als Fehler im Bericht stehen.
     func testImportReportsUnreadableSubtreeInsteadOfSilentlySkippingIt() async throws {
+        try skipIfRootIgnoresFilePermissions()
         try writeFixture("ok/one.sid", in: source)
         try writeFixture("blocked/two.sid", in: source)
 
@@ -439,9 +501,71 @@ final class LibraryTests: XCTestCase {
         XCTAssertFalse(report.wasCancelled)
     }
 
+    // Ist die QUELLWURZEL selbst unlesbar, konnte kein einziger Auftrag
+    // entstehen. Das ist der dokumentierte Gesamtfehler und nicht ein
+    // abgeschlossener Import mit einem Einzelfehler (Review-Fund 2026-08-07).
+    func testImportThrowsWhenSourceFolderItselfIsUnreadable() async throws {
+        try skipIfRootIgnoresFilePermissions()
+        try writeFixture("one.sid", in: source)
+
+        let sourcePath = source.path
+        try fm.setAttributes([.posixPermissions: 0], ofItemAtPath: sourcePath)
+        addTeardownBlock {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: sourcePath)
+        }
+
+        do {
+            _ = try await LibraryImporter(library: library).importFolder(at: source)
+            XCTFail("Eine unlesbare Quellwurzel muss den Gesamtfehler werfen.")
+        } catch let error as LibraryImportError {
+            guard case .sourceUnreadable = error else {
+                return XCTFail("Falscher Fehler: \(error)")
+            }
+        }
+    }
+
+    // Der Fortschritt ist ein oeffentlicher Vertrag: Traversierungsfehler
+    // gehoeren zu keinem Auftrag und duerfen den Zaehler nicht ueber den Nenner
+    // treiben ("8/7" — Review-Fund 2026-08-07).
+    func testProgressCompletedNeverExceedsTotal() async throws {
+        try skipIfRootIgnoresFilePermissions()
+        try writeFixture("ok/one.sid", in: source)
+        try writeFixture("blocked/two.sid", in: source)
+
+        let blockedPath = source.appendingPathComponent("blocked").path
+        try fm.setAttributes([.posixPermissions: 0], ofItemAtPath: blockedPath)
+        addTeardownBlock {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: blockedPath)
+        }
+
+        let progress = ProgressCollector()
+        _ = try await LibraryImporter(library: library).importFolder(at: source) { step in
+            progress.append(step)
+        }
+
+        let steps = progress.values
+        XCTAssertEqual(steps.last?.completed, 1)
+        XCTAssertEqual(steps.last?.total, 1)
+        XCTAssertFalse(steps.contains { $0.completed > $0.total },
+                       "Der Fortschritt hat mehr erledigte als vorhandene Auftraege gemeldet.")
+    }
+
+    // Ohne `LocalizedError` zeigte die Oberflaeche nur die generische
+    // NSError-Bruecke statt des Grundes (Review-Fund 2026-08-07).
+    func testImportErrorsCarryReadableDescriptions() {
+        let source = LibraryImportError.sourceUnreadable("Sammlung")
+        XCTAssertTrue(source.localizedDescription.contains("Sammlung"),
+                      "Meldung ohne Ordnernamen: \(source.localizedDescription)")
+
+        let destination = LibraryImportError.destinationUnavailable("Kein Platz auf dem Gerät")
+        XCTAssertTrue(destination.localizedDescription.contains("Kein Platz auf dem Gerät"),
+                      "Meldung ohne Klartext: \(destination.localizedDescription)")
+    }
+
     // Fehlt die Bibliothekswurzel und laesst sie sich nicht anlegen, ist der
     // dokumentierte Gesamtfehler faellig — nicht ein "Erfolg" voller copyFailed.
     func testImportThrowsWhenLibraryRootCannotBeCreated() async throws {
+        try skipIfRootIgnoresFilePermissions()
         let lockedParent = base.appendingPathComponent("LockedParent")
         let lockedRoot = lockedParent.appendingPathComponent("Library")
         let lockedSupport = base.appendingPathComponent("LockedSupport")
@@ -511,6 +635,7 @@ final class LibraryTests: XCTestCase {
     // wie eine leere Bibliothek aussehen: sonst meldet der Reset Erfolg,
     // loescht Index und Cache, und die Musikdateien bleiben liegen.
     func testResetThrowsWhenRootContentsCannotBeListed() throws {
+        try skipIfRootIgnoresFilePermissions()
         try writeFixture("one.sid", in: root)
         try library.refresh()
         XCTAssertTrue(fm.fileExists(atPath: library.indexFileURL.path))
@@ -532,6 +657,35 @@ final class LibraryTests: XCTestCase {
         XCTAssertFalse(library.isEmpty,
                        "Der In-Memory-Index darf bei einem gescheiterten Reset nicht geleert werden.")
         XCTAssertTrue(fm.fileExists(atPath: root.appendingPathComponent("one.sid").path))
+    }
+
+    // Laesst sich die Wurzel nach dem Loeschen nicht wieder anlegen, darf der
+    // Reset keinen Erfolg melden: die Bibliothek haette danach kein
+    // beschreibbares Ziel mehr (Review-Fund 2026-08-07).
+    func testResetThrowsWhenRootCannotBeRecreated() throws {
+        try skipIfRootIgnoresFilePermissions()
+        let lockedParent = base.appendingPathComponent("LockedParent")
+        let lockedRoot = lockedParent.appendingPathComponent("Library")
+        let lockedSupport = base.appendingPathComponent("LockedSupport")
+        let lockedLibrary = MusicLibrary(root: lockedRoot,
+                                         supportDirectory: lockedSupport,
+                                         fileManager: fm)
+        try writeFixture("one.sid", in: lockedRoot)
+        try lockedLibrary.refresh()
+        XCTAssertTrue(fm.fileExists(atPath: lockedLibrary.indexFileURL.path))
+
+        // Wurzel entfernen und den Elternordner schreibschuetzen: Schritt 1 des
+        // Resets sieht eine fehlende Wurzel (kein Fehler), Schritt 2 kann sie
+        // aber nicht neu anlegen.
+        try fm.removeItem(at: lockedRoot)
+        try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: lockedParent.path)
+        addTeardownBlock {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: lockedParent.path)
+        }
+
+        XCTAssertThrowsError(try LibraryReset.run(library: lockedLibrary))
+        XCTAssertTrue(fm.fileExists(atPath: lockedLibrary.indexFileURL.path),
+                      "Der Index darf bei einem gescheiterten Reset nicht verschwinden.")
     }
 
     // Eine FEHLENDE Wurzel ist dagegen kein Fehler: nichts zu loeschen,

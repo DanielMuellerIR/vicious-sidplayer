@@ -339,6 +339,13 @@ extension AppModel {
         // Scrubber und Auto-Next mit der Dauer des falschen Subtunes
         // (gleiches Muster wie in `restoreSessionIfPossible`).
         resolveComputedLengthIfNeeded()
+        // `loadTrack` hat oben Subtune 0 / Position 0 gesichert. Den
+        // wiederhergestellten Stand ausdruecklich zuruecksichern: bei pausierter
+        // Wiedergabe laeuft kein Playback-Takt, der das nachholen wuerde, und
+        // die naechste Sitzung startete trotz sichtbarer Wiederherstellung
+        // wieder bei 0/0 (gleiches Muster wie in `restoreSessionIfPossible`).
+        services.lastSessionBucket = -1
+        saveSessionState()
         if wasPlaying { startPlayback() }
         syncPlaybackLoop()
         updateNowPlaying(force: true)

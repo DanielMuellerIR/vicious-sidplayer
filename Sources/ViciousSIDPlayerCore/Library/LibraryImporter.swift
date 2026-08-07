@@ -124,6 +124,22 @@ public enum LibraryImportError: Error, Sendable, Equatable {
     case destinationUnavailable(String)
 }
 
+// Ohne `LocalizedError` liefert `error.localizedDescription` fuer einen eigenen
+// Swift-Fehlertyp nur die generische Bruecken-Meldung von NSError ("The
+// operation couldn't be completed."). Genau die zeigt die Oberflaeche aber an —
+// der mitgefuehrte Ordnername beziehungsweise der Klartext des Systemfehlers
+// ginge also verloren.
+extension LibraryImportError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .sourceUnreadable(let name):
+            return "Der Ordner „\(name)“ lässt sich nicht durchsuchen."
+        case .destinationUnavailable(let message):
+            return "Der Musikordner der App lässt sich nicht anlegen: \(message)"
+        }
+    }
+}
+
 /// Kopiert SID-Dateien in die Bibliothek.
 public struct LibraryImporter: Sendable {
 
@@ -213,14 +229,23 @@ public struct LibraryImporter: Sendable {
         // gerufen; `true` heisst "weitermachen" — ein gesperrter Ast bricht
         // nicht den ganzen Import ab (Grundsatz 1 oben).
         var failures: [LibraryImportFailure] = []
+        // Betrifft der Fehler die QUELLWURZEL selbst, ist nicht nur ein Ast
+        // gesperrt, sondern der ganze Import unmoeglich. Das wird hier gemerkt
+        // und nach der Schleife als Gesamtfehler geworfen.
+        var rootUnreadable = false
         guard let enumerator = fm.enumerator(
             at: folder,
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles],
             errorHandler: { url, error in
-                let relative = LibraryPath.relativePath(of: url, underRootComponents: rootComponents)
+                guard let relative = LibraryPath.relativePath(of: url, underRootComponents: rootComponents) else {
+                    // Nur die Quellwurzel liegt nicht UNTERHALB der Quellwurzel —
+                    // daran erkennt man sie. `false` beendet die Enumeration.
+                    rootUnreadable = true
+                    return false
+                }
                 failures.append(LibraryImportFailure(
-                    sourceRelativePath: relative ?? url.lastPathComponent,
+                    sourceRelativePath: relative,
                     reason: .unreadable,
                     message: error.localizedDescription))
                 return true
@@ -246,6 +271,13 @@ public struct LibraryImporter: Sendable {
                 continue
             }
             jobs.append(Job(source: url, relativePath: relative))
+        }
+        // Konnte gar nichts enumeriert werden, ist der dokumentierte
+        // Gesamtfehler faellig. Ihn als einzelnen Dateifehler zu melden saehe
+        // wie ein abgeschlossener Import aus und liesse in einer
+        // Mehrfachauswahl die naechsten Auftraege weiterlaufen.
+        if rootUnreadable {
+            throw LibraryImportError.sourceUnreadable(folder.lastPathComponent)
         }
         jobs.sort { $0.relativePath < $1.relativePath }
         return (jobs, failures)
@@ -315,8 +347,11 @@ public struct LibraryImporter: Sendable {
             }
         }
 
-        let done = imported.count + skipped.count + failed.count
-        progress?(LibraryImportProgress(completed: done, total: jobs.count, currentFileName: ""))
+        // Nur tatsaechlich bearbeitete Auftraege zaehlen. `failed` enthaelt auch
+        // die Traversierungsfehler aus der Zaehlphase; die gehoeren zu keinem
+        // Auftrag und ergaeben sonst Meldungen wie "8/7".
+        let processed = imported.count + skipped.count + failed.count - traversalFailures.count
+        progress?(LibraryImportProgress(completed: processed, total: jobs.count, currentFileName: ""))
 
         // Index angleichen — auch nach einem Abbruch. Genau das macht den
         // abgebrochenen Zustand konsistent: was kopiert wurde, ist danach
@@ -362,7 +397,11 @@ public struct LibraryImporter: Sendable {
             return .failed(.notMaterialized,
                            "Der File Provider hat die Datei nicht innerhalb der Wartezeit bereitgestellt.")
         } catch let error as LibraryImportError {
-            return .failed(.notMaterialized, String(describing: error))
+            // Erreichbar ueber `coordinatedRead`: liefert `NSFileCoordinator`
+            // weder Inhalt noch Fehler, wirft es `sourceUnreadable`. Das ist ein
+            // LESEfehler dieser einen Datei — nicht ein nicht materialisierter
+            // Platzhalter, wie hier frueher eingeordnet wurde.
+            return .failed(.unreadable, error.localizedDescription)
         } catch {
             return .failed(.unreadable, error.localizedDescription)
         }

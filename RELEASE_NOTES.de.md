@@ -16,7 +16,7 @@ am Verhalten unter macOS ändert sich nichts.
 - Behandlung der Audio-Sitzung für genau die Fälle, die eine Musik-App richtig
   machen muss: Ein eingehender Anruf pausiert und setzt nur dann fort, wenn das
   System es freigibt; abgezogene Kopfhörer pausieren, statt auf den Lautsprecher
-  umzuschalten; ein Neustart der Media Services baut die Engine neu auf.
+  umzuschalten.
 - Rekursiver Ordner-Import, der die Unterordnerstruktur erhält, inhaltsgleiche
   Dateien überspringt, Fortschritt meldet, sich abbrechen lässt und Fehler pro
   Datei sammelt, statt den ganzen Lauf abzubrechen. Platzhalter von

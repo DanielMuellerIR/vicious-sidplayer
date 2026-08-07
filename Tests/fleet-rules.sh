@@ -12,7 +12,13 @@
 # und ersetzen. Er waere selbst die Gefahr, vor der die Regel schuetzt.
 #
 # Aufruf:  bash Tests/fleet-rules.sh
+#          REQUIRE_BUNDLE=1 bash Tests/fleet-rules.sh   (vor einem Release)
 # Exit 0 = alle Pruefungen gruen.
+#
+# Die letzte Pruefung liest die gebauten Programme im App-Bundle. Ohne Bundle kann
+# sie nichts belegen und wird uebersprungen — im normalen Quelltest richtig, vor
+# einem Release nicht. Dafuer gibt es REQUIRE_BUNDLE=1: dann ist ein fehlendes
+# Bundle ein Fehlschlag statt einer stillen Luecke (Review-Fund 2026-08-07).
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -93,6 +99,22 @@ else
     ok "kein Bundle.module in Sources"
 fi
 
+# Der Strip-Schritt entfernt die Debug-Map, in der `swift build -c release` fuer
+# jede Quelldatei den vollen .o-Pfad DIESES Macs ablegt. Er muss vorhanden sein
+# UND vor dem Signaturblock stehen — `strip` macht eine vorhandene Signatur
+# ungueltig. Statisch geprueft, weil die Binaerprobe weiter unten ohne gebautes
+# Bundle uebersprungen wird: ein geloeschter oder verschobener Strip-Schritt
+# bliebe sonst im normalen Quelltest gruen.
+strip_line="$(first_line build_app.sh 'strip -S "$macho"')"
+signblock_line="$(first_line build_app.sh '=== Checking code signing identity ===')"
+if [ -z "$strip_line" ] || [ -z "$signblock_line" ]; then
+    bad "build_app.sh hat sich strukturell geaendert — Strip-Pruefung veraltet, bitte anpassen"
+else
+    [ "$strip_line" -lt "$signblock_line" ] \
+        && ok "build_app.sh entfernt die Debug-Symbole vor dem Signieren" \
+        || bad "build_app.sh signiert, bevor die Debug-Symbole entfernt sind"
+fi
+
 # Direkte Probe an den gebauten Programmen im Bundle, falls schon gebaut.
 APP="Vicious SID Player.app"
 if [ -d "$APP" ]; then
@@ -109,6 +131,8 @@ $found"
     else
         ok "gebautes Bundle enthaelt keine Pfade aus dem Heimatverzeichnis"
     fi
+elif [ "${REQUIRE_BUNDLE:-0}" = "1" ]; then
+    bad "$APP nicht vorhanden — mit REQUIRE_BUNDLE=1 ist die Binaerprobe Pflicht"
 else
     echo "  --   $APP nicht vorhanden; Probe uebersprungen (erst 'bash build_app.sh')"
 fi

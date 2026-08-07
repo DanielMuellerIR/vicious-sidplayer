@@ -117,7 +117,10 @@ extension AppModel {
     /// Eine von aussen an die App uebergebene Datei („Oeffnen mit", AirDrop,
     /// Dateien-App). Kommt ueber `.onOpenURL` am App-Einstieg herein.
     ///
-    /// Zwei Herkuenfte, ein Weg:
+    /// Drei Herkuenfte:
+    ///  - Bereits in der Bibliothek: der Nutzer hat in der Dateien-App einen
+    ///    eigenen Titel geoeffnet. Dann wird NICHT importiert, sonst entstuende
+    ///    eine flache zweite Kopie in der Wurzel.
     ///  - „Open in place" (Info.plist erlaubt es): die URL zeigt auf das
     ///    Original beim Absender; der Importer oeffnet den Sicherheits-Scope
     ///    und KOPIERT — das Original bleibt unangetastet.
@@ -134,9 +137,25 @@ extension AppModel {
             errorMessage = "\(url.lastPathComponent) ist keine SID-Datei."
             return
         }
-        let isInboxCopy = services.library.map {
-            LibraryReset.isContained(url, in: $0.root.appendingPathComponent("Inbox", isDirectory: true))
-        } ?? false
+        let inbox = services.library?.root
+            .appendingPathComponent(MusicLibraryLocation.inboxFolderName, isDirectory: true)
+        let isInboxCopy = inbox.map { LibraryReset.isContained(url, in: $0) } ?? false
+
+        // Liegt die Datei bereits IN der Bibliothek (der Nutzer hat in der
+        // Dateien-App einen eigenen Titel geoeffnet), waere ein Import falsch:
+        // `importFiles` legt jede Datei FLACH in der Wurzel ab, aus
+        // "Documents/Komponist/tune.sid" wuerde also eine zweite Kopie
+        // "Documents/tune.sid" samt Doppeleintrag. Stattdessen den vorhandenen
+        // Titel unter seinem relativen Pfad bereitstellen.
+        if !isInboxCopy, let relative = services.library?.relativePath(for: url) {
+            // Nicht von selbst losspielen — dieselbe Zurueckhaltung wie bei der
+            // Sitzungswiederherstellung.
+            loadTrack(id: relative, autoplay: false)
+            // Von aussen abgelegte Dateien stehen vielleicht noch nicht im
+            // Index; der Abgleich holt sie nach.
+            refreshLibrary()
+            return
+        }
 
         // Zum Aufraeumen erst vormerken, wenn der Import wirklich angenommen
         // ist. Sonst bliebe die Vormerkung nach einem abgelehnten Auftrag
@@ -268,7 +287,16 @@ extension AppModel {
         guard !candidates.isEmpty, let library = services.library else { return }
 
         let tally = services.importTally
-        let inbox = library.root.appendingPathComponent("Inbox", isDirectory: true)
+        // Nach einem HARTEN Fehler bleibt alles liegen. Ein solcher Fehler
+        // betrifft einen ganzen Auftrag, taucht also in keiner dateibezogenen
+        // Fehlerliste auf — und die Warteschlange der noch gar nicht
+        // ausgefuehrten Auftraege wurde eben verworfen. Ohne diese Bremse
+        // loeschte der Aufraeumer deren Inbox-Originale, obwohl sie nie
+        // importiert wurden (Review-Fund 2026-08-07).
+        guard !tally.hadFailure else { return }
+
+        let inbox = library.root
+            .appendingPathComponent(MusicLibraryLocation.inboxFolderName, isDirectory: true)
         for url in candidates {
             if tally.wasCancelled { continue }
             // Die Fehlerliste traegt pro Datei "Quellpfad: Meldung"; bei
@@ -301,18 +329,33 @@ extension AppModel {
             errorMessage = "Der Musikordner der App ist nicht erreichbar."
             return
         }
+        // Zuruecksetzen ist eine exklusive Operation und darf sich nicht selbst
+        // ueberholen. Ein zweiter Aufruf wuerde `services.resetTask`
+        // ueberschreiben: der zuerst gestartete Task setzt den Griff am Ende auf
+        // `nil` und startet einen Abgleich, waehrend der zweite noch loescht —
+        // die Sperren in `startImport` und `reloadLibrary` saehen dann keinen
+        // laufenden Reset mehr (Review-Fund 2026-08-07).
+        guard services.resetTask == nil else {
+            errorMessage = "Die Bibliothek wird bereits zurückgesetzt."
+            return
+        }
 
         // Erst alles anhalten, was noch auf die alten Dateien zugreift.
         // `cancel()` ist dabei nur das Signal — WARTEN muss der Hintergrund-
         // Task unten, sonst schreibt ein noch laufender Kopierauftrag nach dem
         // Loeschen eine Datei zurueck oder ein laufender Scan speichert den
         // alten Index wieder ab. Deshalb werden die Tasks hier eingesammelt.
-        cancelImport()
-        cancelLengthEstimate()
-        services.libraryReloadTask?.cancel()
+        //
+        // Die Griffe werden VOR dem Abbrechen gesichert: `cancelLengthEstimate()`
+        // setzt `lengthEstimateTask` selbst auf `nil`, danach gaebe es nichts
+        // mehr abzuwarten — und der Schaetzer koennte sein Ergebnis noch nach
+        // dem `cache.clear()` weiter unten in den Cache schreiben.
         let runningImport = importTask
         let runningReload = services.libraryReloadTask
         let runningEstimate = lengthEstimateTask
+        cancelImport()
+        cancelLengthEstimate()
+        services.libraryReloadTask?.cancel()
         stopPlaybackLoop()
         coordinator.stop()
         services.nowPlaying.clear()
@@ -323,7 +366,10 @@ extension AppModel {
         currentTrackLengths = nil
         computedLength = nil
         clearSessionState()
-        if !keepFavorites { setFavorites([]) }
+        // Die Favoriten werden bewusst NICHT hier geleert, sondern erst nach
+        // einem erfolgreichen Core-Reset (siehe unten): scheitert der, bleiben
+        // Musikdateien und Index stehen — geloeschte Favoriten waeren dann
+        // dauerhafter Datenverlust ohne Gegenwert (Review-Fund 2026-08-07).
 
         // Die Ansicht sofort leeren, damit nicht sekundenlang Titel dastehen,
         // deren Dateien gerade geloescht werden.
@@ -345,7 +391,7 @@ extension AppModel {
             await runningEstimate?.value
 
             // `clearFavorites: nil` — die Favoriten liegen in den
-            // Benutzereinstellungen und wurden oben schon auf dem MainActor
+            // Benutzereinstellungen und werden unten auf dem MainActor
             // behandelt. Der Core soll sie nicht ein zweites Mal anfassen.
             let message: String?
             do {
@@ -363,6 +409,9 @@ extension AppModel {
                 self.services.resetTask = nil
                 if let message {
                     self.errorMessage = "Zurücksetzen fehlgeschlagen: \(message)"
+                } else if !keepFavorites {
+                    // Erst jetzt: der Core-Reset ist durch, die Titel sind weg.
+                    self.setFavorites([])
                 }
                 self.reloadLibrary(restoreSession: false)
             }

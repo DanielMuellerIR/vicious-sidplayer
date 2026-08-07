@@ -201,9 +201,17 @@ sign_with_retry() {
     done
 }
 
-# Debug-Symbole entfernen, BEVOR signiert wird (strip macht eine vorhandene
-# Signatur ungueltig). `swift build -c release` legt eine Debug-Map in jede
-# Binaerdatei: fuer jede uebersetzte Quelldatei einen Eintrag mit dem vollen
+# Ad-hoc-Signatur ("--sign -"): keine Developer-ID, aber eine gueltige Signatur.
+# Auch hier von innen nach aussen und die .appex MIT ihren Entitlements — ohne
+# die laedt das System die sandboxed Extension nicht.
+sign_adhoc() {
+    codesign --force --options runtime --entitlements "$QL_ENTITLEMENTS" --sign - "$APPEX_DIR"
+    codesign --force --options runtime --sign - "$APP_DIR"
+}
+
+# Debug-Symbole entfernen, BEVOR signiert wird (strip veraendert das Binary und
+# damit jede vorhandene Signatur). `swift build -c release` legt eine Debug-Map
+# in jede Binaerdatei: fuer jede uebersetzte Quelldatei einen Eintrag mit dem vollen
 # Pfad ihrer .o-Datei auf DIESEM Mac. Die App braucht das nicht, es verraet nur
 # Benutzernamen und Projektaufbau (gefunden am 2026-08-04). `strip -S` nimmt
 # genau diese Debug-Symbole und laesst die normale Symboltabelle stehen, damit
@@ -218,27 +226,36 @@ while IFS= read -r macho; do
     esac
 done < <(find "$APP_DIR" -type f \( -name '*.dylib' -o -name '*.so' -o -perm +111 \))
 
-if [[ "$SIGN_APP" != "0" ]]; then
-    echo "=== Checking code signing identity ==="
-    if security find-identity -v -p codesigning | grep -Fq "$CODESIGN_IDENTITY"; then
-        echo "=== Signing App Bundle ==="
-        # Von innen nach aussen signieren: erst die .appex MIT ihren
-        # Sandbox-Entitlements, dann die App. (Kein --deep mehr: das wuerde
-        # die appex ohne Entitlements neu signieren -> Quick Look laedt sie nicht.)
-        sign_with_retry --entitlements "$QL_ENTITLEMENTS" --sign "$CODESIGN_IDENTITY" "$APPEX_DIR"
-        sign_with_retry --sign "$CODESIGN_IDENTITY" "$APP_DIR"
-        codesign --verify --deep --strict --verbose=2 "$APP_DIR"
-    elif [[ "$SIGN_APP" == "1" || "${REQUIRE_CODESIGN:-0}" == "1" ]]; then
-        echo "ABBRUCH: Codesign-Identity nicht gefunden: $CODESIGN_IDENTITY" >&2
-        echo "Tipp: SIGN_APP=0 bash build_app.sh baut lokal ohne Signatur." >&2
-        exit 1
-    else
-        echo "WARNUNG: Codesign-Identity nicht sichtbar. Ad-hoc-Signatur (nur lokal)."
-        # Ad-hoc reicht lokal, damit das System die sandboxed .appex laedt;
-        # fuer Releases weiterhin REQUIRE_CODESIGN=1 verwenden.
-        codesign --force --options runtime --entitlements "$QL_ENTITLEMENTS" --sign - "$APPEX_DIR"
-        codesign --force --options runtime --sign - "$APP_DIR"
-    fi
+echo "=== Checking code signing identity ==="
+if [[ "$SIGN_APP" == "0" ]]; then
+    # SIGN_APP=0 heisst "keine Developer-ID", NICHT "gar keine Signatur":
+    # SwiftPM signiert nur die einzelnen Programme ad hoc. Ein App-BUNDLE
+    # braucht zusaetzlich eine eigene Signatur mit Ressourcen-Siegel
+    # (CodeResources) — ohne die meldet `codesign --verify` "code has no
+    # resources but signature indicates they must be present". Und die sandboxed
+    # Quick-Look-Extension bekommt ihre Entitlements ueberhaupt erst hier; ohne
+    # sie laedt das System sie nicht. Beides nachgemessen am 2026-08-07
+    # (Review-Fund): ohne diesen Zweig war die Bundle-Pruefung rot und die
+    # appex hatte keinerlei Entitlements.
+    echo "SIGN_APP=0: Ad-hoc-Signatur (nur lokal lauffaehig, keine Notarisierung)."
+    sign_adhoc
+elif security find-identity -v -p codesigning | grep -Fq "$CODESIGN_IDENTITY"; then
+    echo "=== Signing App Bundle ==="
+    # Von innen nach aussen signieren: erst die .appex MIT ihren
+    # Sandbox-Entitlements, dann die App. (Kein --deep mehr: das wuerde
+    # die appex ohne Entitlements neu signieren -> Quick Look laedt sie nicht.)
+    sign_with_retry --entitlements "$QL_ENTITLEMENTS" --sign "$CODESIGN_IDENTITY" "$APPEX_DIR"
+    sign_with_retry --sign "$CODESIGN_IDENTITY" "$APP_DIR"
+    codesign --verify --deep --strict --verbose=2 "$APP_DIR"
+elif [[ "$SIGN_APP" == "1" || "${REQUIRE_CODESIGN:-0}" == "1" ]]; then
+    echo "ABBRUCH: Codesign-Identity nicht gefunden: $CODESIGN_IDENTITY" >&2
+    echo "Tipp: SIGN_APP=0 bash build_app.sh baut lokal ohne Developer-ID." >&2
+    exit 1
+else
+    echo "WARNUNG: Codesign-Identity nicht sichtbar. Ad-hoc-Signatur (nur lokal)."
+    # Ad-hoc reicht lokal, damit das System die sandboxed .appex laedt;
+    # fuer Releases weiterhin REQUIRE_CODESIGN=1 verwenden.
+    sign_adhoc
 fi
 rm -f "$QL_ENTITLEMENTS"
 

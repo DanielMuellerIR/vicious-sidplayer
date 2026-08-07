@@ -72,9 +72,10 @@ public enum LibraryReset {
     ///                              clearFavorites: wipeFavorites ? { store.removeAllFavorites() } : nil)
     ///
     /// - Throws: `ResetError.outsideRoot`, wenn die Pfadpruefung anschlaegt, oder
-    ///   den Dateisystemfehler, wenn etwas Vorhandenes sich nicht loeschen oder
-    ///   der Wurzelinhalt sich nicht auflisten laesst. Eine FEHLENDE Wurzel ist
-    ///   dagegen kein Fehler — sie zaehlt als leer (Idempotenz).
+    ///   den Dateisystemfehler, wenn etwas Vorhandenes sich nicht loeschen, der
+    ///   Wurzelinhalt sich nicht auflisten oder die Wurzel sich nicht wieder
+    ///   anlegen laesst. Eine FEHLENDE Wurzel ist dagegen kein Fehler — sie
+    ///   zaehlt als leer und wird neu angelegt (Idempotenz).
     @discardableResult
     public static func run(library: MusicLibrary,
                            clearFavorites: (() -> Void)? = nil) throws -> Report {
@@ -109,7 +110,21 @@ public enum LibraryReset {
 
         // 2. Wurzel sicherstellen: sie kann vorher schon gefehlt haben, und ohne
         //    sie schlaegt der naechste Import fehl.
-        try? fm.createDirectory(at: root, withIntermediateDirectories: true)
+        //
+        //    Fail-closed wie in Schritt 1: Gelingt das nicht, wird hier
+        //    abgebrochen — VOR dem Loeschen von Index und Cache. Sonst meldete
+        //    der Reset Erfolg, obwohl die Bibliothek danach gar kein
+        //    beschreibbares Ziel mehr haette (Review-Fund 2026-08-07).
+        do {
+            try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        } catch {
+            // `createDirectory` scheitert auf manchen Dateisystemen auch dann,
+            // wenn der Ordner bereits existiert. Deshalb erst nachsehen, bevor
+            // der Fehler weitergereicht wird.
+            var isDirectory: ObjCBool = false
+            let exists = fm.fileExists(atPath: root.path, isDirectory: &isDirectory)
+            if !(exists && isDirectory.boolValue) { throw error }
+        }
 
         // 3. Index und Caches im Support-Ordner. Hier wird namentlich geloescht,
         //    nicht der ganze Ordner geleert: auf iOS ist "Application Support"

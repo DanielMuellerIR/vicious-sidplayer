@@ -24,6 +24,24 @@ public enum MusicLibraryLocation {
     /// bereits vorhandenen Ablageort des Songlaengen-Caches.
     public static let supportFolderName = "Vicious SID Player"
 
+    /// Ordner, den iOS fuer Uebergaben von aussen anlegt (AirDrop, "Oeffnen
+    /// mit"). Er liegt direkt unter `Documents` und damit mitten in der
+    /// Bibliothekswurzel.
+    public static let inboxFolderName = "Inbox"
+
+    /// Ordner direkt unter der Wurzel, die NICHT zur Bibliothek gehoeren.
+    ///
+    /// Nur auf iOS gibt es einen: die System-Inbox. Auf macOS ist die Wurzel ein
+    /// gewoehnlicher Musikordner — ein "Inbox" darin waere Nutzerinhalt und
+    /// duerfte nicht aus der Ansicht verschwinden.
+    public static var excludedFolderNames: Set<String> {
+        #if os(iOS)
+        [inboxFolderName]
+        #else
+        []
+        #endif
+    }
+
     /// Wurzel der Musikbibliothek. Wird angelegt, falls sie noch nicht existiert.
     ///
     /// - iOS: `<App-Container>/Documents` — nutzersichtbar, siehe oben.

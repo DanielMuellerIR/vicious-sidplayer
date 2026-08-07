@@ -140,6 +140,17 @@ public struct MusicLibraryFolder: Sendable, Hashable, Identifiable {
     }
 }
 
+/// Fehler, die einen Bibliotheks-Scan als Ganzes unmoeglich machen.
+///
+/// Wichtig ist hier die Unterscheidung zu "leer": Ein Scan, der die Wurzel nicht
+/// durchlaufen kann, darf NICHT wie eine leere Bibliothek aussehen — sonst
+/// ersetzte `refresh()` den gueltigen Index durch nichts und meldete alle Titel
+/// als von aussen geloescht.
+public enum MusicLibraryError: Error, Sendable, Equatable {
+    /// Der Bibliotheksordner liess sich nicht (vollstaendig) durchlaufen.
+    case scanFailed(String)
+}
+
 /// Die Musikbibliothek: Wurzelordner, rekursiver Scan, Index.
 ///
 /// Alle Pfade sind injizierbar, damit Tests in einem temporaeren Verzeichnis
@@ -165,6 +176,14 @@ public final class MusicLibrary: @unchecked Sendable {
 
     public let fileManager: FileManager
 
+    /// Ordner DIREKT unter der Wurzel, die nicht zur Bibliothek gehoeren.
+    ///
+    /// Auf iOS ist das `Inbox`: Dorthin legt das System Kopien von AirDrop und
+    /// "Oeffnen mit" ab, und weil die Wurzel dort `Documents` IST, tauchte diese
+    /// Zwischenablage sonst als eigener Bibliotheksordner auf — samt Dateien,
+    /// deren Import gerade fehlgeschlagen ist oder noch laeuft.
+    public let excludedFolderNames: Set<String>
+
     private let lock = NSLock()
     // Serialisiert komplette `refresh()`-Durchlaeufe (Scan + Zuweisung +
     // Speichern) gegeneinander. Der feingranulare `lock` schuetzt nur den
@@ -179,12 +198,18 @@ public final class MusicLibrary: @unchecked Sendable {
     ///   - root: Wurzelordner der Musikbibliothek.
     ///   - supportDirectory: Ort fuer Index und Caches.
     ///   - fileManager: fuer Tests austauschbar.
+    ///   - excludedFolderNames: Ordner direkt unter der Wurzel, die der Scan
+    ///     auslaesst (siehe `excludedFolderNames`). Vorgabe: keine.
     ///
     /// Legt beide Verzeichnisse bei Bedarf an und laedt einen vorhandenen Index.
-    public init(root: URL, supportDirectory: URL, fileManager: FileManager = .default) {
+    public init(root: URL,
+                supportDirectory: URL,
+                fileManager: FileManager = .default,
+                excludedFolderNames: Set<String> = []) {
         self.root = root.standardizedFileURL
         self.supportDirectory = supportDirectory.standardizedFileURL
         self.fileManager = fileManager
+        self.excludedFolderNames = excludedFolderNames
         self.storedIndex = MusicLibraryIndex()
         ensureDirectories()
         loadIndex()
@@ -199,7 +224,10 @@ public final class MusicLibrary: @unchecked Sendable {
               let support = MusicLibraryLocation.support(fm: fm) else {
             return nil
         }
-        return MusicLibrary(root: root, supportDirectory: support, fileManager: fm)
+        return MusicLibrary(root: root,
+                            supportDirectory: support,
+                            fileManager: fm,
+                            excludedFolderNames: MusicLibraryLocation.excludedFolderNames)
     }
 
     /// Ablageort des Index.
@@ -245,6 +273,17 @@ public final class MusicLibrary: @unchecked Sendable {
         return url
     }
 
+    /// Pfad eines beliebigen Ortes relativ zur Bibliothekswurzel — also genau
+    /// die stabile ID, unter der er in der Bibliothek stuende. `nil`, wenn die
+    /// URL gar nicht unterhalb der Wurzel liegt (die Wurzel selbst zaehlt nicht).
+    ///
+    /// Damit erkennt der Aufrufer, ob eine von aussen hereingereichte Datei
+    /// bereits IN der Bibliothek liegt und deshalb nicht noch einmal kopiert
+    /// werden darf.
+    public func relativePath(for url: URL) -> String? {
+        LibraryPath.relativePath(of: url, underRootComponents: LibraryPath.normalizedComponents(root))
+    }
+
     /// Leert den Index im Speicher. Die Index-DATEI wird davon nicht angefasst
     /// (das macht `LibraryReset`, der dabei die Pfadpruefung anwendet).
     public func clearIndex() {
@@ -280,17 +319,40 @@ public final class MusicLibrary: @unchecked Sendable {
     /// Ordner werden gar nicht erst betreten), gefiltert ueber `SidFileType`.
     /// Reagiert auf Task-Abbruch, weil ein Scan ueber eine grosse Sammlung
     /// mehrere Sekunden dauern kann.
+    ///
+    /// - Throws: `MusicLibraryError.scanFailed`, wenn die Enumeration nicht
+    ///   startet oder unterwegs an einem Ordner scheitert (Rechte, File Provider
+    ///   kurz weg). Ein solcher Fehler darf NICHT wie eine leere Bibliothek
+    ///   aussehen — siehe `MusicLibraryError`. Einzige Ausnahme ist eine
+    ///   nachweislich fehlende Wurzel: die zaehlt als leer, denn der Nutzer darf
+    ///   ueber die Dateifreigabe alles loeschen.
     public func scan() throws -> [MusicLibraryEntry] {
         let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
+        let rootComponents = LibraryPath.normalizedComponents(root)
+
+        // Der Fehler-Block wird vom Enumerator synchron waehrend der Schleife
+        // gerufen. `false` bedeutet "Enumeration beenden": ein unlesbarer Ast
+        // macht das Gesamtergebnis unbrauchbar, deshalb wird hier nicht
+        // weitergelaufen, sondern unten geworfen.
+        var traversalError: Error?
         guard let enumerator = fileManager.enumerator(
             at: root,
             includingPropertiesForKeys: keys,
-            options: [.skipsHiddenFiles]
+            options: [.skipsHiddenFiles],
+            errorHandler: { url, error in
+                // Nur die Wurzel selbst liegt nicht UNTERHALB der Wurzel — so
+                // erkennt man, ob der Fehler die Wurzel oder einen Ast betrifft.
+                let isRoot = LibraryPath.relativePath(of: url, underRootComponents: rootComponents) == nil
+                let nsError = error as NSError
+                let missing = nsError.domain == NSCocoaErrorDomain
+                    && nsError.code == NSFileReadNoSuchFileError
+                if !(isRoot && missing) { traversalError = error }
+                return false
+            }
         ) else {
-            return []
+            throw MusicLibraryError.scanFailed(root.lastPathComponent)
         }
 
-        let rootComponents = LibraryPath.normalizedComponents(root)
         var result: [MusicLibraryEntry] = []
         var seen = 0
 
@@ -306,6 +368,15 @@ public final class MusicLibrary: @unchecked Sendable {
             guard let relative = LibraryPath.relativePath(of: url, underRootComponents: rootComponents) else {
                 continue
             }
+            // Ausgeschlossene Aeste (auf iOS `Documents/Inbox`) gehoeren nicht in
+            // die Bibliothek. Der Vergleich laeuft ueber die ERSTE Komponente des
+            // relativen Pfades, damit ein gleichnamiger Unterordner tiefer im
+            // Baum davon unberuehrt bleibt.
+            if !excludedFolderNames.isEmpty,
+               let top = relative.split(separator: "/").first,
+               excludedFolderNames.contains(String(top)) {
+                continue
+            }
 
             result.append(MusicLibraryEntry(
                 relativePath: relative,
@@ -318,6 +389,11 @@ public final class MusicLibrary: @unchecked Sendable {
         }
 
         try Task.checkCancellation()
+        // Erst jetzt werfen: ein abgebrochener Task soll seinen `CancellationError`
+        // behalten, und ein halbes Ergebnis darf den Index ohnehin nicht ersetzen.
+        if let traversalError {
+            throw MusicLibraryError.scanFailed(traversalError.localizedDescription)
+        }
         // Stabile, plattformunabhaengige Ordnung. Eine "natuerliche" Sortierung
         // (Track2 vor Track10) waere huebscher, ist aber sprachabhaengig und
         // damit nicht reproduzierbar — das darf die UI selbst machen.

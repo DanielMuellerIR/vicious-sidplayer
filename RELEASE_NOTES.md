@@ -13,9 +13,8 @@ remain included in the DMG; macOS behaviour is unchanged.
 - Background playback with lock-screen, Control Center and AirPods controls via
   `MPRemoteCommandCenter` and `MPNowPlayingInfoCenter`.
 - Audio session handling for the cases a music app must get right: an incoming
-  call pauses and resumes only when the system allows it, unplugging headphones
-  pauses instead of switching to the speaker, and a media-services reset rebuilds
-  the engine.
+  call pauses and resumes only when the system allows it, and unplugging
+  headphones pauses instead of switching to the speaker.
 - Recursive folder import that keeps the directory structure, skips duplicates by
   content, reports progress, can be cancelled, and collects per-file errors
   instead of aborting the whole run. Placeholder files from file providers such
