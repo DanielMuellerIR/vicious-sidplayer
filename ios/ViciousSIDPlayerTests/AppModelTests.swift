@@ -109,6 +109,162 @@ final class AppModelTests: XCTestCase {
         XCTAssertTrue(model.isSceneActive)
     }
 
+    // MARK: - Songlaenge: die Reihenfolge ist ein Architekturvertrag
+
+    // Die Dauer eines Titels entscheidet ueber Scrubber, Auto-Next,
+    // Sperrbildschirm und WAV-Export. Sie wird in einer festen Reihenfolge
+    // aufgeloest: HVSC-Datenbank, dann berechneter Cache, sonst das Fallback.
+    // Diese Reihenfolge steht in den Projektregeln — bisher hielt sie kein Test
+    // fest, obwohl sie sich mit einer einzigen umgestellten Zeile kippen liesse.
+    @MainActor
+    func testCurrentDurationFollowsTheDocumentedOrder() {
+        let model = AppModel()
+
+        // 1. Nichts bekannt -> Fallback.
+        model.currentTrackLengths = nil
+        model.computedLength = nil
+        XCTAssertEqual(model.currentDuration, AppModel.fallbackDurationSeconds,
+                       "Ohne jede Quelle muss das Fallback gelten")
+
+        // 2. Nur eine berechnete Laenge -> die gewinnt gegen das Fallback.
+        model.computedLength = 42
+        XCTAssertEqual(model.currentDuration, 42)
+
+        // 3. Die HVSC-Datenbank gewinnt gegen die berechnete Laenge.
+        model.currentTrackLengths = [111, 222]
+        XCTAssertEqual(model.currentDuration, 111,
+                       "Der kuratierte Datenbankwert hat immer Vorrang")
+
+        // 4. Kennt die Datenbank den laufenden Subtune nicht, faellt es auf die
+        //    berechnete Laenge zurueck — nicht auf einen fremden Subtune.
+        model.currentTrackLengths = []
+        XCTAssertEqual(model.currentDuration, 42)
+    }
+
+    // MARK: - Sichtbare Liste
+
+    // `visibleTracks` ist mehr als eine Anzeige: es ist zugleich die
+    // Reihenfolge, in der „Weiter" und „Zurueck" laufen. Suche und
+    // Favoritenfilter duerfen deshalb nicht auseinanderlaufen.
+    @MainActor
+    func testVisibleTracksAppliesSearchAndFavouritesTogether() {
+        let model = AppModel()
+        let tracks = [
+            LibraryTrack(id: "Hubbard/Commando.sid", name: "Commando", folderPath: "Hubbard"),
+            LibraryTrack(id: "Hubbard/Sanxion.sid", name: "Sanxion", folderPath: "Hubbard"),
+            LibraryTrack(id: "Galway/Rambo.sid", name: "Rambo", folderPath: "Galway")
+        ]
+        model.applyLibrary(tracks: tracks, folderTree: .empty)
+        XCTAssertEqual(model.visibleTracks.count, 3)
+
+        // Suche greift auf Titel UND Ordnernamen.
+        model.searchText = "galway"
+        XCTAssertEqual(model.visibleTracks.map(\.name), ["Rambo"],
+                       "Die Suche muss auch den Ordnernamen erfassen")
+        model.searchText = "SANX"
+        XCTAssertEqual(model.visibleTracks.map(\.name), ["Sanxion"],
+                       "Die Suche ist unabhaengig von Gross- und Kleinschreibung")
+
+        // Beide Filter zusammen: nur Favoriten, die auch zur Suche passen.
+        model.searchText = "hubbard"
+        model.setFavorites(["Hubbard/Sanxion.sid", "Galway/Rambo.sid"])
+        model.favoritesOnly = true
+        XCTAssertEqual(model.visibleTracks.map(\.name), ["Sanxion"],
+                       "Suche und Favoritenfilter muessen gemeinsam greifen")
+
+        // Leerraum in der Suche darf nicht alles ausfiltern.
+        model.searchText = "   "
+        XCTAssertEqual(model.visibleTracks.count, 2, "Nur Leerraum ist keine Suche")
+    }
+
+    // Verschwindet der laufende Titel von aussen (Dateifreigabe, Loeschen), gilt
+    // kein Titel mehr als aktuell — die Wiedergabe laeuft aber weiter, bis der
+    // Nutzer etwas anderes waehlt.
+    @MainActor
+    func testCurrentTrackIsForgottenWhenItDisappearsFromTheLibrary() {
+        let model = AppModel()
+        let track = LibraryTrack(id: "A/x.sid", name: "x", folderPath: "A")
+        model.applyLibrary(tracks: [track], folderTree: .empty)
+        model.setCurrentTrackID("A/x.sid")
+        XCTAssertNotNil(model.currentTrack)
+
+        model.applyLibrary(tracks: [], folderTree: .empty)
+        XCTAssertNil(model.currentTrackID, "Ein verschwundener Titel darf nicht aktuell bleiben")
+    }
+
+    // MARK: - Favoriten
+
+    // Favoriten haengen an RELATIVEN Pfaden, nicht an absoluten URLs: der
+    // App-Container bekommt bei jeder Neuinstallation eine neue UUID.
+    @MainActor
+    func testFavouritesToggleRoundTrips() {
+        let model = AppModel()
+        let id = "Hubbard/Commando.sid"
+        let previous = model.defaults.stringArray(forKey: AppModel.Keys.favorites)
+        defer { model.defaults.set(previous, forKey: AppModel.Keys.favorites) }
+
+        model.setFavorites([])
+        XCTAssertFalse(model.isFavorite(id))
+
+        model.toggleFavorite(id)
+        XCTAssertTrue(model.isFavorite(id))
+        XCTAssertEqual(model.defaults.stringArray(forKey: AppModel.Keys.favorites), [id],
+                       "Der Favorit muss als relativer Pfad gespeichert sein")
+
+        model.toggleFavorite(id)
+        XCTAssertFalse(model.isFavorite(id))
+    }
+
+    // MARK: - Sitzungswiederherstellung
+
+    // Ist die Wiederherstellung abgeschaltet, darf auch nichts geschrieben
+    // werden — sonst taucht der Stand nach dem Wiedereinschalten aus einer
+    // Sitzung auf, die der Nutzer laengst vergessen hat.
+    @MainActor
+    func testSessionStateIsNotWrittenWhileRestoreIsDisabled() {
+        let model = AppModel()
+        let defaults = model.defaults
+        let previousEnabled = defaults.object(forKey: AppModel.Keys.sessionRestore)
+        let previousID = defaults.object(forKey: AppModel.Keys.lastTrackID)
+        defer {
+            defaults.set(previousEnabled, forKey: AppModel.Keys.sessionRestore)
+            defaults.set(previousID, forKey: AppModel.Keys.lastTrackID)
+        }
+
+        model.clearSessionState()
+        model.setCurrentTrackID("A/x.sid")
+
+        model.sessionRestoreEnabled = false
+        model.saveSessionState()
+        XCTAssertNil(defaults.string(forKey: AppModel.Keys.lastTrackID),
+                     "Bei abgeschalteter Wiederherstellung darf nichts gesichert werden")
+
+        model.sessionRestoreEnabled = true
+        model.saveSessionState()
+        XCTAssertEqual(defaults.string(forKey: AppModel.Keys.lastTrackID), "A/x.sid")
+
+        model.clearSessionState()
+        XCTAssertNil(defaults.string(forKey: AppModel.Keys.lastTrackID),
+                     "clearSessionState muss den Stand wirklich entfernen")
+    }
+
+    // Bei aktiver Zufallswiedergabe wird bewusst NICHT wiederhergestellt — wer
+    // Shuffle anlaesst, will bei jedem Start etwas anderes hoeren. Ohne einen
+    // Titel in der Bibliothek passiert ohnehin nichts; genau das haelt dieser
+    // Test fest, damit der Sonderfall beim Umbauen nicht verlorengeht.
+    @MainActor
+    func testRestoreDoesNothingWithoutTracks() {
+        let model = AppModel()
+        model.applyLibrary(tracks: [], folderTree: .empty)
+        model.shuffle = true
+        model.restoreSessionIfPossible()
+        XCTAssertNil(model.currentTrackID)
+
+        model.shuffle = false
+        model.restoreSessionIfPossible()
+        XCTAssertNil(model.currentTrackID)
+    }
+
     // MARK: - Info.plist-Vertrag
 
     // Diese Schluessel sind keine Kosmetik: ohne sie ist die App im Kern kaputt,
