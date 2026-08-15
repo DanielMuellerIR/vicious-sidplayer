@@ -85,6 +85,17 @@ final class PlayerController: @unchecked Sendable {
     ///   - startSubtune: 0-basiert, vom Aufrufer bereits geprueft.
     ///   - seconds: Spieldauer, `nil` = endlos.
     init(sid: SidFileData, sink: PCMSink, format: PCMFormat, startSubtune: Int, seconds: Double?) throws {
+        // Der Renderblock in `start()` schreibt fest ZWEI Werte je Frame, weil er
+        // die Samples mit `playStereo()` holt. Der Zielpuffer ist aber nach
+        // `format.channels` bemessen. Bei einem Mono-Format waere er nur halb so
+        // gross wie das, was der Block hineinschreibt — ein Schreibzugriff hinter
+        // das Pufferende, den im Release-Build nichts abfaengt. Heute gibt es
+        // keinen Weg, hier etwas anderes als Stereo hereinzureichen; damit das
+        // beim naechsten Ausgabeformat nicht still zur Speicherverletzung wird,
+        // steht die Erwartung hier ausdruecklich.
+        guard format.channels == 2 else {
+            throw PCMSinkError.unsupportedFormat(format)
+        }
         self.metadata = sid.metadata
         self.subtunesCount = max(1, sid.metadata.subtunesCount)
         self.sink = sink

@@ -192,7 +192,10 @@ do {
                                       startSubtune: subtune,
                                       seconds: seconds)
 } catch {
-    fail("Fehler: ungültige Wiedergabedauer — \(error.localizedDescription)", code: 1)
+    // Erreichbar ueber eine unbrauchbare Dauer und ueber ein Ausgabeformat, das
+    // der Controller nicht bedienen kann — deshalb hier keine der beiden
+    // Ursachen behaupten, sondern den Klartext des Fehlers zeigen.
+    fail("Fehler: Wiedergabe lässt sich nicht einrichten — \(error.localizedDescription)", code: 1)
 }
 
 if useStdout {
