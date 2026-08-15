@@ -13,14 +13,12 @@ Quelldateien:
 
 from __future__ import annotations
 
-import base64
 import re
 import sys
 from pathlib import Path
 
 HERE = Path(__file__).parent
 SRC_DIR = HERE / 'src'
-AUDIO_DIR = HERE / 'audio'
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -171,15 +169,6 @@ def strip_module_keywords(src: str) -> str:
             .replace('export class', 'class')
             .replace('export async function', 'async function')
             .replace('export function', 'function'))
-
-
-def get_base64_of_file(filepath: Path) -> str:
-    """Liest eine Datei ein und liefert deren Inhalt als Base64-String."""
-    if not filepath.exists():
-        print(f"Warnung: {filepath} nicht gefunden. Inlining leer.")
-        return ""
-    data = filepath.read_bytes()
-    return base64.b64encode(data).decode('utf-8')
 
 
 def build(minify: bool = True) -> Path:
