@@ -540,6 +540,25 @@ final class ViciousTests: XCTestCase {
         XCTAssertEqual(SonglengthDB.parse(text: cr).count, 2)
     }
 
+    // Die Songlaengen-Datei waehlt der Nutzer selbst aus, sie ist also fremde
+    // Eingabe. Eine Zeile mit "inf" oder "1e400" ergaebe in Swift eine unendliche
+    // Dauer (beides parst Double zu unendlich, und unendlich ist >= 0). Folge:
+    // Auto-Next loeste nie aus, weil die verstrichene Zeit die Dauer nie erreicht,
+    // und der Positionsregler bekaeme einen unendlichen Wertebereich.
+    func testSonglengthDBRejectsNonFiniteLengths() {
+        XCTAssertNil(SonglengthDB.parseLength("inf:00"))
+        XCTAssertNil(SonglengthDB.parseLength("1e400:00"))
+        XCTAssertNil(SonglengthDB.parseLength("0:inf"))
+        XCTAssertNil(SonglengthDB.parseLength("nan:00"))
+        // Gueltige Werte bleiben unberuehrt.
+        XCTAssertEqual(SonglengthDB.parseLength("2:51"), 171)
+
+        // Eine Zeile, deren einziger Wert unbrauchbar ist, darf gar keinen
+        // Eintrag ergeben — sonst stuende dort eine leere Laengenliste.
+        let db = SonglengthDB.parse(text: "c2a01b2e5a55278e6b37b1d63a11e19c=inf:00\n")
+        XCTAssertEqual(db.count, 0)
+    }
+
     func testSonglengthDBParse() {
         let text = """
         [Database]

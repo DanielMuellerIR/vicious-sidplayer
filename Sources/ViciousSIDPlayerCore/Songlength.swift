@@ -92,9 +92,17 @@ public struct SonglengthDB: Sendable {
         // Attribut in Klammern abschneiden: "0:32(G)" -> "0:32"
         let core = token.split(separator: "(").first.map(String.init) ?? token
         let parts = core.split(separator: ":")
+        // `isFinite` ist hier kein Zierat: Double("inf") und Double("1e400")
+        // ergeben in Swift beide unendlich, und unendlich ist >= 0 — eine
+        // praeparierte oder beschaedigte Datenbankzeile lieferte damit eine
+        // unendliche Titeldauer. Auto-Next loeste dann nie aus (die verstrichene
+        // Zeit erreicht die Dauer nie) und der Positionsregler bekaeme einen
+        // unendlichen Wertebereich. Die Datei waehlt der Nutzer selbst aus, sie
+        // ist also fremde Eingabe wie eine SID-Datei auch.
         guard parts.count == 2,
               let minutes = Double(parts[0]),
               let seconds = Double(parts[1]),
+              minutes.isFinite, seconds.isFinite,
               minutes >= 0, seconds >= 0 else { return nil }
         return minutes * 60.0 + seconds
     }
