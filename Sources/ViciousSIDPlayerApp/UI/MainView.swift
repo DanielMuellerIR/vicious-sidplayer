@@ -12,15 +12,6 @@ import AppKit
 //   log stream --predicate 'subsystem == "com.viben.ViciousSIDPlayer"'
 let loadLog = Logger(subsystem: "com.viben.ViciousSIDPlayer", category: "load")
 
-struct Track: Identifiable, Equatable, Sendable {
-    let id: String
-    let name: String
-    let composer: String
-    let year: String
-    let isUser: Bool
-    let fileURL: URL?
-}
-
 final class DropURLsContainer: @unchecked Sendable {
     private let lock = NSLock()
     var urls: [URL] = []
@@ -53,39 +44,45 @@ public struct MainView: View {
     @AppStorage("autoplayFolderPath") private var autoplayFolderPath = ""
     // MPRemoteCommandCenter nur einmal verdrahten (onAppear kann mehrfach feuern).
     @State private var mediaCommandsConfigured = false
-    // Session-Restore: letzter Track (Datei-Pfad), Subtune und Position werden
-    // laufend gesichert und beim naechsten Start wiederhergestellt — aber nur
-    // bei AUSGESCHALTETEM Shuffle (mit Shuffle ist der zufaellige Start bei
-    // jedem Launch das gewollte Verhalten).
+    // Session-Restore: letzter Track, Subtune und Position werden laufend
+    // gesichert und beim naechsten Start wiederhergestellt — aber nur bei
+    // AUSGESCHALTETEM Shuffle (mit Shuffle ist der zufaellige Start bei jedem
+    // Launch das gewollte Verhalten).
+    //
+    // Gespeichert wird seit 2026-08-15 die stabile Titel-ID (`PlaylistTrackID`),
+    // also der Pfad relativ zum Autoplay-Ordner. Der Schluessel heisst weiter
+    // "lastTrackPath", damit ein vorhandener absoluter Pfad beim ersten Start
+    // noch gelesen und umgerechnet werden kann.
     @AppStorage("lastTrackPath") private var lastTrackPath = ""
     @AppStorage("lastSubtune") private var lastSubtune = 0
     @AppStorage("lastPosition") private var lastPosition = 0.0
     // Drosselung der Positions-Sicherung (alle 5 s statt bei jedem UI-Tick).
     @State private var lastSavedBucket = -1
     
-    // Track lists
-    @State private var userTracks: [Track] = []
+    // Die Titelliste. Aufbau, Duplikatpruefung, Suche, Favoriten und die
+    // Rechnung fuer den naechsten Titel stehen im Core (`Playlist`) und sind
+    // dort getestet — hier bleibt nur der Zustand.
+    @State private var playlist = Playlist()
     @State private var currentTrackIdx: Int = -1
 
-    // Playlist-Filter: Live-Suche nach Titel + "nur Favoriten". Beide filtern
-    // NUR die Anzeige (sichtbare Indizes) — Auswahl, Auto-Next und Shuffle
-    // arbeiten weiter auf der vollen Liste mit globalen Indizes.
+    // Die Bibliothek zum aktuellen Autoplay-Ordner: sie liefert den Ordner-Scan
+    // und haelt den Index vor. Optional und veraenderlich, weil der Ordner in
+    // den Einstellungen umgestellt werden kann und `MusicLibrary` ihre Wurzel
+    // bewusst nicht wechselt — bei einer Aenderung wird sie neu gebaut.
+    @State private var library: MusicLibrary? = nil
+
+    // Playlist-Filter: Live-Suche nach Titel + Ordner sowie "nur Favoriten".
+    // Beide filtern NUR die Anzeige (sichtbare Indizes) — Auswahl, Auto-Next
+    // und Shuffle arbeiten weiter auf der vollen Liste mit globalen Indizes.
     @State private var searchText = ""
     @State private var favoritesOnly = false
-    // Favoriten als Datei-Pfade, persistent in UserDefaults.
-    @State private var favorites: Set<String> = []
+    // Favoriten als stabile Titel-IDs, persistent in UserDefaults.
+    @State private var favorites = PlaylistFavorites()
 
     private var visibleTrackIndices: [Int] {
-        var indices = Array(allTracks.indices)
-        if favoritesOnly {
-            indices = indices.filter { idx in
-                allTracks[idx].fileURL.map { favorites.contains($0.path) } ?? false
-            }
-        }
-        if !searchText.isEmpty {
-            indices = indices.filter { allTracks[$0].name.localizedCaseInsensitiveContains(searchText) }
-        }
-        return indices
+        playlist.visibleIndices(searchText: searchText,
+                                favoritesOnly: favoritesOnly,
+                                favorites: favorites)
     }
     
     @State private var showFileImporter = false
@@ -133,10 +130,6 @@ public struct MainView: View {
         return SCRUB_MAX
     }
     
-    private var allTracks: [Track] {
-        return userTracks
-    }
-
     private var themeMode: ThemeMode { ThemeMode(storedValue: themeModeRaw) }
 
     // Effektives Theme: der gespeicherte Modus, im Auto-Fall aufgeloest gegen
@@ -206,7 +199,7 @@ public struct MainView: View {
                             .foregroundColor(textSecCol)
                         Spacer()
                         // Filter "nur Favoriten" (Stern) neben dem Papierkorb.
-                        if !userTracks.isEmpty {
+                        if !playlist.isEmpty {
                             Button(action: { favoritesOnly.toggle() }) {
                                 Image(systemName: favoritesOnly ? "star.fill" : "star")
                                     .font(.system(size: 10))
@@ -258,9 +251,9 @@ public struct MainView: View {
                     ScrollView {
                         VStack(spacing: 2) {
                             ForEach(visibleTrackIndices, id: \.self) { idx in
-                                let track = allTracks[idx]
+                                let track = playlist.tracks[idx]
                                 let isActive = idx == currentTrackIdx
-                                let isFavorite = track.fileURL.map { favorites.contains($0.path) } ?? false
+                                let isFavorite = favorites.contains(track.id)
 
                                 // Zeile = Auswahl-Button + separater Stern-Button
                                 // (Favorit an/aus), beide auf gemeinsamem Hintergrund.
@@ -277,6 +270,12 @@ public struct MainView: View {
                                         .contentShape(Rectangle())
                                     }
                                     .buttonStyle(PlainButtonStyle())
+                                    // Der Ordner steht im Tooltip statt in einer
+                                    // zweiten Zeile: in einer nach Komponisten
+                                    // sortierten Sammlung gibt es denselben
+                                    // Dateinamen mehrfach, und die Seitenleiste
+                                    // ist mit 220 px zu schmal fuer beides.
+                                    .help(track.folderPath.isEmpty ? track.name : "\(track.folderPath)/\(track.name)")
 
                                     Button(action: { toggleFavorite(at: idx) }) {
                                         Image(systemName: isFavorite ? "star.fill" : "star")
@@ -341,8 +340,8 @@ public struct MainView: View {
                             set: { val in if val != -1 { self.selectTrack(at: val) } }
                         )) {
                             Text("— Auswählen —").tag(-1)
-                            ForEach(0..<allTracks.count, id: \.self) { idx in
-                                Text(allTracks[idx].name).tag(idx)
+                            ForEach(0..<playlist.count, id: \.self) { idx in
+                                Text(playlist.tracks[idx].name).tag(idx)
                             }
                         }
                         .pickerStyle(DefaultPickerStyle())
@@ -590,16 +589,22 @@ public struct MainView: View {
             // doppelte Observer und ein erneutes (storendes) Laden des audio/-Ordners.
             if !didInitialize {
                 didInitialize = true
-                // Favoriten aus UserDefaults laden (persistente Datei-Pfade).
-                favorites = Set(UserDefaults.standard.stringArray(forKey: "favoriteTrackPaths") ?? [])
+                // Favoriten aus den Einstellungen. Die Umrechnung alter absoluter
+                // Pfade auf relative Titel-IDs passiert erst, wenn die
+                // Bibliothekswurzel feststeht (`migrateStoredIDs`).
+                favorites = PlaylistFavorites(
+                    storedValues: UserDefaults.standard.stringArray(forKey: PlaylistFavorites.userDefaultsKey) ?? [],
+                    root: nil
+                )
                 coordinator.setVolume(volume)
                 setupMenuNotificationHandlers()
                 setupMediaRemoteCommands()
                 // Songlengths-DB (HVSC) im Hintergrund laden — VOR der Playlist,
                 // damit der erste Track seine Laenge moeglichst schon findet.
                 loadSonglengthDB()
-                // Start-Playlist aus dem Autoplay-Ordner laden (siehe Einstellungen).
-                loadLocalAudioFolder()
+                // Start-Playlist aus dem Autoplay-Ordner laden (siehe Einstellungen)
+                // und die letzte Sitzung fortsetzen.
+                loadLocalAudioFolder(restoreSession: true)
             }
             // Dateien, die per Doppelklick/"Oeffnen mit" die App gestartet haben,
             // liegen schon im Puffer des AppDelegate -> jetzt nachziehen (Kaltstart;
@@ -646,9 +651,10 @@ public struct MainView: View {
                 // zurueck und laeuft (da isPlaying) direkt weiter.
                 if coordinator.currentSubtune + 1 < coordinator.subtunesCount {
                     coordinator.setSubtune(sub: coordinator.currentSubtune + 1)
-                } else if allTracks.count > 1 {
+                } else if playlist.count > 1 {
                     coordinator.stop()
-                    loadTrack(index: advanceTrackIndex(), autoplay: true)
+                    loadTrack(index: playlist.nextIndex(after: currentTrackIdx, shuffle: shuffle),
+                              autoplay: true)
                 } else {
                     coordinator.stop()
                 }
@@ -693,23 +699,10 @@ public struct MainView: View {
         coordinator.seek(seconds: target)
     }
 
-    // Index des naechsten Tracks: bei aktiver Zufallswiedergabe ein zufaelliger
-    // (nicht der aktuelle), sonst der naechste in Reihenfolge (mit Umlauf).
-    private func advanceTrackIndex() -> Int {
-        let count = allTracks.count
-        guard count > 1 else { return currentTrackIdx }
-        if shuffle {
-            var idx = Int.random(in: 0..<count)
-            if idx == currentTrackIdx { idx = (idx + 1) % count }
-            return idx
-        }
-        return (currentTrackIdx + 1) % count
-    }
-
     @discardableResult
     private func loadTrack(index: Int, autoplay: Bool) -> Bool {
         guard !isTransitioning else { return false }
-        guard index >= 0 && index < allTracks.count else { return false }
+        guard let track = playlist.track(at: index) else { return false }
 
         isTransitioning = true
         var didLoad = false
@@ -726,15 +719,10 @@ public struct MainView: View {
         }
 
         self.errorMessage = nil
-        let track = allTracks[index]
-
-        // User-Tracks tragen immer ihre Datei-URL. Built-in-Tracks gibt es in
-        // diesem Player bewusst nicht (es werden keine SIDs gebuendelt), daher
-        // ist der fileURL == nil-Fall nur eine defensive Absicherung.
-        guard let fileURL = track.fileURL else {
-            self.errorMessage = "Track ohne Datei-URL: \(track.name)"
-            return false
-        }
+        // Die absolute URL entsteht erst zur Laufzeit aus Bibliothekswurzel und
+        // relativem Pfad (bei hereingezogenen Fremdtiteln steht sie direkt im
+        // Eintrag) — gespeichert wird sie nie.
+        let fileURL = track.url
 
         // codereview-ok: defer haelt Scope ueber den Read; ausserdem App nicht sandboxed (2026-07-01)
         let accessed = fileURL.startAccessingSecurityScopedResource()
@@ -775,39 +763,16 @@ public struct MainView: View {
         }
     }
 
-    private func handleDroppedURLs(_ urls: [URL], isStartupLoad: Bool = false) {
+    // Von aussen hereingereichte Dateien und Ordner: Drag & Drop, der
+    // Oeffnen-Dialog und "Oeffnen mit". Sie werden NICHT in die Bibliothek
+    // kopiert — der Nutzer will sie nur hoeren. Liegen sie unterhalb des
+    // Autoplay-Ordners, bekommen sie trotzdem dessen relative Titel-ID und sind
+    // damit dieselben Titel wie die aus dem Ordner-Scan.
+    private func handleDroppedURLs(_ urls: [URL]) {
         loadLog.info("handleDroppedURLs: \(urls.count, privacy: .public) Eingabe-URL(s)")
         self.errorMessage = nil
-        var sidFiles: [URL] = []
-        let fm = FileManager.default
 
-        for url in urls {
-            // codereview-ok: App nicht sandboxed -> security-scoped calls sind No-Op; latent falls je Sandbox aktiviert wird (2026-07-01)
-            let accessed = url.startAccessingSecurityScopedResource()
-            var isDir: ObjCBool = false
-            if fm.fileExists(atPath: url.path, isDirectory: &isDir) {
-                if isDir.boolValue {
-                    let keys: [URLResourceKey] = [.isRegularFileKey]
-                    if let enumerator = fm.enumerator(at: url, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) {
-                        while let fileURL = enumerator.nextObject() as? URL {
-                            let fileAccessed = fileURL.startAccessingSecurityScopedResource()
-                            if fileURL.pathExtension.lowercased() == "sid" {
-                                sidFiles.append(fileURL)
-                            }
-                            if fileAccessed {
-                                fileURL.stopAccessingSecurityScopedResource()
-                            }
-                        }
-                    }
-                } else if url.pathExtension.lowercased() == "sid" {
-                    sidFiles.append(url)
-                }
-            }
-            if accessed {
-                url.stopAccessingSecurityScopedResource()
-            }
-        }
-
+        let sidFiles = collectSIDURLs(from: urls)
         guard !sidFiles.isEmpty else {
             loadLog.error("handleDroppedURLs: keine .sid Dateien in der Eingabe gefunden")
             self.errorMessage = "Keine .sid Dateien gefunden."
@@ -815,80 +780,48 @@ public struct MainView: View {
         }
         loadLog.info("handleDroppedURLs: \(sidFiles.count, privacy: .public) .sid Datei(en) gefunden")
 
-        sidFiles.sort(by: { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending })
+        // Duplikatpruefung und Aufnahme stehen im Core und sind dort getestet.
+        let additions = playlist.append(sidFiles, root: library?.root)
+        // Auch bei einer bereits geladenen Datei springt die Auswahl dorthin:
+        // wer sie erneut hereinzieht, will sie hoeren.
+        if let index = additions.firstIndex {
+            loadTrack(index: index, autoplay: true)
+        }
+    }
 
-        var firstTrackToPlayIdx = -1
-        var tracksToAdd: [Track] = []
+    // Sammelt die .sid-Dateien aus einer gemischten Eingabe von Dateien und
+    // Ordnern. Ordner werden rekursiv durchsucht — mit demselben Scan, den auch
+    // die Bibliothek benutzt (`MusicLibrary.scanFolder`); vorher standen dafuer
+    // zwei eigene Schleifen in dieser Datei.
+    //
+    // Sortiert wird natuerlich nach Dateiname ("Track2" vor "Track10"), damit
+    // ein hereingezogener Ordner in derselben Ordnung erscheint wie die
+    // Bibliothek.
+    private func collectSIDURLs(from urls: [URL]) -> [URL] {
+        let fm = FileManager.default
+        var found: [URL] = []
 
-        for url in sidFiles {
-            // Endung robust entfernen: deletingPathExtension strippt nur die echte
-            // Datei-Endung (egal ob .sid/.SID/.Sid), waehrend das frueher genutzte
-            // replacingOccurrences(of: ".sid") case-sensitiv war und Grossschreibung
-            // stehen liess (verfaelschte Duplikat-Erkennung via name==name und Anzeige).
-            let name = url.deletingPathExtension().lastPathComponent
-            
-            // Duplicate check: against existing tracks AND within current batch
-            let isDuplicate = allTracks.contains(where: { $0.name == name || ($0.fileURL != nil && $0.fileURL?.path == url.path) })
-                || tracksToAdd.contains(where: { $0.name == name })
-            if isDuplicate {
-                if firstTrackToPlayIdx == -1 {
-                    if let existingIdx = allTracks.firstIndex(where: { $0.name == name }) {
-                        firstTrackToPlayIdx = existingIdx
-                    }
-                }
-                continue
-            }
-            
-            let newTrack = Track(
-                id: UUID().uuidString,
-                name: name,
-                composer: "Benutzer geladen",
-                year: "N/A",
-                isUser: true,
-                fileURL: url
-            )
-            tracksToAdd.append(newTrack)
-            if firstTrackToPlayIdx == -1 {
-                firstTrackToPlayIdx = allTracks.count + tracksToAdd.count - 1
+        for url in urls {
+            // codereview-ok: App nicht sandboxed -> security-scoped calls sind No-Op; latent falls je Sandbox aktiviert wird (2026-07-01)
+            let accessed = url.startAccessingSecurityScopedResource()
+            defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: url.path, isDirectory: &isDir) else { continue }
+            if isDir.boolValue {
+                // Ein unlesbarer Ast laesst den Scan werfen. Fuer einen fremden
+                // Ordner ist das kein Grund zur Meldung: dann bleibt es bei dem,
+                // was sonst noch in der Eingabe steckt, und wenn gar nichts
+                // uebrig bleibt, sagt das die Meldung oben.
+                let entries = (try? MusicLibrary.scanFolder(url, fileManager: fm)) ?? []
+                found.append(contentsOf: entries.map { $0.url(relativeTo: url) })
+            } else if SidFileType.matches(url) {
+                found.append(url)
             }
         }
 
-        if !tracksToAdd.isEmpty {
-            self.userTracks.append(contentsOf: tracksToAdd)
-        }
-
-        // Sofort einen Track auswaehlen und abspielen. Beim Start mit aktiver
-        // Zufallswiedergabe einen zufaelligen statt des ersten (alphabetisch)
-        // Tracks — so beginnt jeder App-Start mit einem anderen Song. Ohne
-        // Shuffle wird stattdessen die letzte Sitzung fortgesetzt (Track,
-        // Subtune, Position), falls der Track noch in der Playlist ist.
-        if firstTrackToPlayIdx != -1 {
-            if isStartupLoad && !shuffle && !lastTrackPath.isEmpty,
-               let restoreIdx = allTracks.firstIndex(where: { $0.fileURL?.path == lastTrackPath }) {
-                let sub = lastSubtune
-                let pos = lastPosition
-                if loadTrack(index: restoreIdx, autoplay: true) {
-                    // Nach setSid ist subtunesCount gesetzt -> Subtune/Position gezielt
-                    // wiederherstellen (setSubtune prueft den Bereich selbst).
-                    if sub > 0 { coordinator.setSubtune(sub: sub) }
-                    if pos > 1.0 { coordinator.seek(seconds: pos) }
-                    resolveComputedLengthIfNeeded()
-                    loadLog.info("Session-Restore: \(lastTrackPath, privacy: .public), Subtune \(sub, privacy: .public), Position \(Int(pos), privacy: .public) s")
-                    return
-                }
-                loadLog.error("Session-Restore fehlgeschlagen; starte mit einem anderen lesbaren Playlist-Eintrag")
-            }
-            let playIdx: Int
-            if isStartupLoad && shuffle && allTracks.count > 1 {
-                playIdx = Int.random(in: 0..<allTracks.count)
-            } else {
-                playIdx = firstTrackToPlayIdx
-            }
-            if isStartupLoad {
-                _ = loadFirstPlayableTrack(startingAt: playIdx, autoplay: true)
-            } else {
-                loadTrack(index: playIdx, autoplay: true)
-            }
+        return found.sorted {
+            $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
         }
     }
 
@@ -897,10 +830,10 @@ public struct MainView: View {
     /// die Wiedergabe der danach folgenden gueltigen Datei.
     @discardableResult
     private func loadFirstPlayableTrack(startingAt index: Int, autoplay: Bool) -> Bool {
-        guard !allTracks.isEmpty else { return false }
-        let start = max(0, min(index, allTracks.count - 1))
-        for offset in 0..<allTracks.count {
-            let candidate = (start + offset) % allTracks.count
+        guard !playlist.isEmpty else { return false }
+        let start = max(0, min(index, playlist.count - 1))
+        for offset in 0..<playlist.count {
+            let candidate = (start + offset) % playlist.count
             if loadTrack(index: candidate, autoplay: autoplay) { return true }
         }
         return false
@@ -909,7 +842,7 @@ public struct MainView: View {
     private func clearPlaylist() {
         coordinator.stop()
         cancelLengthEstimate()
-        userTracks.removeAll()
+        playlist.removeAll()
         currentTrackIdx = -1
         errorMessage = nil
         // Songlaengen-Zustand des (nicht mehr vorhandenen) Tracks zuruecksetzen.
@@ -918,49 +851,117 @@ public struct MainView: View {
         computedLength = nil
     }
 
-    private func loadLocalAudioFolder() {
+    // Start-Playlist aus dem Autoplay-Ordner aufbauen.
+    //
+    // Der Ordner ist in den Einstellungen (Cmd+,) konfigurierbar; ohne eigene
+    // Auswahl gilt ~/Music/Vicious SID Player/. Er liegt AUSSERHALB des Repos und
+    // wird nie mit ausgeliefert. Die Aufloesung steht testbar in
+    // `AutoplayFolder.resolve`, der Scan in `MusicLibrary` — beide im Core.
+    ///
+    /// - Parameter restoreSession: nur beim allerersten Laden `true`. Beim
+    ///   Wechsel des Ordners in den Einstellungen waere ein Fortsetzen falsch —
+    ///   der Nutzer hat gerade eine ANDERE Sammlung gewaehlt und erwartet, dass
+    ///   sie vorn beginnt.
+    private func loadLocalAudioFolder(restoreSession: Bool = false) {
         let fm = FileManager.default
-        // Start-Playlist aus dem Autoplay-Ordner laden (rekursiv, inkl. Unterordner).
-        // Der Ordner ist in den Einstellungen (Cmd+,) konfigurierbar; ohne eigene
-        // Auswahl gilt ~/Music/Vicious SID Player/. Er liegt AUSSERHALB des Repos
-        // und wird nie mit ausgeliefert/gepusht. Aufloesungslogik testbar in
-        // AutoplayFolder.resolve (Core).
         guard let dir = AutoplayFolder.resolve(configuredPath: autoplayFolderPath, fm: fm) else { return }
-        let sids = collectSIDs(in: dir, fm: fm)
-        guard !sids.isEmpty else { return }
-        handleDroppedURLs(sids, isStartupLoad: true)
+
+        // Index und Caches gehoeren nicht in den Musikordner des Nutzers,
+        // sondern nach "Application Support". Liefert das System den Ort nicht
+        // (auf dem Mac praktisch ausgeschlossen), landet der Index im
+        // temporaeren Verzeichnis: dann geht beim naechsten Start nur die
+        // Abkuerzung verloren, gescannt wird ohnehin.
+        let support = MusicLibraryLocation.support(fm: fm) ?? fm.temporaryDirectory
+        let lib = MusicLibrary(root: dir,
+                               supportDirectory: support,
+                               fileManager: fm,
+                               indexFileName: MusicLibrary.indexFileName(forRoot: dir))
+        library = lib
+        migrateStoredIDs(root: lib.root)
+
+        // Abgleich mit dem Dateisystem. Scheitert er (Ordner verschwunden,
+        // Netzlaufwerk offline), bleibt der zuletzt gespeicherte Index dieser
+        // Wurzel stehen — besser eine bekannte Liste als gar keine.
+        do {
+            try lib.refresh()
+        } catch {
+            loadLog.error("Bibliotheks-Scan fehlgeschlagen: \(error.localizedDescription, privacy: .public)")
+        }
+
+        playlist.setLibrary(lib.entries, root: lib.root)
+        guard !playlist.isEmpty else { return }
+        startInitialPlayback(restoreSession: restoreSession)
     }
 
-    // Sammelt alle .sid-Dateien in dir REKURSIV (auch aus Unterordnern), natuerlich
-    // sortiert nach Pfad. So kann der Nutzer seine Sammlung beliebig verschachteln.
-    private func collectSIDs(in dir: URL, fm: FileManager) -> [URL] {
-        guard let enumerator = fm.enumerator(at: dir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else {
-            return []
+    // Womit die App nach dem Aufbau der Start-Playlist beginnt.
+    //
+    // Ohne Shuffle wird die letzte Sitzung fortgesetzt (Titel, Subtune,
+    // Position), sofern der Titel noch da ist. Mit Shuffle beginnt jeder Start
+    // bewusst zufaellig — deshalb wird dann gar nicht wiederhergestellt.
+    private func startInitialPlayback(restoreSession: Bool) {
+        if restoreSession, !shuffle, let id = restoredTrackID(), let restoreIdx = playlist.index(forID: id) {
+            let sub = lastSubtune
+            let pos = lastPosition
+            if loadTrack(index: restoreIdx, autoplay: true) {
+                // Nach setSid ist subtunesCount gesetzt -> Subtune/Position gezielt
+                // wiederherstellen (setSubtune prueft den Bereich selbst).
+                if sub > 0 { coordinator.setSubtune(sub: sub) }
+                if pos > 1.0 { coordinator.seek(seconds: pos) }
+                resolveComputedLengthIfNeeded()
+                loadLog.info("Session-Restore: \(id, privacy: .public), Subtune \(sub, privacy: .public), Position \(Int(pos), privacy: .public) s")
+                return
+            }
+            loadLog.error("Session-Restore fehlgeschlagen; starte mit einem anderen lesbaren Playlist-Eintrag")
         }
-        var out: [URL] = []
-        for case let url as URL in enumerator where url.pathExtension.lowercased() == "sid" {
-            out.append(url)
-        }
-        return out.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
+
+        // Beim Start mit aktiver Zufallswiedergabe einen zufaelligen statt des
+        // ersten Titels — so beginnt jeder App-Start mit einem anderen Song.
+        let start = (restoreSession && shuffle && playlist.count > 1)
+            ? Int.random(in: 0..<playlist.count)
+            : 0
+        loadFirstPlayableTrack(startingAt: start, autoplay: true)
     }
 
-    // Favorit an/aus fuer einen Track (persistent ueber den Datei-Pfad).
+    // Der gespeicherte Titel der letzten Sitzung, auf die aktuelle Wurzel
+    // umgerechnet (frueher stand hier ein absoluter Pfad).
+    private func restoredTrackID() -> String? {
+        guard !lastTrackPath.isEmpty else { return nil }
+        return PlaylistTrackID.migrate(lastTrackPath, root: library?.root)
+    }
+
+    // Rechnet die gespeicherten absoluten Pfade auf relative Titel-IDs um,
+    // sobald die Bibliothekswurzel feststeht.
+    //
+    // Ohne diesen Schritt waeren nach dem Umbau alle Favoriten wertlos: sie
+    // stehen als absolute Pfade in den Einstellungen, die Titel heissen jetzt
+    // relativ zum Autoplay-Ordner. Die Umrechnung ist mehrfach anwendbar, ein
+    // spaeterer Start findet also nichts mehr zu tun.
+    private func migrateStoredIDs(root: URL) {
+        let key = PlaylistFavorites.userDefaultsKey
+        let stored = UserDefaults.standard.stringArray(forKey: key) ?? []
+        let migrated = PlaylistFavorites(storedValues: stored, root: root)
+        favorites = migrated
+        if migrated.storageValue != stored.sorted() {
+            UserDefaults.standard.set(migrated.storageValue, forKey: key)
+            loadLog.info("Favoriten auf relative Pfade umgestellt: \(migrated.storageValue.count, privacy: .public)")
+        }
+
+        if !lastTrackPath.isEmpty {
+            lastTrackPath = PlaylistTrackID.migrate(lastTrackPath, root: root)
+        }
+    }
+
+    // Favorit an/aus fuer einen Titel (persistent ueber seine stabile ID).
     private func toggleFavorite(at index: Int) {
-        guard index >= 0 && index < allTracks.count,
-              let path = allTracks[index].fileURL?.path else { return }
-        if favorites.contains(path) {
-            favorites.remove(path)
-        } else {
-            favorites.insert(path)
-        }
-        UserDefaults.standard.set(Array(favorites).sorted(), forKey: "favoriteTrackPaths")
+        guard let track = playlist.track(at: index) else { return }
+        favorites.toggle(track.id)
+        UserDefaults.standard.set(favorites.storageValue, forKey: PlaylistFavorites.userDefaultsKey)
     }
 
     // Sichert den Wiedergabe-Stand fuer den naechsten App-Start (Session-Restore).
     private func saveSessionState() {
-        guard currentTrackIdx >= 0, currentTrackIdx < allTracks.count,
-              let path = allTracks[currentTrackIdx].fileURL?.path else { return }
-        lastTrackPath = path
+        guard let track = playlist.track(at: currentTrackIdx) else { return }
+        lastTrackPath = track.id
         lastSubtune = coordinator.currentSubtune
         lastPosition = coordinator.elapsedSeconds
     }
@@ -1028,8 +1029,7 @@ public struct MainView: View {
             return
         }
         guard let md5 = currentMD5,
-              currentTrackIdx >= 0, currentTrackIdx < allTracks.count,
-              let fileURL = allTracks[currentTrackIdx].fileURL else { return }
+              let fileURL = playlist.track(at: currentTrackIdx)?.url else { return }
         let subtune = coordinator.currentSubtune
         let estimateKey = "\(md5.lowercased()):\(subtune)"
 
@@ -1104,8 +1104,9 @@ public struct MainView: View {
         }
         NotificationCenter.default.addObserver(forName: NSNotification.Name("menuNextTrack"), object: nil, queue: .main) { _ in
             Task { @MainActor in
-                if allTracks.count > 1 {
-                    loadTrack(index: advanceTrackIndex(), autoplay: coordinator.isPlaying)
+                if playlist.count > 1 {
+                    loadTrack(index: playlist.nextIndex(after: currentTrackIdx, shuffle: shuffle),
+                              autoplay: coordinator.isPlaying)
                 }
             }
         }
@@ -1122,9 +1123,9 @@ public struct MainView: View {
         }
         NotificationCenter.default.addObserver(forName: NSNotification.Name("menuPrevTrack"), object: nil, queue: .main) { _ in
             Task { @MainActor in
-                if allTracks.count > 1 {
-                    let prev = (currentTrackIdx - 1 + allTracks.count) % allTracks.count
-                    loadTrack(index: prev, autoplay: coordinator.isPlaying)
+                if playlist.count > 1 {
+                    loadTrack(index: playlist.previousIndex(before: currentTrackIdx),
+                              autoplay: coordinator.isPlaying)
                 }
             }
         }
@@ -1170,8 +1171,7 @@ public struct MainView: View {
     // als WAV-Datei — Ziel via Save-Panel, Render im Hintergrund (schneller als
     // Echtzeit, WavRenderer im Core). Dauer = SCRUB_MAX, wie der Scrubber.
     private func exportCurrentTrackAsWAV() {
-        guard currentTrackIdx >= 0, currentTrackIdx < allTracks.count,
-              let fileURL = allTracks[currentTrackIdx].fileURL else {
+        guard let fileURL = playlist.track(at: currentTrackIdx)?.url else {
             errorMessage = "Kein Track für den WAV-Export ausgewählt."
             return
         }

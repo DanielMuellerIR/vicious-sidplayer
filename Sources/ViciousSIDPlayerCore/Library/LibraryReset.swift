@@ -121,7 +121,9 @@ public enum LibraryReset {
         //    nicht der ganze Ordner geleert: auf iOS ist "Application Support"
         //    der gesamte interne Bereich der App.
         var removedSupportFiles: [String] = []
-        let supportNames = [MusicLibrary.indexFileName] + cacheFileNames
+        // Der Index dieser Bibliothek, nicht der Vorgabename: auf dem Mac ist die
+        // Wurzel frei waehlbar und der Index heisst deshalb je Wurzel anders.
+        let supportNames = [library.indexFileName] + cacheFileNames
         for name in supportNames {
             let url = library.supportDirectory.appendingPathComponent(name)
             guard fm.fileExists(atPath: url.path) else { continue }

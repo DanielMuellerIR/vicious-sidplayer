@@ -46,8 +46,22 @@ Releaseartefakte bleiben unversioniert.
   Now Playing und Export.
 - Session-Restore speichert Track/Subtune/Position gedrosselt. Bei aktivem Shuffle
   nicht restaurieren; zufälliger Start ist beabsichtigt.
-- Playlist-Deduplikation nach Dateiname und Favoriten-/Suchverhalten dürfen beim
-  Nachladen des Autoplay-Ordners nicht auseinanderlaufen.
+- Titel-IDs sind auch auf dem Mac relative Pfade (`PlaylistTrackID`): Playlist,
+  Favoriten und Session-Restore erkennen einen Titel an seinem Pfad unterhalb des
+  Autoplay-Ordners, hereingezogene Fremddateien an ihrem absoluten Pfad. Darüber
+  läuft auch die Deduplikation — derselbe Dateiname in verschiedenen Ordnern sind
+  zwei Titel (Entscheidung 2026-08-15; vorher galt der bloße Dateiname, wodurch in
+  einer nach Komponisten sortierten Sammlung ganze Ordner unerreichbar blieben).
+  Gespeicherte absolute Pfade rechnet die App beim Start einmalig um; diesen
+  Migrationspfad nicht entfernen, sonst verliert der Nutzer seine Favoriten.
+- Playlist-Logik (Aufbau, Deduplikation, Suche über Titel **und** Ordner, Favoriten,
+  nächster Titel) steht im Core in `Playlist`, der Ordner-Scan in `MusicLibrary`.
+  Die Frontends halten nur Zustand. Neue Korrektheitsregeln gehören dorthin, weil
+  `MainView` in einem `executableTarget` liegt und aus XCTest nicht erreichbar ist.
+- Der Autoplay-Ordner ist auf dem Mac frei wählbar, `MusicLibrary` wechselt ihre
+  Wurzel aber nie: bei einer Änderung wird sie neu gebaut, und der Index heißt je
+  Wurzel anders (`MusicLibrary.indexFileName(forRoot:)`). Ohne das zeigte ein
+  fehlgeschlagener Scan die Titel der vorigen Sammlung an.
 
 ### iOS
 

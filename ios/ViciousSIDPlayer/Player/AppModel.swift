@@ -57,18 +57,15 @@ final class AppModel: ObservableObject {
     /// `tracks`, gefiltert nach `searchText` und `favoritesOnly`. Das ist die
     /// Liste, die die UI zeigt, und zugleich die Reihenfolge, in der
     /// „Weiter" und „Zurueck" laufen.
+    /// Die Suchregel selbst steht im Core (`PlaylistSearch`), weil die Mac-App
+    /// dieselbe braucht — vorher stand sie hier und dort in je eigener Fassung.
     var visibleTracks: [LibraryTrack] {
-        var result = tracks
-        if favoritesOnly {
-            result = result.filter { favorites.contains($0.id) }
+        tracks.filter { track in
+            if favoritesOnly && !favorites.contains(track.id) { return false }
+            return PlaylistSearch.matches(name: track.name,
+                                          folderPath: track.folderPath,
+                                          needle: searchText)
         }
-        let needle = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if !needle.isEmpty {
-            result = result.filter {
-                $0.name.lowercased().contains(needle) || $0.folderPath.lowercased().contains(needle)
-            }
-        }
-        return result
     }
 
     /// Der gerade geladene Titel als Datensatz, `nil` wenn keiner geladen ist.

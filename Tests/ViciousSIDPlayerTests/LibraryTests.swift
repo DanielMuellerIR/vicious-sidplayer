@@ -717,7 +717,7 @@ final class LibraryTests: XCTestCase {
         XCTAssertEqual(report.removedFiles, 2)
         XCTAssertEqual(report.removedTopLevelItems, 2)     // "Composer" und "two.sid"
         XCTAssertEqual(report.removedSupportFiles.sorted(),
-                       [LibraryReset.cacheFileNames[0], MusicLibrary.indexFileName].sorted())
+                       [LibraryReset.cacheFileNames[0], MusicLibrary.defaultIndexFileName].sorted())
         XCTAssertFalse(report.favoritesCleared)
         XCTAssertFalse(report.isEmpty)
 

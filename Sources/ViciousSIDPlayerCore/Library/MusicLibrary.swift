@@ -161,9 +161,30 @@ public enum MusicLibraryError: Error, Sendable, Equatable {
 /// Tasks (Import, Scan) und aus der UI gelesen werden.
 public final class MusicLibrary: @unchecked Sendable {
 
-    /// Dateiname des Index im Support-Ordner. Bewusst NICHT in der Wurzel: dort
-    /// wuerde ihn der Nutzer in der Dateifreigabe zwischen seiner Musik sehen.
-    public static let indexFileName = "library-index.json"
+    /// Vorgabe fuer den Dateinamen des Index im Support-Ordner. Bewusst NICHT in
+    /// der Wurzel: dort wuerde ihn der Nutzer in der Dateifreigabe zwischen
+    /// seiner Musik sehen.
+    public static let defaultIndexFileName = "library-index.json"
+
+    /// Ein eigener Index-Dateiname je Wurzel.
+    ///
+    /// Auf iOS gibt es genau eine Wurzel, dort genuegt die Vorgabe. Auf dem Mac
+    /// ist der Ordner in den Einstellungen frei waehlbar — und dann waere ein
+    /// gemeinsamer Index gefaehrlich: nach dem Umschalten von Sammlung A auf
+    /// Sammlung B laedt `init` zuerst den gespeicherten Index von A. Scheitert
+    /// der anschliessende Scan von B (Ordner weg, Rechte, Netzlaufwerk offline),
+    /// zeigte die App die Titel von A an — mit URLs, die unter B zusammengesetzt
+    /// werden und ins Leere zeigen. Mit eigenem Namen je Wurzel kann das nicht
+    /// passieren, und beim Zurueckschalten ist der alte Stand sofort wieder da.
+    ///
+    /// Der Name enthaelt den Pfad nicht im Klartext, sondern als kurzen
+    /// Pruefwert — ein Dateiname darf keine Schraegstriche enthalten, und der
+    /// Ablageort des Nutzers gehoert nicht in einen Dateinamen.
+    public static func indexFileName(forRoot root: URL) -> String {
+        let key = LibraryPath.normalizedComponents(root).joined(separator: "/")
+        let digest = MD5.hexString(of: Data(key.utf8)).prefix(16)
+        return "library-index-\(digest).json"
+    }
 
     /// Format des gespeicherten Index. Passt sie nicht, wird der Index verworfen.
     public static let indexFormatVersion = 1
@@ -184,6 +205,9 @@ public final class MusicLibrary: @unchecked Sendable {
     /// deren Import gerade fehlgeschlagen ist oder noch laeuft.
     public let excludedFolderNames: Set<String>
 
+    /// Dateiname des Index in `supportDirectory` — siehe `indexFileName(forRoot:)`.
+    public let indexFileName: String
+
     private let lock = NSLock()
     // Serialisiert komplette `refresh()`-Durchlaeufe (Scan + Zuweisung +
     // Speichern) gegeneinander. Der feingranulare `lock` schuetzt nur den
@@ -200,16 +224,20 @@ public final class MusicLibrary: @unchecked Sendable {
     ///   - fileManager: fuer Tests austauschbar.
     ///   - excludedFolderNames: Ordner direkt unter der Wurzel, die der Scan
     ///     auslaesst (siehe `excludedFolderNames`). Vorgabe: keine.
+    ///   - indexFileName: Dateiname des Index. Vorgabe ist der gemeinsame Name;
+    ///     wer die Wurzel wechseln kann, uebergibt `indexFileName(forRoot:)`.
     ///
     /// Legt beide Verzeichnisse bei Bedarf an und laedt einen vorhandenen Index.
     public init(root: URL,
                 supportDirectory: URL,
                 fileManager: FileManager = .default,
-                excludedFolderNames: Set<String> = []) {
+                excludedFolderNames: Set<String> = [],
+                indexFileName: String = MusicLibrary.defaultIndexFileName) {
         self.root = root.standardizedFileURL
         self.supportDirectory = supportDirectory.standardizedFileURL
         self.fileManager = fileManager
         self.excludedFolderNames = excludedFolderNames
+        self.indexFileName = indexFileName
         self.storedIndex = MusicLibraryIndex()
         ensureDirectories()
         loadIndex()
@@ -232,7 +260,7 @@ public final class MusicLibrary: @unchecked Sendable {
 
     /// Ablageort des Index.
     public var indexFileURL: URL {
-        supportDirectory.appendingPathComponent(MusicLibrary.indexFileName)
+        supportDirectory.appendingPathComponent(indexFileName)
     }
 
     // MARK: - Zugriff auf den Index
@@ -327,6 +355,22 @@ public final class MusicLibrary: @unchecked Sendable {
     ///   nachweislich fehlende Wurzel: die zaehlt als leer, denn der Nutzer darf
     ///   ueber die Dateifreigabe alles loeschen.
     public func scan() throws -> [MusicLibraryEntry] {
+        try MusicLibrary.scanFolder(root,
+                                    fileManager: fileManager,
+                                    excludedFolderNames: excludedFolderNames)
+    }
+
+    /// Derselbe Scan fuer einen beliebigen Ordner, ohne Bibliothek und ohne
+    /// Index. Die Mac-App braucht das fuer per Drag & Drop hereingezogene
+    /// Ordner: die liegen irgendwo auf der Platte, sollen aber nach denselben
+    /// Regeln durchsucht werden wie die Bibliothek selbst — vorher standen dafuer
+    /// zwei weitere, leicht abweichende Fassungen dieser Schleife in `MainView`.
+    ///
+    /// Die relativen Pfade der Ergebnisse beziehen sich auf den uebergebenen
+    /// Ordner; die absolute URL liefert `MusicLibraryEntry.url(relativeTo:)`.
+    public static func scanFolder(_ root: URL,
+                                  fileManager: FileManager = .default,
+                                  excludedFolderNames: Set<String> = []) throws -> [MusicLibraryEntry] {
         let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
         let rootComponents = LibraryPath.normalizedComponents(root)
 
