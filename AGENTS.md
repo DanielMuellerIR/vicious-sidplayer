@@ -43,7 +43,11 @@ Releaseartefakte bleiben unversioniert.
 - Songlänge: HVSC `Songlengths.md5` → berechneter Cache → 360-s-Fallback. Der
   Hintergrund-Estimator erkennt Ende erst nach mindestens drei Sekunden Stille und
   cached auch Loop-/Negativergebnisse. Diese Reihenfolge steuert Scrubber, Auto-Next,
-  Now Playing und Export.
+  Now Playing und Export. Sie steht seit v1.9.9 im Core in `SongLengthResolver`
+  (Reihenfolge, negativer Cache, Buchführung über die laufende Berechnung) und
+  `SongLengthSelection` (Leiter zur effektiven Dauer); die Frontends halten nur noch
+  den Hintergrund-Task. Neue Regeln gehören dorthin, nicht in `MainView` oder
+  `AppModel+Playback`.
 - Session-Restore speichert Track/Subtune/Position gedrosselt. Bei aktivem Shuffle
   nicht restaurieren; zufälliger Start ist beabsichtigt.
 - Titel-IDs sind auch auf dem Mac relative Pfade (`PlaylistTrackID`): Playlist,

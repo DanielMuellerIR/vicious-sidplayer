@@ -50,10 +50,6 @@ final class PlayerServices {
     /// Laufender Ladevorgang der HVSC-Songlaengen-Datenbank.
     var songlengthLoadTask: Task<Void, Never>?
 
-    /// „Datei:Subtune", fuer den gerade eine Laenge berechnet wird. Verhindert,
-    /// dass dieselbe Berechnung doppelt startet.
-    var lengthEstimateKey: String?
-
     /// Letzter gespeicherter 5-Sekunden-Abschnitt der Sitzung. Ohne diese
     /// Drosselung schriebe die App im Sekundentakt in die Benutzereinstellungen.
     var lastSessionBucket = -1

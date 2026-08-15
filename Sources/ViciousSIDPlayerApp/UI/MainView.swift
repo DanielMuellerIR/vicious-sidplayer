@@ -112,22 +112,22 @@ public struct MainView: View {
     @State private var songlengthLoadTask: Task<Void, Never>? = nil
     @State private var songlengthLoadGeneration = 0
     @State private var lengthEstimateTask: Task<Void, Never>? = nil
-    @State private var lengthEstimateGeneration = 0
-    @State private var lengthEstimateKey: String? = nil
-    private let lengthCache = SongLengthCache.defaultCache()
+    // Die Reihenfolge der Laengenquellen und die Buchfuehrung ueber die laufende
+    // Berechnung stehen im Core (`SongLengthResolver`) — dieselbe Instanz der
+    // Regel wie in der iPhone-App, und dort auch getestet. Die Ansicht haelt nur
+    // noch den Task.
+    private let lengthResolver = SongLengthResolver()
     // Pfad zur Songlengths.md5 aus den Einstellungen ("" = automatisch suchen).
     @AppStorage("songlengthsPath") private var songlengthsPath = ""
 
     // Effektive Dauer des aktuellen Subtunes — bestimmt Scrubber, Auto-Next,
-    // Now-Playing und WAV-Export-Dauer.
+    // Now-Playing und WAV-Export-Dauer. Die Leiter aus den drei Quellen steht im
+    // Core, damit Mac und iPhone nicht auseinanderlaufen.
     private var currentDuration: Double {
-        if let lengths = currentTrackLengths, coordinator.currentSubtune < lengths.count {
-            return lengths[coordinator.currentSubtune]
-        }
-        if let computed = computedLength {
-            return computed
-        }
-        return SCRUB_MAX
+        return SongLengthSelection.duration(databaseLengths: currentTrackLengths,
+                                            subtune: coordinator.currentSubtune,
+                                            computed: computedLength,
+                                            fallback: SCRUB_MAX)
     }
     
     private var themeMode: ThemeMode { ThemeMode(storedValue: themeModeRaw) }
@@ -1017,64 +1017,57 @@ public struct MainView: View {
     }
 
     // Berechnete Laenge fuer den aktuellen Track/Subtune aufloesen, falls die
-    // HVSC-DB nichts liefert: erst der persistente Cache, sonst Hintergrund-
-    // Berechnung (schneller als Echtzeit; Ergebnis wird gecacht — auch ein
-    // "kein Ende gefunden" als -1, damit Loop-Tunes nicht immer wieder neu
-    // gerechnet werden).
+    // HVSC-DB nichts liefert. Welche Quelle in welcher Reihenfolge gilt, steht
+    // im Core; hier bleibt nur das Starten und Aufraeumen des Hintergrund-Tasks.
     private func resolveComputedLengthIfNeeded() {
         computedLength = nil
-        // DB-Laenge vorhanden? Dann ist nichts zu berechnen.
-        if let lengths = currentTrackLengths, coordinator.currentSubtune < lengths.count {
-            cancelLengthEstimate()
-            return
+        switch lengthResolver.plan(md5: currentMD5,
+                                   subtune: coordinator.currentSubtune,
+                                   databaseLengths: currentTrackLengths,
+                                   fileURL: playlist.track(at: currentTrackIdx)?.url) {
+        case .databaseProvidesLength, .noLengthKnown:
+            // Nichts zu rechnen. Eine ueberfluessig gewordene Rechnung hat der
+            // Resolver bereits entwertet — der Task hier gehoert noch abgeraeumt.
+            lengthEstimateTask?.cancel()
+            lengthEstimateTask = nil
+        case .trackNotReady, .alreadyRunning:
+            // Titelwechsel noch nicht abgeschlossen, oder genau diese Analyse
+            // laeuft bereits: in beiden Faellen nichts anfassen.
+            break
+        case .cached(let seconds):
+            lengthEstimateTask?.cancel()
+            lengthEstimateTask = nil
+            computedLength = seconds
+        case .estimate(let ticket):
+            lengthEstimateTask?.cancel()
+            lengthEstimateTask = startLengthEstimate(ticket)
         }
-        guard let md5 = currentMD5,
-              let fileURL = playlist.track(at: currentTrackIdx)?.url else { return }
-        let subtune = coordinator.currentSubtune
-        let estimateKey = "\(md5.lowercased()):\(subtune)"
+    }
 
-        // Derselbe Track/Subtune ist bereits in Arbeit (z.B. zwei unmittelbar
-        // aufeinanderfolgende SwiftUI-onChange-Ereignisse): nicht doppelt starten.
-        if lengthEstimateKey == estimateKey, lengthEstimateTask != nil { return }
-        cancelLengthEstimate()
-
-        if let cached = lengthCache.length(md5: md5, subtune: subtune) {
-            // -1 = frueher berechnet, kein Ende gefunden (Loop) -> Fallback behalten.
-            if cached > 0 { computedLength = cached }
-            return
-        }
-
-        let cache = lengthCache
-        lengthEstimateGeneration &+= 1
-        let generation = lengthEstimateGeneration
-        lengthEstimateKey = estimateKey
-        lengthEstimateTask = Task.detached(priority: .utility) {
+    // Startet die Hintergrund-Berechnung. Sie laeuft schneller als Echtzeit; das
+    // Ergebnis nimmt der Resolver entgegen und sagt, ob es noch zum laufenden
+    // Titel passt.
+    private func startLengthEstimate(_ ticket: SongLengthEstimateTicket) -> Task<Void, Never> {
+        let resolver = lengthResolver
+        return Task.detached(priority: .utility) {
             do {
-                try Task.checkCancellation()
-                let data = try Data(contentsOf: fileURL)
-                let sid = try SidParser.parse(data: data)
-                let result = try SongLengthEstimator.estimate(sidFile: sid, subtune: subtune)
-                try Task.checkCancellation()
-                cache.store(md5: md5, subtune: subtune, seconds: result ?? -1)
+                let result = try resolver.runEstimate(ticket: ticket)
                 await MainActor.run {
-                    guard lengthEstimateGeneration == generation,
-                          lengthEstimateKey == estimateKey else { return }
                     lengthEstimateTask = nil
-                    lengthEstimateKey = nil
-                    // Nur uebernehmen, wenn immer noch derselbe Track/Subtune laeuft.
-                    if currentMD5 == md5 && coordinator.currentSubtune == subtune, let result {
-                        computedLength = result
+                    if let accepted = resolver.accept(result,
+                                                      ticket: ticket,
+                                                      currentMD5: currentMD5,
+                                                      currentSubtune: coordinator.currentSubtune) {
+                        computedLength = accepted
                     }
                 }
             } catch is CancellationError {
-                // Track/Subtune wurde gewechselt; kein negatives Cache-Ergebnis
-                // fuer eine absichtlich abgebrochene Analyse speichern.
+                // Track/Subtune wurde gewechselt. Der Resolver cached fuer eine
+                // absichtlich abgebrochene Analyse bewusst nichts.
             } catch {
                 await MainActor.run {
-                    if lengthEstimateGeneration == generation {
-                        lengthEstimateTask = nil
-                        lengthEstimateKey = nil
-                    }
+                    lengthEstimateTask = nil
+                    resolver.fail(ticket: ticket)
                 }
             }
         }
@@ -1083,8 +1076,7 @@ public struct MainView: View {
     private func cancelLengthEstimate() {
         lengthEstimateTask?.cancel()
         lengthEstimateTask = nil
-        lengthEstimateKey = nil
-        lengthEstimateGeneration &+= 1
+        lengthResolver.cancel()
     }
 
     // Die Rechnung steht im Core (`PlaytimeFormat`) — iPhone-App und

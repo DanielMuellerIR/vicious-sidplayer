@@ -93,17 +93,19 @@ final class AppModel: ObservableObject {
     /// Effektive Dauer des laufenden Subtunes. Reihenfolge wie auf dem Mac:
     /// HVSC-Datenbank, dann berechneter Cache, sonst das Fallback-Limit.
     /// Steuert Scrubber, Auto-Next, Sperrbildschirm und WAV-Export.
+    ///
+    /// Die Leiter selbst steht im Core (`SongLengthSelection`) — genau deshalb
+    /// kann sie hier nicht mehr von der Mac-Fassung abweichen.
     var currentDuration: Double {
-        if let lengths = currentTrackLengths, coordinator.currentSubtune < lengths.count {
-            return lengths[coordinator.currentSubtune]
-        }
-        if let computed = computedLength { return computed }
-        return Self.fallbackDurationSeconds
+        return SongLengthSelection.duration(databaseLengths: currentTrackLengths,
+                                            subtune: coordinator.currentSubtune,
+                                            computed: computedLength,
+                                            fallback: Self.fallbackDurationSeconds)
     }
 
     /// Fallback, wenn weder HVSC-Eintrag noch berechnete Laenge vorliegen —
-    /// identisch zur Mac-App.
-    static let fallbackDurationSeconds = 360.0
+    /// identisch zur Mac-App, weil beide denselben Core-Wert verwenden.
+    static let fallbackDurationSeconds = SongLengthSelection.fallbackSeconds
 
     // MARK: - Import
 
@@ -165,11 +167,16 @@ final class AppModel: ObservableObject {
     var currentMD5: String?
     let lengthCache = SongLengthCache.defaultCache()
 
-    /// Genau je ein verwalteter Hintergrund-Task. Die Generationszaehler
-    /// verhindern, dass ein langsames altes Ergebnis einen inzwischen
-    /// gewaehlten Titel ueberschreibt.
+    /// Reihenfolge der Laengenquellen und Buchfuehrung ueber die laufende
+    /// Berechnung — dieselbe Regel wie in der Mac-App, weil beide denselben
+    /// Core-Typ benutzen. `lazy`, weil sie auf `lengthCache` aufsetzt: das
+    /// Zuruecksetzen der Bibliothek leert genau diese Cache-Instanz.
+    lazy var lengthResolver = SongLengthResolver(cache: lengthCache)
+
+    /// Der laufende Hintergrund-Task der Laengenberechnung. Nur der Task liegt
+    /// noch hier; ob sein Ergebnis noch zum aktuellen Titel passt, entscheidet
+    /// der Resolver.
     var lengthEstimateTask: Task<Void, Never>?
-    var lengthEstimateGeneration = 0
     var importTask: Task<Void, Never>?
 
     /// UserDefaults-Schluessel an einer Stelle, damit Schreiber und Leser sich

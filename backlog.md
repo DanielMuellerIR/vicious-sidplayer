@@ -51,17 +51,17 @@ Die Kampagne hat alle Bereiche des Repos abgedeckt (Stand in `.codeqa/coverage.j
 Was sie bewusst **nicht** angefasst hat, steht hier — jeder Punkt ist geprüft und
 belegt, keiner ist eine Vermutung.
 
-1. ~~**Mac-App auf den Core zurückbauen.**~~ **Erledigt am 2026-08-15 (v1.9.8).**
-   Playlist-Aufbau, Deduplikation, Suche, Favoriten und die Rechnung für den
-   nächsten Titel stehen jetzt im Core (`Playlist`), der Ordner-Scan in
-   `MusicLibrary`; `MainView` hält nur noch Zustand. Nicht erledigt ist damit die
-   **Songlängen-Auflösung**: sie liegt weiterhin mit fünf `@State`-Feldern und zwei
-   Hintergrund-Tasks in `MainView`, während die iPhone-App dieselbe Logik in
-   `AppModel+Playback.swift` ein zweites Mal hält. Das ist der nächste sinnvolle
-   Rückbauschritt und war nicht Teil dieses Auftrags. Ebenfalls offen: der
-   Bibliotheks-Scan läuft auf dem Mac weiterhin **synchron** beim Start — bei den
-   >50.000 Dateien einer HVSC würde die Oberfläche dabei sichtbar stehen (so war es
-   vorher auch schon; die iPhone-App macht es bereits im Hintergrund).
+1. ~~**Mac-App auf den Core zurückbauen.**~~ **Erledigt am 2026-08-15 (v1.9.8 und
+   v1.9.9).** Playlist-Aufbau, Deduplikation, Suche, Favoriten und die Rechnung für
+   den nächsten Titel stehen im Core (`Playlist`), der Ordner-Scan in
+   `MusicLibrary`; `MainView` hält nur noch Zustand. Mit v1.9.9 folgte die
+   **Songlängen-Auflösung**: Reihenfolge der Quellen, negativer Cache und die
+   Buchführung über die laufende Berechnung stehen jetzt in `SongLengthResolver`,
+   die Leiter zur effektiven Dauer in `SongLengthSelection` — beide Apps benutzen
+   dieselbe Instanz der Regel, und sie ist erstmals getestet (20 Tests). Offen
+   bleibt: der Bibliotheks-Scan läuft auf dem Mac weiterhin **synchron** beim Start —
+   bei den >50.000 Dateien einer HVSC würde die Oberfläche dabei sichtbar stehen (so
+   war es vorher auch schon; die iPhone-App macht es bereits im Hintergrund).
 
 2. **`AVAudioEnginePCMSink.stop()` baut außerhalb des Locks ab.** `sourceNode` und der
    Zwischenpuffer werden ohne Sperre freigegeben, obwohl das Protokoll ausdrücklich

@@ -470,82 +470,64 @@ extension AppModel {
     /// Loest die Laenge des laufenden Subtunes auf, wenn die HVSC-Datenbank
     /// nichts liefert.
     ///
-    /// Die Reihenfolge ist ein Architekturvertrag und darf sich nicht aendern:
-    ///
-    ///   1. HVSC-`Songlengths.md5` — von Menschen kuratiert, immer der Vorrang.
-    ///   2. Berechneter Cache — Ergebnis einer frueheren Analyse dieser Datei.
-    ///   3. Hintergrund-Berechnung — der Emulator laeuft schneller als Echtzeit
-    ///      und sucht das Ende. Als Ende gilt erst, wenn mindestens drei
-    ///      Sekunden Stille am Stueck folgen (steckt im `SongLengthEstimator`).
-    ///   4. Sonst bleibt es beim 360-Sekunden-Fallback aus `AppModel`.
-    ///
-    /// Auch ein „kein Ende gefunden" wird gecacht (als -1). Sonst wuerde jeder
-    /// endlos loopende Tune — und das ist die HVSC-Mehrheit — bei jedem Abspielen
-    /// erneut sechs Minuten lang durchgerechnet.
+    /// Die Reihenfolge ist ein Architekturvertrag und steht deshalb im Core
+    /// (`SongLengthResolver`), zusammen mit der Buchfuehrung darueber, welche
+    /// Berechnung gerade laeuft und welches spaet eintreffende Ergebnis noch
+    /// gelten darf. Hier bleibt nur der Hintergrund-Task und das, was danach in
+    /// der Oberflaeche passiert.
     func resolveComputedLengthIfNeeded() {
         computedLength = nil
-
-        // Die Datenbank kennt die Laenge? Dann gibt es nichts zu rechnen.
-        if let lengths = currentTrackLengths, coordinator.currentSubtune < lengths.count {
-            cancelLengthEstimate()
-            return
+        let fileURL = currentTrackID.flatMap { trackURL(for: $0) }
+        switch lengthResolver.plan(md5: currentMD5,
+                                   subtune: coordinator.currentSubtune,
+                                   databaseLengths: currentTrackLengths,
+                                   fileURL: fileURL) {
+        case .databaseProvidesLength, .noLengthKnown:
+            lengthEstimateTask?.cancel()
+            lengthEstimateTask = nil
+        case .trackNotReady, .alreadyRunning:
+            // Titelwechsel noch nicht abgeschlossen, oder genau diese Analyse
+            // laeuft bereits: in beiden Faellen nichts anfassen.
+            break
+        case .cached(let seconds):
+            lengthEstimateTask?.cancel()
+            lengthEstimateTask = nil
+            computedLength = seconds
+        case .estimate(let ticket):
+            lengthEstimateTask?.cancel()
+            lengthEstimateTask = startLengthEstimate(ticket)
         }
-        guard let md5 = currentMD5,
-              let id = currentTrackID,
-              let fileURL = trackURL(for: id) else { return }
+    }
 
-        let subtune = coordinator.currentSubtune
-        let estimateKey = "\(md5.lowercased()):\(subtune)"
-
-        // Genau diese Berechnung laeuft schon (z.B. zwei kurz aufeinander
-        // folgende Ereignisse aus der Oberflaeche): nicht doppelt starten.
-        if services.lengthEstimateKey == estimateKey, lengthEstimateTask != nil { return }
-        cancelLengthEstimate()
-
-        if let cached = lengthCache.length(md5: md5, subtune: subtune) {
-            // -1 = frueher berechnet, kein Ende gefunden -> Fallback behalten.
-            if cached > 0 { computedLength = cached }
-            return
-        }
-
-        let cache = lengthCache
-        // Der Generationszaehler schuetzt vor veralteten Ergebnissen: wechselt
-        // der Nutzer waehrend der Berechnung den Titel, darf das spaet
-        // eintreffende Ergebnis den neuen Titel nicht ueberschreiben.
-        lengthEstimateGeneration &+= 1
-        let generation = lengthEstimateGeneration
-        services.lengthEstimateKey = estimateKey
-
-        lengthEstimateTask = Task.detached(priority: .utility) { [self] in
+    /// Startet die Berechnung neben dem Hauptthread. Wird ein Ergebnis
+    /// uebernommen, muss auch der Sperrbildschirm die neue Dauer erfahren —
+    /// deshalb hier das zusaetzliche `updateNowPlaying`.
+    private func startLengthEstimate(_ ticket: SongLengthEstimateTicket) -> Task<Void, Never> {
+        // Den Resolver VOR dem Task greifen: `lengthResolver` ist eine `lazy`
+        // Eigenschaft des MainActor-gebundenen AppModel und darf aus dem
+        // abgeloesten Task nicht mehr angefasst werden.
+        let resolver = lengthResolver
+        return Task.detached(priority: .utility) { [self] in
             do {
-                try Task.checkCancellation()
-                let data = try Data(contentsOf: fileURL)
-                let sidFile = try SidParser.parse(data: data)
-                let result = try SongLengthEstimator.estimate(sidFile: sidFile, subtune: subtune)
-                try Task.checkCancellation()
-                cache.store(md5: md5, subtune: subtune, seconds: result ?? -1)
-
+                let result = try resolver.runEstimate(ticket: ticket)
                 await MainActor.run {
-                    guard self.lengthEstimateGeneration == generation,
-                          self.services.lengthEstimateKey == estimateKey else { return }
                     self.lengthEstimateTask = nil
-                    self.services.lengthEstimateKey = nil
-                    if self.currentMD5 == md5,
-                       self.coordinator.currentSubtune == subtune,
-                       let result {
-                        self.computedLength = result
+                    if let accepted = resolver.accept(
+                        result,
+                        ticket: ticket,
+                        currentMD5: self.currentMD5,
+                        currentSubtune: self.coordinator.currentSubtune) {
+                        self.computedLength = accepted
                         self.updateNowPlaying(force: true)
                     }
                 }
             } catch is CancellationError {
                 // Titel gewechselt: fuer eine absichtlich abgebrochene Analyse
-                // darf KEIN negatives Ergebnis in den Cache.
+                // cached der Resolver bewusst nichts.
             } catch {
                 await MainActor.run {
-                    if self.lengthEstimateGeneration == generation {
-                        self.lengthEstimateTask = nil
-                        self.services.lengthEstimateKey = nil
-                    }
+                    self.lengthEstimateTask = nil
+                    resolver.fail(ticket: ticket)
                 }
             }
         }
@@ -554,8 +536,7 @@ extension AppModel {
     func cancelLengthEstimate() {
         lengthEstimateTask?.cancel()
         lengthEstimateTask = nil
-        services.lengthEstimateKey = nil
-        lengthEstimateGeneration &+= 1
+        lengthResolver.cancel()
     }
 
     // MARK: - Sitzung
