@@ -61,7 +61,12 @@ final class PCMSinkTests: XCTestCase {
     /// Erzeugt eine Ausgabedatei und das zugehoerige Schreib-Handle.
     private func makeOutputFile(_ name: String) throws -> (url: URL, handle: FileHandle) {
         let url = directory.appendingPathComponent(name)
-        FileManager.default.createFile(atPath: url.path, contents: nil)
+        // Rueckgabewert bewusst verworfen: Schlaegt das Anlegen fehl, faellt genau
+        // das eine Zeile weiter beim Oeffnen des Handles auf, und zwar mit dem
+        // aussagekraeftigeren Fehler. Das `_ =` ist noetig, weil Apples Foundation
+        // die Methode als @discardableResult fuehrt, die Linux-Foundation aber
+        // nicht — ohne die Zuweisung warnt nur der Linux-Build.
+        _ = FileManager.default.createFile(atPath: url.path, contents: nil)
         return (url, try FileHandle(forWritingTo: url))
     }
 
