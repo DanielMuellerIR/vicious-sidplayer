@@ -53,9 +53,24 @@ public struct SonglengthDB: Sendable {
         cancellationCheck: () throws -> Void
     ) throws -> SonglengthDB {
         var entries: [String: [Double]] = [:]
-        for (index, line) in text.split(separator: "\n", omittingEmptySubsequences: true).enumerated() {
+        // Zeilen an JEDEM Zeilenumbruch trennen, nicht nur an "\n".
+        //
+        // Warum das wichtig ist: Die HVSC liefert ihre Songlengths.md5 mit
+        // Windows-Zeilenenden aus. In Swift ist "\r\n" EIN einzelnes Character
+        // und damit ungleich "\n" — `split(separator: "\n")` fand darin also gar
+        // keine Trennstelle und lieferte die komplette Datei als eine einzige
+        // Zeile zurueck. Die scheiterte dann an der 32-Zeichen-Pruefung des MD5,
+        // und die Datenbank kam mit NULL Eintraegen heraus: Der Nutzer importierte
+        // seine Songlaengen, sah "0 Einträge", und saemtliche Laengen fielen still
+        // auf die Hintergrund-Schaetzung und das 360-Sekunden-Fallback zurueck.
+        //
+        // `isNewline` deckt "\n", "\r\n" und ein einzelnes "\r" gleichermassen ab.
+        // Zusaetzlich wird unten mit `.whitespacesAndNewlines` getrimmt: `.whitespaces`
+        // allein enthaelt kein Wagenruecklaufzeichen und liess es am Zeilenende
+        // stehen, wodurch der letzte Laengenwert jeder Zeile unlesbar wurde.
+        for (index, line) in text.split(whereSeparator: \.isNewline).enumerated() {
             if index.isMultiple(of: 256) { try cancellationCheck() }
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             // Kommentare (Datei-Pfade) und Sektions-Kopf ueberspringen.
             if trimmed.isEmpty || trimmed.hasPrefix(";") || trimmed.hasPrefix("[") { continue }
             guard let eq = trimmed.firstIndex(of: "=") else { continue }

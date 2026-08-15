@@ -473,6 +473,45 @@ final class ViciousTests: XCTestCase {
 
     // Songlengths.md5-Parser: Kommentare/Sektionen ignorieren, M:SS und
     // M:SS.mmm parsen, Attribute in Klammern abschneiden, kaputte Zeilen skippen.
+    // Regression: Die HVSC liefert ihre Songlengths.md5 mit Windows-Zeilenenden.
+    //
+    // In Swift ist "\r\n" EIN Character und damit ungleich "\n". Ein Trennen an
+    // "\n" fand darin also gar keine Trennstelle: die komplette Datei kam als
+    // eine einzige Zeile heraus, scheiterte an der 32-Zeichen-Pruefung des MD5 —
+    // und die Datenbank hatte NULL Eintraege. Der Nutzer importierte seine
+    // Songlaengen, sah "0 Einträge", und alle Laengen fielen still auf die
+    // Hintergrund-Schaetzung und das 360-Sekunden-Fallback zurueck.
+    //
+    // Der zweite Teil derselben Falle: `.whitespaces` enthaelt kein
+    // Wagenruecklaufzeichen. Selbst bei richtig getrennten Zeilen blieb es am
+    // Ende stehen und machte den letzten Laengenwert jeder Zeile unlesbar.
+    func testSonglengthDBParsesWindowsLineEndings() {
+        let crlf = "[Database]\r\n"
+            + "; /MUSICIANS/T/Tel_Jeroen/Cybernoid.sid\r\n"
+            + "c2a01b2e5a55278e6b37b1d63a11e19c=2:51 1:07 0:45\r\n"
+            + "d3b07384d113edec49eaa6238ad5ff00=1:30\r\n"
+
+        let db = SonglengthDB.parse(text: crlf)
+        XCTAssertEqual(db.count, 2, "Beide Eintraege muessen erkannt werden")
+        XCTAssertEqual(db.lengths(forMD5: "c2a01b2e5a55278e6b37b1d63a11e19c"),
+                       [171, 67, 45],
+                       "Auch der LETZTE Wert der Zeile muss ankommen")
+        // Ein Tune mit nur einem Subtune war der schlimmste Fall: sein einziger
+        // Wert war zugleich der letzte, der Eintrag verschwand also ganz.
+        XCTAssertEqual(db.lengths(forMD5: "d3b07384d113edec49eaa6238ad5ff00"), [90])
+
+        // Dieselbe Datenbank mit Unix-Zeilenenden muss dasselbe ergeben.
+        let lf = crlf.replacingOccurrences(of: "\r\n", with: "\n")
+        let unixDB = SonglengthDB.parse(text: lf)
+        XCTAssertEqual(unixDB.count, db.count)
+        XCTAssertEqual(unixDB.lengths(forMD5: "c2a01b2e5a55278e6b37b1d63a11e19c"),
+                       db.lengths(forMD5: "c2a01b2e5a55278e6b37b1d63a11e19c"))
+
+        // Klassische Mac-Zeilenenden (nur Wagenruecklauf) ebenfalls.
+        let cr = crlf.replacingOccurrences(of: "\r\n", with: "\r")
+        XCTAssertEqual(SonglengthDB.parse(text: cr).count, 2)
+    }
+
     func testSonglengthDBParse() {
         let text = """
         [Database]
