@@ -545,8 +545,35 @@ public final class MusicLibrary: @unchecked Sendable {
     /// Fehlerweitergabe: schlaegt es fehl, scheitert der naechste echte Zugriff
     /// mit einer aussagekraeftigeren Meldung.
     private func ensureDirectories() {
-        try? fileManager.createDirectory(at: root, withIntermediateDirectories: true)
-        try? fileManager.createDirectory(at: supportDirectory, withIntermediateDirectories: true)
+        try? LibraryDirectory.ensure(root, fm: fileManager)
+        try? LibraryDirectory.ensure(supportDirectory, fm: fileManager)
+    }
+}
+
+// Verzeichnis anlegen, falls es fehlt — fuer Bibliothek, Importer, Reset und
+// Ortsbestimmung.
+//
+// Warum das nicht einfach `createDirectory(withIntermediateDirectories: true)`
+// ist: Auf manchen Dateisystemen scheitert der Aufruf auch dann, wenn das
+// Verzeichnis bereits existiert. Wer den Fehler ungeprueft weiterreicht, meldet
+// also ein Problem, wo keins ist. Deshalb wird im Fehlerfall nachgesehen, ob das
+// Ziel inzwischen (oder schon vorher) als Verzeichnis dasteht.
+//
+// Diese Nachpruefung stand vorher an vier Stellen in leicht verschiedenen
+// Fassungen. Hier steht sie einmal; die Aufrufer unterscheiden sich nur noch
+// darin, WAS sie im Fehlerfall melden.
+enum LibraryDirectory {
+    /// - Throws: den urspruenglichen Dateisystemfehler, wenn danach immer noch
+    ///   kein Verzeichnis da ist (etwa weil an der Stelle eine Datei liegt).
+    ///   Aufrufer mit eigenem Fehlertyp fangen ihn und uebersetzen.
+    static func ensure(_ url: URL, fm: FileManager) throws {
+        do {
+            try fm.createDirectory(at: url, withIntermediateDirectories: true)
+        } catch {
+            var isDirectory: ObjCBool = false
+            let exists = fm.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            if !(exists && isDirectory.boolValue) { throw error }
+        }
     }
 }
 

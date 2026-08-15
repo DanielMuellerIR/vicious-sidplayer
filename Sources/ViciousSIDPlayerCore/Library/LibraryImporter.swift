@@ -296,14 +296,9 @@ public struct LibraryImporter: Sendable {
         // Auftrag gelingen: dann ist der dokumentierte Gesamtfehler faellig,
         // statt jede Datei einzeln mit "copyFailed" scheitern zu lassen.
         do {
-            try fm.createDirectory(at: library.root, withIntermediateDirectories: true)
+            try LibraryDirectory.ensure(library.root, fm: fm)
         } catch {
-            var isDirectory: ObjCBool = false
-            let rootExists = fm.fileExists(atPath: library.root.path, isDirectory: &isDirectory)
-                && isDirectory.boolValue
-            if !rootExists {
-                throw LibraryImportError.destinationUnavailable(error.localizedDescription)
-            }
+            throw LibraryImportError.destinationUnavailable(error.localizedDescription)
         }
 
         var imported: [String] = []

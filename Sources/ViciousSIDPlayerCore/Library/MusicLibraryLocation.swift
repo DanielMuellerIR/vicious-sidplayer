@@ -89,14 +89,13 @@ public enum MusicLibraryLocation {
     }
 
     /// Legt das Verzeichnis bei Bedarf an und liefert es zurueck; `nil`, wenn
-    /// das nicht gelingt (z.B. weil an der Stelle eine Datei liegt).
+    /// das nicht gelingt (z.B. weil an der Stelle eine Datei liegt). Anders als
+    /// die uebrigen Aufrufer von `LibraryDirectory.ensure` meldet diese Stelle
+    /// keinen Fehler weiter: Wer hier `nil` bekommt, zeigt dem Nutzer ohnehin
+    /// eine eigene Meldung ("Ort nicht verfuegbar").
     private static func ensureDirectory(_ url: URL, fm: FileManager) -> URL? {
-        var isDir: ObjCBool = false
-        if fm.fileExists(atPath: url.path, isDirectory: &isDir) {
-            return isDir.boolValue ? url : nil
-        }
         do {
-            try fm.createDirectory(at: url, withIntermediateDirectories: true)
+            try LibraryDirectory.ensure(url, fm: fm)
             return url
         } catch {
             return nil

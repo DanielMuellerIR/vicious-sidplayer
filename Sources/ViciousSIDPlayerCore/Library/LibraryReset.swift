@@ -115,16 +115,7 @@ public enum LibraryReset {
         //    abgebrochen — VOR dem Loeschen von Index und Cache. Sonst meldete
         //    der Reset Erfolg, obwohl die Bibliothek danach gar kein
         //    beschreibbares Ziel mehr haette (Review-Fund 2026-08-07).
-        do {
-            try fm.createDirectory(at: root, withIntermediateDirectories: true)
-        } catch {
-            // `createDirectory` scheitert auf manchen Dateisystemen auch dann,
-            // wenn der Ordner bereits existiert. Deshalb erst nachsehen, bevor
-            // der Fehler weitergereicht wird.
-            var isDirectory: ObjCBool = false
-            let exists = fm.fileExists(atPath: root.path, isDirectory: &isDirectory)
-            if !(exists && isDirectory.boolValue) { throw error }
-        }
+        try LibraryDirectory.ensure(root, fm: fm)
 
         // 3. Index und Caches im Support-Ordner. Hier wird namentlich geloescht,
         //    nicht der ganze Ordner geleert: auf iOS ist "Application Support"

@@ -779,6 +779,47 @@ final class LibraryTests: XCTestCase {
         XCTAssertTrue(LibraryReset.isContained(root.appendingPathComponent("A/tief/x.sid"), in: root))
     }
 
+    // Symlinks — der dritte Fall, den die Pfadpruefung laut Kommentar abdeckt,
+    // fuer den es aber bisher keinen Test gab.
+    //
+    // Zwei Richtungen, und sie fallen unterschiedlich aus:
+    //   a) Ein Link, der von AUSSEN in die Bibliothek zeigt, gilt als drinnen —
+    //      denn aufgeloest liegt sein Ziel wirklich dort.
+    //   b) Ein Link, der INNERHALB der Bibliothek liegt, aber nach draussen
+    //      zeigt, gilt als draussen. Das ist die wichtige Richtung: sonst waere
+    //      ein Symlink der einfachste Weg, den Reset auf fremde Ordner zu lenken.
+    func testContainmentResolvesSymlinks() throws {
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        let outside = base.appendingPathComponent("Fremd")
+        try fm.createDirectory(at: outside, withIntermediateDirectories: true)
+        let outsideFile = outside.appendingPathComponent("fremd.sid")
+        try makeSidFixture().write(to: outsideFile)
+
+        // a) Von aussen auf die Bibliothek zeigen.
+        let insideTarget = root.appendingPathComponent("echt.sid")
+        try makeSidFixture().write(to: insideTarget)
+        let linkFromOutside = outside.appendingPathComponent("zeigt-rein.sid")
+        try fm.createSymbolicLink(at: linkFromOutside, withDestinationURL: insideTarget)
+        XCTAssertTrue(LibraryReset.isContained(linkFromOutside, in: root),
+                      "Ein Link auf eine Datei IN der Bibliothek zeigt aufgeloest dorthin")
+
+        // b) Der gefaehrliche Fall: Link liegt drinnen, Ziel liegt draussen.
+        let linkFromInside = root.appendingPathComponent("zeigt-raus.sid")
+        try fm.createSymbolicLink(at: linkFromInside, withDestinationURL: outsideFile)
+        XCTAssertFalse(LibraryReset.isContained(linkFromInside, in: root),
+                       "Ein Link aus der Bibliothek heraus darf NICHT als enthalten gelten")
+
+        // Und der Reset loescht ihn folglich nicht, sondern verweigert die Arbeit,
+        // statt am Link entlang in einen fremden Ordner zu greifen.
+        XCTAssertThrowsError(try LibraryReset.remove(linkFromInside, under: root, fm: fm)) { error in
+            guard case LibraryReset.ResetError.outsideRoot = error else {
+                return XCTFail("Falscher Fehlertyp: \(error)")
+            }
+        }
+        XCTAssertTrue(fm.fileExists(atPath: outsideFile.path),
+                      "Die fremde Zieldatei muss unangetastet bleiben")
+    }
+
     // MARK: - Kleine Helfer
 
     /// Wartet, bis `condition` zutrifft (hoechstens `timeout` Sekunden), ohne
