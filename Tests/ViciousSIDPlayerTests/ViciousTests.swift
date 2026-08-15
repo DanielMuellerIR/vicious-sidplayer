@@ -443,6 +443,34 @@ final class ViciousTests: XCTestCase {
         }
     }
 
+    // Spielzeit-Anzeige. Stand vorher dreimal im Repo — in der Mac-App, in der
+    // iPhone-App und noch einmal in der Quick-Look-Vorschau — und nur die
+    // iPhone-Fassung war robust. Jetzt eine Fassung im Core, hier geprueft.
+    func testPlaytimeFormat() {
+        XCTAssertEqual(PlaytimeFormat.string(0), "0:00")
+        XCTAssertEqual(PlaytimeFormat.string(9), "0:09")
+        XCTAssertEqual(PlaytimeFormat.string(65), "1:05")
+        XCTAssertEqual(PlaytimeFormat.string(600), "10:00")
+        XCTAssertEqual(PlaytimeFormat.string(3661), "1:01:01")
+
+        // Abgerundet: sonst stuende am Ende eines Titels kurz eine Zeit, die
+        // groesser ist als seine Dauer.
+        XCTAssertEqual(PlaytimeFormat.string(59.9), "0:59")
+
+        // Genau die Werte, an denen die frueheren Fassungen scheiterten: der
+        // Positionsregler liefert beim Ziehen gelegentlich NaN oder kurz einen
+        // negativen Wert. "0:-5" war das Ergebnis auf dem Mac; in der
+        // Quick-Look-Vorschau haette ein nicht-endlicher Wert sogar den
+        // Umwandlungsaufruf zum Absturz gebracht.
+        XCTAssertEqual(PlaytimeFormat.string(-5), "0:00")
+        XCTAssertEqual(PlaytimeFormat.string(.nan), "0:00")
+        XCTAssertEqual(PlaytimeFormat.string(.infinity), "0:00")
+        XCTAssertEqual(PlaytimeFormat.string(-.infinity), "0:00")
+
+        // Absurd grosse Werte duerfen nicht abstuerzen, sondern werden gedeckelt.
+        XCTAssertEqual(PlaytimeFormat.string(1e18), "100:00:00")
+    }
+
     // Autoplay-Ordner-Aufloesung (Einstellungen-Dialog): konfigurierter Ordner
     // gewinnt, wenn er existiert; sonst Standard-Ordner; sonst nil.
     func testAutoplayFolderResolve() {

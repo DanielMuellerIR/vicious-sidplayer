@@ -90,8 +90,11 @@ final class PreviewViewController: NSViewController, QLPreviewingController {
         // Laufzeit + Play-Zustand + Subtune-Anzeige live nachfuehren.
         coordinator.$elapsedSeconds
             .sink { [weak self] seconds in
-                let total = Int(seconds)
-                self?.timeLabel.stringValue = String(format: "%d:%02d", total / 60, total % 60)
+                // Ueber den Core, wie Mac- und iPhone-App. Vorher stand hier ein
+                // ungeprueftes `Int(seconds)` — das ist in Swift kein
+                // Schoenheitsfehler, sondern ein Absturz, sobald der Wert
+                // unendlich oder NaN ist.
+                self?.timeLabel.stringValue = PlaytimeFormat.string(seconds)
             }
             .store(in: &cancellables)
         coordinator.$isPlaying

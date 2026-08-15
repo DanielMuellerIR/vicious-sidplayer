@@ -1087,11 +1087,12 @@ public struct MainView: View {
         lengthEstimateGeneration &+= 1
     }
 
+    // Die Rechnung steht im Core (`PlaytimeFormat`) — iPhone-App und
+    // Quick-Look-Vorschau zeigen dieselbe Spielzeit an. Frueher stand hier eine
+    // eigene, schwaechere Fassung: sie liess negative Zwischenwerte des
+    // Positionsreglers als "0:-5" durch und kannte keine Stunden.
     private func formatTime(_ sec: Double) -> String {
-        guard sec.isFinite && !sec.isNaN else { return "0:00" }
-        let m = Int(sec) / 60
-        let s = Int(sec) % 60
-        return String(format: "%d:%02d", m, s)
+        PlaytimeFormat.string(sec)
     }
 
     private func setupMenuNotificationHandlers() {
