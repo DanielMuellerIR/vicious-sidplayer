@@ -306,6 +306,61 @@ final class ViciousTests: XCTestCase {
         // Kein Crash == bestanden.
     }
 
+    // Puls-Wellenform in ihren Grenzfaellen: Pulsbreite 0 und Frequenz 0.
+    //
+    // Warum das ein eigener Test ist: Der Puls-Pfad glaettet die Flanke im
+    // Sample-Raster ueber einen Faktor `step`, der bei sehr langsamen
+    // Oszillatoren bewusst unendlich wird (ideale Rechteckflanke — so rechnet
+    // auch die HTML5-Engine, siehe Tests/parity-html5.sh). Damit entstehen im
+    // Rechenweg absichtlich nicht-endliche Zwischenwerte. In JavaScript ist das
+    // harmlos, weil dort das abschliessende Zuschneiden auf 32 Bit aus Unendlich
+    // und NaN eine 0 macht; in Swift wuerde dieselbe Umwandlung hart abstuerzen.
+    // Dieser Test haelt fest, dass die Emulation solche Kombinationen
+    // ueberlebt und weiter endliche Samples liefert.
+    func testPulseWaveformEdgeCasesStayFinite() throws {
+        // 6502-Routine: Puls-Wellenform mit Pulsbreite 0 UND Frequenz 0 —
+        // beides zusammen ist der ungemuetlichste Fall.
+        var code: [UInt8] = []
+        code += [0xA9, 0x0F, 0x8D, 0x18, 0xD4]  // LDA #$0F / STA $D418  Lautstaerke 15
+        code += [0xA9, 0x00, 0x8D, 0x05, 0xD4]  // LDA #$00 / STA $D405  Attack/Decay 0
+        code += [0xA9, 0xF0, 0x8D, 0x06, 0xD4]  // LDA #$F0 / STA $D406  Sustain 15
+        code += [0xA9, 0x00, 0x8D, 0x02, 0xD4]  // LDA #$00 / STA $D402  Pulsbreite = 0
+        code += [0xA9, 0x00, 0x8D, 0x03, 0xD4]  // LDA #$00 / STA $D403
+        code += [0xA9, 0x00, 0x8D, 0x00, 0xD4]  // LDA #$00 / STA $D400  Frequenz = 0
+        code += [0xA9, 0x00, 0x8D, 0x01, 0xD4]  // LDA #$00 / STA $D401
+        code += [0xA9, 0x41, 0x8D, 0x04, 0xD4]  // LDA #$41 / STA $D404  Puls + Gate
+        code += [0x60]                          // RTS
+        let playOffset = UInt16(code.count)
+        code += [0x60]                          // play: RTS (Register bleiben stehen)
+
+        var bytes = [UInt8](repeating: 0, count: 0x7C)
+        bytes[0] = 0x50; bytes[1] = 0x53; bytes[2] = 0x49; bytes[3] = 0x44 // "PSID"
+        bytes[5] = 0x02                                     // Version 2
+        bytes[7] = 0x7C                                     // dataOffset
+        bytes[8] = 0x10; bytes[9] = 0x00                    // loadAddr = 0x1000
+        bytes[10] = 0x10; bytes[11] = 0x00                  // initAddr = 0x1000
+        bytes[12] = UInt8((0x1000 + playOffset) >> 8)       // playAddr
+        bytes[13] = UInt8((0x1000 + playOffset) & 0xFF)
+        bytes[15] = 1                                       // songs = 1
+        bytes[17] = 0x01                                    // startSong = 1
+        bytes[0x77] = 0x20                                  // Modell 8580
+
+        let sid = try SidParser.parse(data: Data(bytes) + Data(code))
+        let processor = ViciousProcessor(sampleRate: 44100.0)
+        _ = processor.loadSID(sidFile: sid)
+        processor.initSubtune(sub: 0)
+        processor.setVolume(vol: 1.0)
+
+        // Ein Absturz hier waere das eigentliche Fehlerbild; zusaetzlich pruefen
+        // wir, dass kein NaN/Unendlich bis in die Audioausgabe durchschlaegt.
+        for index in 0..<20000 {
+            let sample = processor.play()
+            guard sample.isFinite else {
+                return XCTFail("Sample \(index) ist nicht endlich: \(sample)")
+            }
+        }
+    }
+
     // Autoplay-Ordner-Aufloesung (Einstellungen-Dialog): konfigurierter Ordner
     // gewinnt, wenn er existiert; sonst Standard-Ordner; sonst nil.
     func testAutoplayFolderResolve() {

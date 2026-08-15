@@ -109,7 +109,6 @@ public final class ViciousProcessor: Sendable {
     nonisolated(unsafe) private var noise_LFSR = [UInt32](repeating: 0x7FFFF8, count: 9)
     nonisolated(unsafe) private var prevwfout = [Double](repeating: 0.0, count: 9)
     nonisolated(unsafe) private var prevwavdata = [Double](repeating: 0.0, count: 9)
-    nonisolated(unsafe) private var combiwf: Double = 0.0
     nonisolated(unsafe) private var prevlowpass = [Double](repeating: 0.0, count: 3)
     nonisolated(unsafe) private var prevbandpass = [Double](repeating: 0.0, count: 3)
 
@@ -676,9 +675,13 @@ public final class ViciousProcessor: Sendable {
         var idx = index
         if differ6581 && SID_model == 6581.0 { idx &= 0x7FF }
         let safeIdx = max(0, min(wfarray.count - 1, idx))
-        combiwf = (wfarray[safeIdx] + prevwavdata[channel]) / 2.0
+        // Mittelwert aus aktuellem und vorigem Tabellenwert — das glaettet den
+        // Sprung zwischen zwei Abtastpunkten der kombinierten Wellenform. Der
+        // Wert ist reine Zwischenrechnung und war frueher unnoetig ein Feld der
+        // Klasse; als lokale Groesse teilt ihn kein anderer Kanal mehr.
+        let smoothed = (wfarray[safeIdx] + prevwavdata[channel]) / 2.0
         prevwavdata[channel] = wfarray[safeIdx]
-        return combiwf
+        return smoothed
     }
 
     private func SID_core(num: Int, SIDaddr: Int) -> Double {
@@ -793,16 +796,38 @@ public final class ViciousProcessor: Sendable {
                 wfout = (wf & 0x70) != 0 ? 0.0 : (bit0 + bit1 + bit2 + bit3 + bit4 + bit5 + bit6 + bit7)
             } else if (wf & PULSE_BITMASK) != 0 {
                 let pw = Double(UInt16(memory[chnadd + 2]) | UInt16(memory[chnadd + 3] & 0xF) << 8) * 16.0
-                var tmpAcc = Double(Int(accuadd) >> 9)
+                // Wirksame Pulsbreite: sehr schmale und sehr breite Pulse kann der
+                // SID bei hohen Frequenzen nicht mehr aufloesen, deshalb begrenzt
+                // jsSID sie nach unten UND oben. Beide Schranken leiten sich aus
+                // derselben Groesse ab — accuadd um 9 Bit nach rechts geschoben:
+                // sie selbst ist die Untergrenze, ihre 16-Bit-Spiegelung
+                // (XOR 0xFFFF) die Obergrenze.
+                //
+                // Frueher stand hier fuer die Obergrenze `Int(accuadd) ^ 0xFFFF`,
+                // also die Spiegelung des UNGESCHOBENEN Werts. Das ergab je nach
+                // Frequenz eine viel zu strenge oder gar keine Begrenzung; die
+                // native Engine klang bei Puls-Stimmen hoerbar anders als die
+                // HTML5-Engine des Projekts und als jsSID 0.9.1 (Nachweis:
+                // Tests/parity-html5.sh).
+                let accuShifted = Int(accuadd) >> 9
+                let pwLowerBound = Double(accuShifted)
+                let pwUpperBound = Double(accuShifted ^ 0xFFFF)
                 var activePw = pw
-                if pw > 0.0 && pw < tmpAcc { activePw = tmpAcc }
-                tmpAcc = Double(Int(accuadd) ^ 0xFFFF)
-                if activePw > tmpAcc { activePw = tmpAcc }
+                if pw > 0.0 && pw < pwLowerBound { activePw = pwLowerBound }
+                if activePw > pwUpperBound { activePw = pwUpperBound }
                 
                 let phaseVal = Double(Int(phaseaccu[channel]) >> 8)
                 if wf == PULSE_BITMASK {
-                    let stepScaler = Double(Int(accuadd) >> 16)
-                    let step = stepScaler > 0.0 ? 256.0 / stepScaler : 256.0
+                    // `step` steuert, wie steil die Puls-Flanke im Sample-Raster
+                    // nachgebildet wird. Je langsamer der Oszillator laeuft (kleines
+                    // accuadd), desto groesser step und desto haerter die Flanke.
+                    // Unterhalb von 0x10000 kommt der Oszillator pro Sample nicht
+                    // einmal einen vollen 16-Bit-Schritt voran — dann ist gar keine
+                    // Glaettung mehr noetig und step wird unendlich, also die ideale
+                    // Rechteckflanke. Die HTML5-Engine des Projekts erreicht das ueber
+                    // die IEEE-Division durch null; hier stand frueher ersatzweise 256,
+                    // also ausgerechnet die weichste statt der haertesten Flanke.
+                    let step = 256.0 / Double(Int(accuadd) >> 16)
                     if test != 0 {
                         wfout = 65535.0
                     } else if phaseVal < activePw {
@@ -815,7 +840,13 @@ public final class ViciousProcessor: Sendable {
                         if lim > 65535.0 { lim = 65535.0 }
                         wfout = (65535.0 - phaseVal) * step - lim
                         if wfout >= 0.0 { wfout = 65535.0 }
-                        wfout = Double(Int(wfout) & 0xFFFF)
+                        // JavaScript schneidet hier mit ToInt32 auf 32 Bit zu; fuer
+                        // Unendlich und NaN liefert das eine 0. Swift wuerde bei beidem
+                        // hart abstuerzen, deshalb dieselbe Regel ausdruecklich
+                        // nachbilden — gleiches Muster wie beim OSC3-Readback weiter
+                        // unten. Nicht-endlich wird hier tatsaechlich erreicht, seit
+                        // step bei langsamen Oszillatoren unendlich sein darf.
+                        wfout = wfout.isFinite ? Double(Int(wfout) & 0xFFFF) : 0.0
                     }
                 } else {
                     wfout = (phaseVal >= activePw || test != 0) ? 65535.0 : 0.0
