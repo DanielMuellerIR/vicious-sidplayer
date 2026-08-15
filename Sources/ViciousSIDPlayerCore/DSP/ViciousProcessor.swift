@@ -227,7 +227,13 @@ public final class ViciousProcessor: Sendable {
             initCPU(mempos: initaddr)
             initSID()
 
-            A = UInt8(subtune)
+            // Die Subtune-Nummer wird der init-Routine im Akku uebergeben — einem
+            // 8-Bit-Register des C64. Der Parser klemmt die Anzahl bereits auf die
+            // vom Format erlaubten 256, aber initSubtune(sub:) ist oeffentlich und
+            // koennte auch direkt mit einem groesseren Wert gerufen werden. Ein
+            // pruefendes UInt8(...) wuerde dann abstuerzen; abschneiden entspricht
+            // dem, was die Hardware und die C-Vorlage tun.
+            A = UInt8(truncatingIfNeeded: subtune)
             memory[1] = 0x37
             memory[0xDC05] = 0
 

@@ -27,6 +27,15 @@ public struct SidFileData: Sendable {
 
 public enum SidParser {
     public static func parse(data: Data) throws -> SidFileData {
+        // Alle Offsets unten sind Header-Positionen ab Dateianfang. Ein `Data`,
+        // das ein Ausschnitt eines groesseren ist, beginnt aber NICHT bei Index 0
+        // — `data[0x16]` laese dann an voellig anderer Stelle oder stuerzte ab.
+        // Heute uebergeben alle Aufrufer vollstaendige Dateien, doch das ist eine
+        // Eigenschaft der Aufrufer und keine der Schnittstelle. Deshalb hier
+        // einmal normalisieren; fuer den Normalfall kostet das nichts, weil
+        // dann gar nicht kopiert wird.
+        let data = data.startIndex == 0 ? data : Data(data)
+
         guard data.count >= 0x7C else {
             throw ParserError.invalidSize
         }
@@ -47,8 +56,17 @@ public enum SidParser {
         var loadAddr = readUInt16(8)
         let initAddr = readUInt16(10)
         let playAddr = readUInt16(12)
-        let subtunes = Int(readUInt16(14))
-        
+        // Anzahl der Subtunes. Das SID-Dateiformat erlaubt 1 bis 256 — die
+        // Nummer wird der init-Routine im 8-Bit-Akku des C64 uebergeben, mehr
+        // passt dort physisch nicht hinein. Eine fehlerhafte Datei kann hier
+        // aber jeden Wert bis 65535 behaupten, und der lief bisher ungeprueft
+        // durch: Sobald irgendwo Subtune 256 oder hoeher gewaehlt wurde, stuerzte
+        // die Emulation beim Fuellen des Akkus ab. Erreichbar war das aus allen
+        // vier Frontends (CLI mit --subtune, Subtune-Auswahl in beiden Apps,
+        // Quick Look, WAV-Export). Deshalb hier an der Dateigrenze auf den
+        // gueltigen Bereich klemmen.
+        let subtunes = min(256, max(1, Int(readUInt16(14))))
+
         // Timer modes: 32 bits starting at offset 18 (each bit maps to a subtune)
         var timermodes = [Bool](repeating: false, count: 32)
         for i in 0..<32 {

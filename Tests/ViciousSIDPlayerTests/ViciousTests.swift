@@ -206,6 +206,88 @@ final class ViciousTests: XCTestCase {
         // Kein Crash == bestanden.
     }
 
+    // Regression: Eine fehlerhafte Datei darf keine Subtune-Zahl jenseits des
+    // Formats durchreichen.
+    //
+    // Das SID-Format erlaubt 1 bis 256 Subtunes, weil die Nummer der init-Routine
+    // im 8-Bit-Akku des C64 uebergeben wird. Eine kaputte Datei kann im Header
+    // trotzdem bis 65535 behaupten. Das lief ungeprueft durch, und sobald
+    // irgendwo Subtune 256 oder hoeher gewaehlt wurde, stuerzte die Emulation ab —
+    // erreichbar aus allen vier Frontends (CLI `--subtune`, Subtune-Auswahl in
+    // Mac- und iPhone-App, Quick Look, WAV-Export).
+    func testAbsurdSubtuneCountIsClampedToFormatMaximum() throws {
+        var bytes = [UInt8](repeating: 0, count: 0x7C)
+        bytes[0] = 0x50; bytes[1] = 0x53; bytes[2] = 0x49; bytes[3] = 0x44 // "PSID"
+        bytes[5] = 0x02                 // Version 2
+        bytes[7] = 0x7C                 // dataOffset = 0x7C
+        bytes[8] = 0x10; bytes[9] = 0x00 // loadAddr = 0x1000 (explizit)
+        bytes[10] = 0x10                // initAddr = 0x1000
+        bytes[12] = 0x10                // playAddr = 0x1000
+        bytes[14] = 0xFF; bytes[15] = 0xFF // songs = 65535 — weit jenseits des Formats
+        bytes[17] = 0x01                // startSong = 1
+        bytes += [0x60]                 // RTS
+
+        let sid = try SidParser.parse(data: Data(bytes))
+        XCTAssertEqual(sid.subtuneAmount, 256, "Subtune-Zahl muss auf das Formatmaximum geklemmt werden")
+        XCTAssertEqual(sid.metadata.subtunesCount, 256)
+
+        // Der Wert, an dem es frueher zerbrach: Subtune 300 passt nicht in den
+        // 8-Bit-Akku. Auch direkt am Processor darf das nicht abstuerzen.
+        let processor = ViciousProcessor(sampleRate: 44100.0)
+        _ = processor.loadSID(sidFile: sid)
+        processor.setVolume(vol: 1.0)
+        for sub in [255, 256, 300, 65535] {
+            processor.initSubtune(sub: sub)
+            for _ in 0..<200 { _ = processor.play() }
+        }
+        // Kein Crash == bestanden.
+    }
+
+    // Eine Datei, die 0 Subtunes behauptet, muss als 1 gelten — sonst gaebe es
+    // keinen einzigen abspielbaren Subtune und die Auswahl liefe ins Leere.
+    func testZeroSubtuneCountBecomesOne() throws {
+        var bytes = [UInt8](repeating: 0, count: 0x7C)
+        bytes[0] = 0x50; bytes[1] = 0x53; bytes[2] = 0x49; bytes[3] = 0x44 // "PSID"
+        bytes[5] = 0x02
+        bytes[7] = 0x7C
+        bytes[8] = 0x10; bytes[9] = 0x00
+        bytes[10] = 0x10
+        bytes[12] = 0x10
+        // songs bleibt 0
+        bytes += [0x60]
+
+        let sid = try SidParser.parse(data: Data(bytes))
+        XCTAssertEqual(sid.subtuneAmount, 1)
+    }
+
+    // Der Parser muss auch einen Data-AUSSCHNITT richtig lesen. Ein Ausschnitt
+    // beginnt nicht bei Index 0, die Header-Offsets rechnen aber ab Dateianfang.
+    // Ohne Normalisierung laese der Parser an falscher Stelle oder stuerzte ab.
+    func testParsesDataSliceWithNonZeroStartIndex() throws {
+        var bytes = [UInt8](repeating: 0, count: 0x7C)
+        bytes[0] = 0x50; bytes[1] = 0x53; bytes[2] = 0x49; bytes[3] = 0x44 // "PSID"
+        bytes[5] = 0x02
+        bytes[7] = 0x7C
+        bytes[8] = 0x10; bytes[9] = 0x00 // loadAddr = 0x1000
+        bytes[10] = 0x10                 // initAddr = 0x1000
+        bytes[12] = 0x10                 // playAddr = 0x1000
+        bytes[15] = 3                    // songs = 3
+        bytes[0x16] = 0x41; bytes[0x17] = 0x42 // Titel "AB"
+        bytes += [0x60]
+
+        let padded = Data([0xAA, 0xBB, 0xCC]) + Data(bytes)
+        let slice = padded[3...]                       // startIndex == 3
+        XCTAssertEqual(slice.startIndex, 3, "Testaufbau: der Ausschnitt muss versetzt beginnen")
+
+        let fromSlice = try SidParser.parse(data: slice)
+        let fromWhole = try SidParser.parse(data: Data(bytes))
+        XCTAssertEqual(fromSlice.metadata.title, "AB")
+        XCTAssertEqual(fromSlice.metadata.title, fromWhole.metadata.title)
+        XCTAssertEqual(fromSlice.loadAddr, fromWhole.loadAddr)
+        XCTAssertEqual(fromSlice.subtuneAmount, fromWhole.subtuneAmount)
+        XCTAssertEqual(fromSlice.binaryData, fromWhole.binaryData)
+    }
+
     // Regression: Umlaute in den Header-Feldern wurden als Ersatzzeichen
     // angezeigt ("C.H�lsbeck" statt "C.Hülsbeck"), weil die 32-Byte-Felder
     // Title/Author/Released als UTF-8 dekodiert wurden. Laut SID-Spec sind
