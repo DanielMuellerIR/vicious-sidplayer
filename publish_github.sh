@@ -92,7 +92,17 @@ if [[ -n "$FORBIDDEN_NOW" ]]; then
     exit 1
 fi
 
-FORBIDDEN_EVER="$(git rev-list --objects --all | awk '{print $2}' \
+# `git rev-list --objects` schreibt "<objekt-id> <pfad>" — und der Pfad darf
+# Leerzeichen enthalten. `awk '{print $2}'` nahm davon nur das erste Wort: Aus
+# "Sammlung/My Tune.sid" wurde "Sammlung/My", was weder auf .sid endet noch
+# unter audio/ liegt und deshalb durch den Filter rutschte. Eine spaeter
+# geloeschte SID-Datei mit Leerzeichen im Pfad waere so trotz Sperre
+# oeffentlich geworden (Review-Fund 2026-08-17). `cut -d' ' -f2-` entfernt
+# genau die Objekt-ID und laesst den Rest des Pfads unangetastet; Zeilen ohne
+# Pfad (nackte Commit-/Tree-Objekte) fallen durch das grep sowieso heraus.
+FORBIDDEN_EVER="$(git rev-list --objects --all \
+    | grep ' ' \
+    | cut -d' ' -f2- \
     | grep -E -i "$FORBIDDEN_PATTERN" | sort -u || true)"
 if [[ -n "$FORBIDDEN_EVER" ]]; then
     echo "ABBRUCH: Nicht veroeffentlichbare Artefakte stecken in der Git-HISTORIE:" >&2

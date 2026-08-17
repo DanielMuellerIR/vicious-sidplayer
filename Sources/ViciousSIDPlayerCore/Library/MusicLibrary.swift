@@ -371,14 +371,52 @@ public final class MusicLibrary: @unchecked Sendable {
     public static func scanFolder(_ root: URL,
                                   fileManager: FileManager = .default,
                                   excludedFolderNames: Set<String> = []) throws -> [MusicLibraryEntry] {
-        let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
+        let result = try scanFolderAllowingPartialResults(
+            root, fileManager: fileManager, excludedFolderNames: excludedFolderNames)
+        // Alles-oder-nichts: Fuer den Bibliotheksabgleich darf ein halbes
+        // Ergebnis den Index nicht ersetzen.
+        if let failure = result.traversalError {
+            throw MusicLibraryError.scanFailed(failure.message)
+        }
+        return result.entries
+    }
+
+    /// Ergebnis eines Ordner-Scans, der ein Teilergebnis zulaesst.
+    public struct FolderScanResult: Sendable {
+        /// Alle gefundenen und lesbaren SID-Dateien.
+        public let entries: [MusicLibraryEntry]
+        /// Der Ast, an dem die Traversierung scheiterte — `nil`, wenn alles
+        /// lesbar war. `path` ist der konkrete Pfad, `message` der Systemtext.
+        public let traversalError: (path: String, message: String)?
+    }
+
+    /// Derselbe Scan, aber mit Teilergebnis UND Fehler getrennt.
+    ///
+    /// Der Bibliotheksabgleich braucht Alles-oder-nichts; ein per Drag & Drop
+    /// hereingezogener fremder Ordner nicht. Dort liess ein einziger unlesbarer
+    /// Unterordner vorher auch alle bereits gefundenen, lesbaren SID-Dateien
+    /// verschwinden, und die App meldete „Keine .sid Dateien gefunden"
+    /// (Review-Fund 2026-08-17).
+    public static func scanFolderAllowingPartialResults(
+        _ root: URL,
+        fileManager: FileManager = .default,
+        excludedFolderNames: Set<String> = []
+    ) throws -> FolderScanResult {
+        let keys: [URLResourceKey] = [.isRegularFileKey, .isDirectoryKey,
+                                      .fileSizeKey, .contentModificationDateKey]
         let rootComponents = LibraryPath.normalizedComponents(root)
 
         // Der Fehler-Block wird vom Enumerator synchron waehrend der Schleife
-        // gerufen. `false` bedeutet "Enumeration beenden": ein unlesbarer Ast
-        // macht das Gesamtergebnis unbrauchbar, deshalb wird hier nicht
-        // weitergelaufen, sondern unten geworfen.
-        var traversalError: Error?
+        // gerufen. Er merkt sich den ERSTEN Fehler und laeuft weiter, damit ein
+        // Teilergebnis wirklich alle lesbaren Dateien enthaelt; ob daraus ein
+        // Fehlschlag wird, entscheidet der Aufrufer.
+        var traversalError: (path: String, message: String)?
+        /// Liegt dieser relative Pfad in einem ausgeschlossenen Ast?
+        func isExcluded(_ relative: String?) -> Bool {
+            guard !excludedFolderNames.isEmpty, let relative,
+                  let top = relative.split(separator: "/").first else { return false }
+            return excludedFolderNames.contains(String(top))
+        }
         guard let enumerator = fileManager.enumerator(
             at: root,
             includingPropertiesForKeys: keys,
@@ -386,12 +424,25 @@ public final class MusicLibrary: @unchecked Sendable {
             errorHandler: { url, error in
                 // Nur die Wurzel selbst liegt nicht UNTERHALB der Wurzel — so
                 // erkennt man, ob der Fehler die Wurzel oder einen Ast betrifft.
-                let isRoot = LibraryPath.relativePath(of: url, underRootComponents: rootComponents) == nil
+                let relative = LibraryPath.relativePath(of: url, underRootComponents: rootComponents)
+                let isRoot = relative == nil
+                // Ein Fehler aus einem ausdruecklich AUSGESCHLOSSENEN Ast (auf
+                // iOS `Documents/Inbox`) geht die Bibliothek nichts an; er darf
+                // den ganzen Abgleich nicht scheitern lassen
+                // (Review-Fund 2026-08-17).
+                if isExcluded(relative) { return true }
                 let nsError = error as NSError
                 let missing = nsError.domain == NSCocoaErrorDomain
                     && nsError.code == NSFileReadNoSuchFileError
-                if !(isRoot && missing) { traversalError = error }
-                return false
+                if !(isRoot && missing), traversalError == nil {
+                    traversalError = (url.path, error.localizedDescription)
+                }
+                // WEITERLAUFEN statt abbrechen. Der Abbruch machte das
+                // Ergebnis von der alphabetischen Reihenfolge abhaengig: Lag
+                // der unlesbare Ast vorn, fehlten auch alle danach liegenden
+                // lesbaren Dateien. Der strenge `scanFolder` wirft trotzdem —
+                // er wertet `traversalError` aus (Review-Fund 2026-08-17).
+                return true
             }
         ) else {
             throw MusicLibraryError.scanFailed(root.lastPathComponent)
@@ -406,21 +457,24 @@ public final class MusicLibrary: @unchecked Sendable {
             // reicht voellig und kostet nichts.
             if seen.isMultiple(of: 256) { try Task.checkCancellation() }
 
-            guard SidFileType.matches(url) else { continue }
             let values = try? url.resourceValues(forKeys: Set(keys))
-            guard values?.isRegularFile == true else { continue }
-            guard let relative = LibraryPath.relativePath(of: url, underRootComponents: rootComponents) else {
-                continue
-            }
+            let relativeOrNil = LibraryPath.relativePath(of: url, underRootComponents: rootComponents)
             // Ausgeschlossene Aeste (auf iOS `Documents/Inbox`) gehoeren nicht in
             // die Bibliothek. Der Vergleich laeuft ueber die ERSTE Komponente des
             // relativen Pfades, damit ein gleichnamiger Unterordner tiefer im
             // Baum davon unberuehrt bleibt.
-            if !excludedFolderNames.isEmpty,
-               let top = relative.split(separator: "/").first,
-               excludedFolderNames.contains(String(top)) {
+            //
+            // Der ausgeschlossene Ast wird jetzt beim VERZEICHNISEINTRAG
+            // uebersprungen. Vorher lief der Enumerator trotzdem hinein, und ein
+            // unlesbarer Unterordner darin liess den ganzen Abgleich scheitern
+            // (Review-Fund 2026-08-17).
+            if isExcluded(relativeOrNil) {
+                if values?.isDirectory == true { enumerator.skipDescendants() }
                 continue
             }
+            guard SidFileType.matches(url) else { continue }
+            guard values?.isRegularFile == true else { continue }
+            guard let relative = relativeOrNil else { continue }
 
             result.append(MusicLibraryEntry(
                 relativePath: relative,
@@ -432,17 +486,14 @@ public final class MusicLibrary: @unchecked Sendable {
             ))
         }
 
+        // Vor dem Ergebnis: ein abgebrochener Task soll seinen
+        // `CancellationError` behalten.
         try Task.checkCancellation()
-        // Erst jetzt werfen: ein abgebrochener Task soll seinen `CancellationError`
-        // behalten, und ein halbes Ergebnis darf den Index ohnehin nicht ersetzen.
-        if let traversalError {
-            throw MusicLibraryError.scanFailed(traversalError.localizedDescription)
-        }
         // Stabile, plattformunabhaengige Ordnung. Eine "natuerliche" Sortierung
         // (Track2 vor Track10) waere huebscher, ist aber sprachabhaengig und
         // damit nicht reproduzierbar — das darf die UI selbst machen.
         result.sort { $0.relativePath < $1.relativePath }
-        return result
+        return FolderScanResult(entries: result, traversalError: traversalError)
     }
 
     /// Gleicht den Index gegen das Dateisystem ab ("reconcile"), speichert ihn

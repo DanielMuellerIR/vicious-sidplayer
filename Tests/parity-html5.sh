@@ -116,11 +116,20 @@ echo "  OK   $work/js.pcm"
 
 # --- 3. Vergleich -------------------------------------------------------------
 echo "3. Sample-fuer-Sample vergleichen"
-python3 - "$work/js.pcm" "$work/swift.wav" <<'PY'
+python3 - "$work/js.pcm" "$work/swift.wav" "$SECONDS_TO_RENDER" <<'PY'
 import struct, sys
 js  = open(sys.argv[1], "rb").read()
 wav = open(sys.argv[2], "rb").read()[44:]   # 44-Byte-RIFF-Header ueberspringen
-n = min(len(js), len(wav)) // 2
+# Beide Seiten muessen GENAU die erwartete Menge liefern. Vorher verglich der
+# Test nur das gemeinsame Praefix (`min(len(js), len(wav))`): Eine Engine
+# konnte ihre Ausgabe verkuerzen, und der Test meldete sie bei identischem
+# Rest trotzdem als „bitgenau identisch" (Review-Fund 2026-08-17).
+erwartet = int(round(float(sys.argv[3]) * 44100)) * 2   # Samples * 2 Byte, mono
+if len(js) != erwartet or len(wav) != erwartet:
+    print(f"  FAIL Laengen weichen ab: html5={len(js)} B, swift={len(wav)} B, "
+          f"erwartet je {erwartet} B", file=sys.stderr)
+    sys.exit(1)
+n = erwartet // 2
 if n == 0:
     print("  FAIL keine Samples gerendert", file=sys.stderr); sys.exit(1)
 a = struct.unpack(f"<{n}h", js[:n * 2])

@@ -74,6 +74,19 @@ final class PlayerController: @unchecked Sendable {
     private let budget: FrameBudget
 
     private let lock = NSLock()
+    /// Serialisiert ganze BEDIENOPERATIONEN (Start, Play, Pause, Stop,
+    /// Subtune-Wechsel).
+    ///
+    /// `lock` schuetzt nur einzelne Feldzugriffe und wird vor jedem Sink- bzw.
+    /// Processor-Aufruf freigegeben. Zwei Bedienbefehle von Tastatur- und
+    /// MPRIS-Thread konnten sich dadurch ueberholen: Ein dazwischen laufendes
+    /// `stop` wurde danach von `play`/`pause` wieder auf .playing/.paused
+    /// ueberschrieben, und zwei parallele Subtune-Wechsel riefen den Processor
+    /// in anderer Reihenfolge auf, als das gespeicherte `subtune` sagt
+    /// (Review-Fund 2026-08-17). Benachrichtigt wird erst NACH der
+    /// vollstaendigen Operation und ausserhalb dieser Sperre — ein Beobachter
+    /// darf zurueckrufen, ohne sich selbst auszusperren.
+    private let operationLock = NSLock()
     private var currentState: PlaybackState = .stopped
     private var subtune: Int
     private var observer: (@Sendable () -> Void)?
@@ -171,36 +184,64 @@ final class PlayerController: @unchecked Sendable {
             return granted
         }
 
-        try sink.start(render: render)
+        operationLock.lock()
+        do {
+            try sink.start(render: render)
+        } catch {
+            operationLock.unlock()
+            throw error
+        }
         lock.lock()
         currentState = .playing
         lock.unlock()
+        operationLock.unlock()
         notifyObserver()
     }
 
     /// Setzt fort. Auf einem nicht pausierten Player wirkungslos.
     func play() {
+        operationLock.lock()
+        let changed = playLocked()
+        operationLock.unlock()
+        if changed { notifyObserver() }
+    }
+
+    /// Rumpf von play(); der Aufrufer haelt die Operationssperre.
+    /// Rueckgabe: Hat sich der Zustand wirklich geaendert?
+    @discardableResult
+    private func playLocked() -> Bool {
         lock.lock()
-        guard currentState == .paused else { lock.unlock(); return }
+        guard currentState == .paused else { lock.unlock(); return false }
         lock.unlock()
 
-        // Ausserhalb des Locks: sink.resume() kann werfen und ruft fremden Code.
+        // Ausserhalb des Feld-Locks: sink.resume() kann werfen und ruft fremden
+        // Code. Die Operationssperre haelt derweil jeden anderen Befehl auf.
         do {
             try sink.resume()
             lock.lock()
             currentState = .playing
             lock.unlock()
-            notifyObserver()
+            return true
         } catch {
             // Laesst sich die Ausgabe nicht fortsetzen, bleibt der Zustand
             // ehrlich auf „pausiert" stehen, statt etwas zu behaupten.
+            return false
         }
     }
 
     /// Haelt an, ohne den Emulationsstand zu verlieren.
     func pause() {
+        operationLock.lock()
+        let changed = pauseLocked()
+        operationLock.unlock()
+        if changed { notifyObserver() }
+    }
+
+    /// Rumpf von pause(); der Aufrufer haelt die Operationssperre.
+    @discardableResult
+    private func pauseLocked() -> Bool {
         lock.lock()
-        guard currentState == .playing else { lock.unlock(); return }
+        guard currentState == .playing else { lock.unlock(); return false }
         lock.unlock()
 
         do {
@@ -208,19 +249,31 @@ final class PlayerController: @unchecked Sendable {
             lock.lock()
             currentState = .paused
             lock.unlock()
-            notifyObserver()
+            return true
         } catch {
             // Siehe play(): im Zweifel lieber nichts behaupten.
+            return false
         }
     }
 
     /// Schaltet zwischen Pause und Wiedergabe um.
+    ///
+    /// Lesen des Zustands und Umschalten gehoeren in DIESELBE Operation — sonst
+    /// entscheidet der Umschalter auf einem Stand, den ein anderer Thread
+    /// inzwischen geaendert hat.
     func playPause() {
-        switch state {
-        case .playing: pause()
-        case .paused: play()
+        operationLock.lock()
+        lock.lock()
+        let current = currentState
+        lock.unlock()
+        var changed = false
+        switch current {
+        case .playing: changed = pauseLocked()
+        case .paused: changed = playLocked()
         case .stopped: break
         }
+        operationLock.unlock()
+        if changed { notifyObserver() }
     }
 
     /// Naechster Subtune (rotiert am Ende zurueck auf den ersten).
@@ -241,22 +294,34 @@ final class PlayerController: @unchecked Sendable {
     private func switchSubtune(_ pick: (Int, Int) -> Int) {
         guard subtunesCount > 1 else { return }
 
+        // Die GANZE Operation unter der Operationssperre: Auswahl, Speichern und
+        // der Processor-Aufruf gehoeren zusammen. Sonst konnten zwei parallele
+        // Wechsel ihre `initSubtune`-Aufrufe in anderer Reihenfolge ausfuehren
+        // als das gespeicherte `subtune` (Review-Fund 2026-08-17).
+        operationLock.lock()
         lock.lock()
-        guard currentState != .stopped else { lock.unlock(); return }
+        guard currentState != .stopped else {
+            lock.unlock()
+            operationLock.unlock()
+            return
+        }
         subtune = pick(subtune, subtunesCount)
         let target = subtune
         lock.unlock()
 
         processor.initSubtune(sub: target)
+        operationLock.unlock()
         notifyObserver()
     }
 
     /// Beendet endgueltig. Mehrfacher Aufruf ist harmlos.
     func stop() {
+        operationLock.lock()
         sink.stop()
         lock.lock()
         currentState = .stopped
         lock.unlock()
+        operationLock.unlock()
         notifyObserver()
     }
 

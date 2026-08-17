@@ -1106,10 +1106,18 @@ public final class ViciousProcessor: Sendable {
         )
     }
 
+    /// Auf einen Subtune umschalten.
+    ///
+    /// Der Wert wird auf den gueltigen Bereich geklemmt. Ein NEGATIVER Subtune
+    /// kam vorher unveraendert bis `timermode[min(sub, 31)]` durch — fuer -1
+    /// ergibt `min` wieder -1, und der Zugriff beendete den Prozess mit einem
+    /// Index-Trap (Review-Fund 2026-08-17). Die obere Grenze deckte die
+    /// bestehende Abschneidung schon ab.
     public func initSubtune(sub: Int) {
         lock.lock()
         defer { lock.unlock() }
-        initEmulation(subt: sub)
+        let obergrenze = max(0, subtune_amount - 1)
+        initEmulation(subt: min(max(0, sub), obergrenze))
     }
 
     public func setVolume(vol: Double) {

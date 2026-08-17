@@ -25,10 +25,16 @@ final class LibraryImportIntegrationTests: XCTestCase {
     private var model: AppModel!
     /// Quellbaum ausserhalb der Bibliothek, wird nach jedem Test geloescht.
     private var source: URL!
+    /// Eigene UserDefaults-Suite, damit der Test nichts im produktiven
+    /// Speicher der Test-App hinterlaesst (Review-Fund 2026-08-17).
+    private var suiteName: String!
+    private var defaults: UserDefaults!
 
     override func setUp() async throws {
         try await super.setUp()
-        model = AppModel()
+        suiteName = "vsp-import-tests-\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
+        model = AppModel(defaults: defaults)
         source = fm.temporaryDirectory.appendingPathComponent("vicious-import-\(UUID().uuidString)")
         try fm.createDirectory(at: source, withIntermediateDirectories: true)
         await resetLibrary()
@@ -38,6 +44,8 @@ final class LibraryImportIntegrationTests: XCTestCase {
         if let source { try? fm.removeItem(at: source) }
         await resetLibrary()
         model = nil
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults = nil
         try await super.tearDown()
     }
 
@@ -362,5 +370,42 @@ final class LibraryImportIntegrationTests: XCTestCase {
         await waitForLibrary()
         XCTAssertFalse(model.tracks.contains { $0.id == "Fremd/extern.sid" },
                        "Von aussen geloeschte Dateien muessen verschwinden.")
+    }
+
+    // MARK: - Review-Fund 2026-08-17
+
+    /// Der Shuffle-Sonderfall von `restoreSessionIfPossible` mit einer ECHTEN,
+    /// ladbaren Bibliothek.
+    ///
+    /// Der bisherige Test dazu setzte die Bibliothek absichtlich leer — die
+    /// Methode kehrte schon an `guard !tracks.isEmpty` zurueck und erreichte
+    /// weder den Shuffle-Zweig noch die Wiederherstellung. Er waere auch nach
+    /// dem Entfernen der zugesagten Sonderregel gruen geblieben.
+    func testShuffleRestorePreparesARandomTrackInsteadOfTheSavedOne() async throws {
+        try write("A/eins.sid", payload: [0x60, 0x01])
+        try write("A/zwei.sid", payload: [0x60, 0x02])
+        await importSource()
+        XCTAssertEqual(model.tracks.count, 2)
+
+        let gespeichert = try XCTUnwrap(model.tracks.first).id
+        defaults.set(gespeichert, forKey: "lastTrackID")
+        model.setCurrentTrackID(nil)
+
+        // Mit Shuffle: irgendein Titel wird bereitgestellt, aber NICHT gespielt
+        // und nicht zwingend der gespeicherte.
+        model.shuffle = true
+        model.restoreSessionIfPossible()
+        let vorbereitet = try XCTUnwrap(model.currentTrackID,
+                                        "Shuffle muss einen Titel bereitstellen")
+        XCTAssertTrue(model.tracks.contains { $0.id == vorbereitet })
+        XCTAssertFalse(model.coordinator.isPlaying, "Shuffle stellt nur bereit, es spielt nicht los")
+
+        // Ohne Shuffle: genau der gespeicherte Titel kommt zurueck.
+        model.setCurrentTrackID(nil)
+        model.shuffle = false
+        model.restoreSessionIfPossible()
+        XCTAssertEqual(model.currentTrackID, gespeichert,
+                       "Ohne Shuffle wird der gespeicherte Titel wiederhergestellt")
+        XCTAssertFalse(model.coordinator.isPlaying)
     }
 }

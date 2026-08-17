@@ -13,6 +13,28 @@ import ViciousSIDPlayerCore
 // temporaeren Verzeichnis.
 final class AppModelTests: XCTestCase {
 
+    /// Eigene UserDefaults-Suite je Test. Vorher schrieben die Tests in
+    /// `UserDefaults.standard` der Test-App und raeumten nicht auf: Favoriten,
+    /// `shuffle` und die Sitzungsschluessel blieben liegen, die Tests hingen
+    /// damit von ihrer Reihenfolge ab und veraenderten den Simulatorzustand
+    /// ueber den einzelnen Test hinaus (Review-Fund 2026-08-17).
+    private var suiteName: String!
+    private var defaults: UserDefaults!
+
+    override func setUpWithError() throws {
+        suiteName = "vsp-tests-\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
+    }
+
+    override func tearDownWithError() throws {
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults = nil
+    }
+
+    /// Ein Modell auf der Testsuite — nie auf dem produktiven Speicher.
+    @MainActor
+    private func makeModel() -> AppModel { AppModel(defaults: defaults) }
+
     // MARK: - Zeitformatierung
 
     func testFormatTime() {
@@ -97,7 +119,7 @@ final class AppModelTests: XCTestCase {
     // ios/GERAETETEST.md); der Simulator suspendiert anders.
     @MainActor
     func testScenePhaseTogglesVisualisationButNeverStopsPlayback() {
-        let model = AppModel()
+        let model = makeModel()
         XCTAssertTrue(model.isSceneActive)
 
         model.scenePhaseChanged(to: .background)
@@ -118,7 +140,7 @@ final class AppModelTests: XCTestCase {
     // fest, obwohl sie sich mit einer einzigen umgestellten Zeile kippen liesse.
     @MainActor
     func testCurrentDurationFollowsTheDocumentedOrder() {
-        let model = AppModel()
+        let model = makeModel()
 
         // 1. Nichts bekannt -> Fallback.
         model.currentTrackLengths = nil
@@ -148,7 +170,7 @@ final class AppModelTests: XCTestCase {
     // Favoritenfilter duerfen deshalb nicht auseinanderlaufen.
     @MainActor
     func testVisibleTracksAppliesSearchAndFavouritesTogether() {
-        let model = AppModel()
+        let model = makeModel()
         let tracks = [
             LibraryTrack(id: "Hubbard/Commando.sid", name: "Commando", folderPath: "Hubbard"),
             LibraryTrack(id: "Hubbard/Sanxion.sid", name: "Sanxion", folderPath: "Hubbard"),
@@ -182,7 +204,7 @@ final class AppModelTests: XCTestCase {
     // Nutzer etwas anderes waehlt.
     @MainActor
     func testCurrentTrackIsForgottenWhenItDisappearsFromTheLibrary() {
-        let model = AppModel()
+        let model = makeModel()
         let track = LibraryTrack(id: "A/x.sid", name: "x", folderPath: "A")
         model.applyLibrary(tracks: [track], folderTree: .empty)
         model.setCurrentTrackID("A/x.sid")
@@ -198,7 +220,7 @@ final class AppModelTests: XCTestCase {
     // App-Container bekommt bei jeder Neuinstallation eine neue UUID.
     @MainActor
     func testFavouritesToggleRoundTrips() {
-        let model = AppModel()
+        let model = makeModel()
         let id = "Hubbard/Commando.sid"
         let previous = model.defaults.stringArray(forKey: AppModel.Keys.favorites)
         defer { model.defaults.set(previous, forKey: AppModel.Keys.favorites) }
@@ -222,7 +244,7 @@ final class AppModelTests: XCTestCase {
     // Sitzung auf, die der Nutzer laengst vergessen hat.
     @MainActor
     func testSessionStateIsNotWrittenWhileRestoreIsDisabled() {
-        let model = AppModel()
+        let model = makeModel()
         let defaults = model.defaults
         let previousEnabled = defaults.object(forKey: AppModel.Keys.sessionRestore)
         let previousID = defaults.object(forKey: AppModel.Keys.lastTrackID)
@@ -248,13 +270,15 @@ final class AppModelTests: XCTestCase {
                      "clearSessionState muss den Stand wirklich entfernen")
     }
 
-    // Bei aktiver Zufallswiedergabe wird bewusst NICHT wiederhergestellt — wer
-    // Shuffle anlaesst, will bei jedem Start etwas anderes hoeren. Ohne einen
-    // Titel in der Bibliothek passiert ohnehin nichts; genau das haelt dieser
-    // Test fest, damit der Sonderfall beim Umbauen nicht verlorengeht.
+    // Ohne Titel in der Bibliothek passiert nichts — mehr belegt dieser Test
+    // nicht, und mehr behauptet er jetzt auch nicht mehr. Der eigentliche
+    // Shuffle-Vertrag braucht eine ECHTE, ladbare Bibliothek und steht deshalb
+    // in LibraryImportIntegrationTests
+    // (testShuffleRestorePreparesARandomTrackInsteadOfTheSavedOne,
+    // Review-Fund 2026-08-17).
     @MainActor
     func testRestoreDoesNothingWithoutTracks() {
-        let model = AppModel()
+        let model = makeModel()
         model.applyLibrary(tracks: [], folderTree: .empty)
         model.shuffle = true
         model.restoreSessionIfPossible()

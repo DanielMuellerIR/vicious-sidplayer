@@ -112,11 +112,21 @@ public struct MainView: View {
     @State private var songlengthLoadTask: Task<Void, Never>? = nil
     @State private var songlengthLoadGeneration = 0
     @State private var lengthEstimateTask: Task<Void, Never>? = nil
+    /// Wem gehoert `lengthEstimateTask` gerade? Ohne diese Angabe leerte der
+    /// spaete Abschluss von Schaetzung A den Griff bedingungslos und traf damit
+    /// die inzwischen eingetragene Schaetzung B (Review-Fund 2026-08-17).
+    @State private var lengthEstimateOwner: SongLengthEstimateTicket? = nil
     // Die Reihenfolge der Laengenquellen und die Buchfuehrung ueber die laufende
     // Berechnung stehen im Core (`SongLengthResolver`) — dieselbe Instanz der
     // Regel wie in der iPhone-App, und dort auch getestet. Die Ansicht haelt nur
     // noch den Task.
-    private let lengthResolver = SongLengthResolver()
+    // `@State` statt `let`: Der Resolver ist eine ZUSTANDSBEHAFTETE Referenz
+    // (activeKey, generation). Als normales `private let` bekam jede
+    // Neuerzeugung der Ansicht eine frische Instanz, waehrend der Task im
+    // SwiftUI-Zustand ueberlebte — Deduplikation, Generation und Abbruch liefen
+    // dann auf verschiedenen Instanzen (Review-Fund 2026-08-17). `@State` haelt
+    // die erste Instanz ueber alle Neuerzeugungen hinweg fest.
+    @State private var lengthResolver = SongLengthResolver()
     // Pfad zur Songlengths.md5 aus den Einstellungen ("" = automatisch suchen).
     @AppStorage("songlengthsPath") private var songlengthsPath = ""
 
@@ -772,11 +782,21 @@ public struct MainView: View {
         loadLog.info("handleDroppedURLs: \(urls.count, privacy: .public) Eingabe-URL(s)")
         self.errorMessage = nil
 
-        let sidFiles = collectSIDURLs(from: urls)
+        let (sidFiles, unreadable) = collectSIDURLs(from: urls)
         guard !sidFiles.isEmpty else {
             loadLog.error("handleDroppedURLs: keine .sid Dateien in der Eingabe gefunden")
-            self.errorMessage = "Keine .sid Dateien gefunden."
+            // Den unlesbaren Ast konkret nennen: „Keine .sid Dateien gefunden"
+            // waere hier die falsche Auskunft.
+            if let blocked = unreadable.first {
+                self.errorMessage = "Keine .sid Dateien gefunden. Nicht lesbar: \(blocked)"
+            } else {
+                self.errorMessage = "Keine .sid Dateien gefunden."
+            }
             return
+        }
+        if let blocked = unreadable.first {
+            loadLog.error("handleDroppedURLs: Ast nicht lesbar: \(blocked, privacy: .public)")
+            self.errorMessage = "Ein Ordner war nicht lesbar: \(blocked)"
         }
         loadLog.info("handleDroppedURLs: \(sidFiles.count, privacy: .public) .sid Datei(en) gefunden")
 
@@ -797,9 +817,10 @@ public struct MainView: View {
     // Sortiert wird natuerlich nach Dateiname ("Track2" vor "Track10"), damit
     // ein hereingezogener Ordner in derselben Ordnung erscheint wie die
     // Bibliothek.
-    private func collectSIDURLs(from urls: [URL]) -> [URL] {
+    private func collectSIDURLs(from urls: [URL]) -> (urls: [URL], unreadable: [String]) {
         let fm = FileManager.default
         var found: [URL] = []
+        var unreadable: [String] = []
 
         for url in urls {
             // codereview-ok: App nicht sandboxed -> security-scoped calls sind No-Op; latent falls je Sandbox aktiviert wird (2026-07-01)
@@ -809,20 +830,29 @@ public struct MainView: View {
             var isDir: ObjCBool = false
             guard fm.fileExists(atPath: url.path, isDirectory: &isDir) else { continue }
             if isDir.boolValue {
-                // Ein unlesbarer Ast laesst den Scan werfen. Fuer einen fremden
-                // Ordner ist das kein Grund zur Meldung: dann bleibt es bei dem,
-                // was sonst noch in der Eingabe steckt, und wenn gar nichts
-                // uebrig bleibt, sagt das die Meldung oben.
-                let entries = (try? MusicLibrary.scanFolder(url, fileManager: fm)) ?? []
-                found.append(contentsOf: entries.map { $0.url(relativeTo: url) })
+                // Teilergebnis UND Fehler getrennt: Ein einziger unlesbarer
+                // Unterordner liess vorher auch alle bereits gefundenen,
+                // LESBAREN Titel desselben Ordners verschwinden — die App
+                // meldete dann „Keine .sid Dateien gefunden"
+                // (Review-Fund 2026-08-17).
+                let scan = try? MusicLibrary.scanFolderAllowingPartialResults(
+                    url, fileManager: fm)
+                if let scan {
+                    found.append(contentsOf: scan.entries.map { $0.url(relativeTo: url) })
+                    if let failure = scan.traversalError {
+                        unreadable.append(failure.path)
+                    }
+                } else {
+                    unreadable.append(url.path)
+                }
             } else if SidFileType.matches(url) {
                 found.append(url)
             }
         }
 
-        return found.sorted {
+        return (found.sorted {
             $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
-        }
+        }, unreadable)
     }
 
     /// Probiert beim Start alle Playlist-Eintraege zyklisch. So blockiert weder
@@ -1040,6 +1070,7 @@ public struct MainView: View {
             computedLength = seconds
         case .estimate(let ticket):
             lengthEstimateTask?.cancel()
+            lengthEstimateOwner = ticket
             lengthEstimateTask = startLengthEstimate(ticket)
         }
     }
@@ -1053,7 +1084,8 @@ public struct MainView: View {
             do {
                 let result = try resolver.runEstimate(ticket: ticket)
                 await MainActor.run {
-                    lengthEstimateTask = nil
+                    // NUR den eigenen, noch aktuellen Griff leeren.
+                    releaseLengthEstimateHandle(ticket)
                     if let accepted = resolver.accept(result,
                                                       ticket: ticket,
                                                       currentMD5: currentMD5,
@@ -1066,16 +1098,24 @@ public struct MainView: View {
                 // absichtlich abgebrochene Analyse bewusst nichts.
             } catch {
                 await MainActor.run {
-                    lengthEstimateTask = nil
+                    releaseLengthEstimateHandle(ticket)
                     resolver.fail(ticket: ticket)
                 }
             }
         }
     }
 
+    /// Den Griff freigeben, wenn er noch diesem Ticket gehoert.
+    private func releaseLengthEstimateHandle(_ ticket: SongLengthEstimateTicket) {
+        guard lengthEstimateOwner == ticket else { return }
+        lengthEstimateOwner = nil
+        lengthEstimateTask = nil
+    }
+
     private func cancelLengthEstimate() {
         lengthEstimateTask?.cancel()
         lengthEstimateTask = nil
+        lengthEstimateOwner = nil
         lengthResolver.cancel()
     }
 

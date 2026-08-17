@@ -143,7 +143,14 @@ final class AppModel: ObservableObject {
 
     // MARK: - Interne Bausteine
 
-    let defaults = UserDefaults.standard
+    /// Wohin Einstellungen und Sitzungszustand geschrieben werden.
+    ///
+    /// Injizierbar, damit Tests eine EIGENE Suite bekommen. Vorher schrieben sie
+    /// in `UserDefaults.standard` der Test-App und liessen ihre Werte dort
+    /// liegen: Die Tests hingen damit voneinander und von ihrer Reihenfolge ab
+    /// und veraenderten den Zustand im Simulator ueber den einzelnen Test hinaus
+    /// (Review-Fund 2026-08-17).
+    let defaults: UserDefaults
     let fileManager = FileManager.default
 
     /// Langlebige Bausteine, die die Extensions in `Player/` brauchen —
@@ -177,6 +184,12 @@ final class AppModel: ObservableObject {
     /// noch hier; ob sein Ergebnis noch zum aktuellen Titel passt, entscheidet
     /// der Resolver.
     var lengthEstimateTask: Task<Void, Never>?
+    /// Wem gehoert `lengthEstimateTask` gerade? Ohne diese Angabe leerte der
+    /// spaete Abschluss von Schaetzung A den Griff bedingungslos — und traf
+    /// damit die inzwischen eingetragene Schaetzung B, die danach nicht mehr
+    /// abbrechbar war und nach `lengthCache.clear()` alte Werte
+    /// zurueckschreiben konnte (Review-Fund 2026-08-17).
+    var lengthEstimateOwner: SongLengthEstimateTicket?
     var importTask: Task<Void, Never>?
 
     /// UserDefaults-Schluessel an einer Stelle, damit Schreiber und Leser sich
@@ -192,7 +205,8 @@ final class AppModel: ObservableObject {
         static let lastPosition = "lastPosition"
     }
 
-    init() {
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         loadSettings()
     }
 

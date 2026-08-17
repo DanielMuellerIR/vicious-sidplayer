@@ -485,6 +485,7 @@ extension AppModel {
         case .databaseProvidesLength, .noLengthKnown:
             lengthEstimateTask?.cancel()
             lengthEstimateTask = nil
+            lengthEstimateOwner = nil
         case .trackNotReady, .alreadyRunning:
             // Titelwechsel noch nicht abgeschlossen, oder genau diese Analyse
             // laeuft bereits: in beiden Faellen nichts anfassen.
@@ -492,9 +493,11 @@ extension AppModel {
         case .cached(let seconds):
             lengthEstimateTask?.cancel()
             lengthEstimateTask = nil
+            lengthEstimateOwner = nil
             computedLength = seconds
         case .estimate(let ticket):
             lengthEstimateTask?.cancel()
+            lengthEstimateOwner = ticket
             lengthEstimateTask = startLengthEstimate(ticket)
         }
     }
@@ -511,7 +514,8 @@ extension AppModel {
             do {
                 let result = try resolver.runEstimate(ticket: ticket)
                 await MainActor.run {
-                    self.lengthEstimateTask = nil
+                    // NUR den eigenen, noch aktuellen Griff leeren.
+                    self.releaseLengthEstimateHandle(ticket)
                     if let accepted = resolver.accept(
                         result,
                         ticket: ticket,
@@ -526,16 +530,28 @@ extension AppModel {
                 // cached der Resolver bewusst nichts.
             } catch {
                 await MainActor.run {
-                    self.lengthEstimateTask = nil
+                    self.releaseLengthEstimateHandle(ticket)
                     resolver.fail(ticket: ticket)
                 }
             }
         }
     }
 
+    /// Den Griff freigeben, wenn er noch diesem Ticket gehoert.
+    ///
+    /// Steht inzwischen eine neuere Schaetzung im Property, bleibt sie stehen:
+    /// Sonst verloere `cancelLengthEstimate`/`resetLibrary` den Zugriff auf den
+    /// laufenden Task (Review-Fund 2026-08-17).
+    func releaseLengthEstimateHandle(_ ticket: SongLengthEstimateTicket) {
+        guard lengthEstimateOwner == ticket else { return }
+        lengthEstimateOwner = nil
+        lengthEstimateTask = nil
+    }
+
     func cancelLengthEstimate() {
         lengthEstimateTask?.cancel()
         lengthEstimateTask = nil
+        lengthEstimateOwner = nil
         lengthResolver.cancel()
     }
 

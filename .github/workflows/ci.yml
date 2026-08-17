@@ -52,3 +52,20 @@ jobs:
       # gibt bewusst keine SID-Datei im Repo, gegen die man spielen koennte.
       - name: Binary laeuft an
         run: ./.build/release/vicious-sid --help
+
+      # Die beiden Skript-Testsuiten liefen bisher NIRGENDS in CI: Eine erneute
+      # Abweichung zwischen Swift- und HTML5-DSP oder ein Bruch der CLI-Zusagen
+      # (Exit-Codes, Kanaltrennung, PCM-Datenmenge) waere trotz gruener CI
+      # unbemerkt geblieben (Review-Fund 2026-08-17). Beide brauchen python3,
+      # der Paritaetstest zusaetzlich node.
+      - name: Werkzeuge fuer die Skript-Tests
+        run: apt-get install -y -qq python3 nodejs
+
+      - name: CLI-Vertrag (Exit-Codes, Kanaltrennung, Datenmenge)
+        run: bash Tests/cli-smoke.sh
+
+      - name: Paritaet Swift-DSP gegen HTML5-DSP
+        run: bash Tests/parity-html5.sh
+
+      - name: Historienfilter der Veroeffentlichung
+        run: bash Tests/publish-history-filter.sh
