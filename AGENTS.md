@@ -29,6 +29,14 @@ Releaseartefakte bleiben unversioniert.
 
 - SID-/6502-Emulation stammt aus jsSID 0.9.1 mit lokalen Korrekturen. Opcode-Maske,
   Noise-Waveform und ENV3-Readback nicht ohne Referenztest verändern.
+- Zeilenbasierte Textdateien fremder Herkunft (etwa `Songlengths.md5`) unicode-korrekt
+  trennen, z. B. über `split(whereSeparator: \.isNewline)`. In Swift ist `"\r\n"` ein
+  einzelnes `Character`; `split(separator: "\n")` liefert bei Windows-Zeilenenden
+  deshalb eine einzige Zeile. Solche Parser immer mit LF- und CRLF-Eingaben testen.
+- Binärparser dürfen nicht voraussetzen, dass `Data` bei Index 0 beginnt: Ein
+  `Data`-Ausschnitt hat einen eigenen `startIndex`. Offsets relativ zu
+  `data.startIndex` rechnen oder die Eingabe an der Parsergrenze bewusst in ein
+  neues `Data` normalisieren; Tests auch mit echten Slices füttern.
 - HTML5-Engine läuft als Plain Class im AudioWorklet; Bundling muss über `file://`
   funktionsfähig bleiben. Keine Serverpflicht einführen.
 - Native Wiedergabe: `play()` baut den Processor neu oder setzt einen pausierten
