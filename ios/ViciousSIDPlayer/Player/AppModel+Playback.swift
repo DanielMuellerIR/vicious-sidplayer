@@ -602,8 +602,15 @@ extension AppModel {
         guard currentTrackID == nil, !tracks.isEmpty else { return }
 
         if shuffle {
+            let savedID = defaults.string(forKey: Keys.lastTrackID)
+            let savedSubtune = defaults.integer(forKey: Keys.lastSubtune)
+            let savedPos = defaults.double(forKey: Keys.lastPosition)
             if let random = tracks.randomElement() {
                 loadTrack(id: random.id, autoplay: false)
+                // Die gespeicherte Sitzung nicht durch die zufaellige Vorbereitung ueberschreiben
+                if let savedID { defaults.set(savedID, forKey: Keys.lastTrackID) }
+                defaults.set(savedSubtune, forKey: Keys.lastSubtune)
+                defaults.set(savedPos, forKey: Keys.lastPosition)
             }
             return
         }

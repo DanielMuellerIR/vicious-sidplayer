@@ -38,6 +38,8 @@ public struct MainView: View {
     // Zufallswiedergabe. @AppStorage sichert den Zustand in UserDefaults, bleibt
     // also ueber App-Neustarts erhalten.
     @AppStorage("shuffleEnabled") private var shuffle = false
+    // Breite der linken Playlist-Seitenleiste (anpassbar per Splitter).
+    @AppStorage("sidebarWidth") private var sidebarWidth = 240.0
     // Autoplay-Ordner aus den Einstellungen (Cmd+,). "" = Standard-Ordner.
     // Gleicher UserDefaults-Key wie in SettingsView — Aenderungen dort landen
     // hier sofort (onChange laedt die Playlist neu).
@@ -330,11 +332,14 @@ public struct MainView: View {
                     .padding(12)
                     .background(bgSecondary)
                 }
-                .frame(width: 220)
+                .frame(width: CGFloat(max(180.0, min(600.0, sidebarWidth))))
                 .background(bgSecondary)
                 
-                Divider()
-                    .background(borderCol)
+                SidebarSplitter(width: $sidebarWidth,
+                                minWidth: 180.0,
+                                maxWidth: 600.0,
+                                defaultWidth: 240.0,
+                                borderCol: borderCol)
                 
                 // Main Panel
                 VStack(spacing: 0) {
@@ -430,7 +435,7 @@ public struct MainView: View {
                             .padding(.horizontal, 4)
                         }
 
-                        // Transport: Shuffle · 15 s zurueck · Play/Pause · 30 s vor · Stop.
+                        // Transport: Shuffle · Vorheriger Titel · 15 s zurueck · Play/Pause · 30 s vor · Naechster Titel · Stop.
                         HStack(spacing: 12) {
                             Button(action: { shuffle.toggle() }) {
                                 Image(systemName: "shuffle").font(.system(size: 15))
@@ -438,6 +443,14 @@ public struct MainView: View {
                             .buttonStyle(BorderlessButtonStyle())
                             .foregroundColor(shuffle ? accentCol : textSecCol)
                             .help(shuffle ? "Zufallswiedergabe: an" : "Zufallswiedergabe: aus")
+
+                            Button(action: { playPreviousTrack() }) {
+                                Image(systemName: "backward.end.fill").font(.system(size: 14))
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .foregroundColor(playlist.count > 1 ? textCol : textSecCol.opacity(0.35))
+                            .disabled(playlist.count <= 1)
+                            .help("Vorheriger Titel (⌘←)")
 
                             Button(action: { skip(by: -15) }) {
                                 Image(systemName: "gobackward.15").font(.system(size: 16))
@@ -460,6 +473,14 @@ public struct MainView: View {
                             .buttonStyle(BorderlessButtonStyle())
                             .foregroundColor(textCol)
                             .help("30 Sekunden vor")
+
+                            Button(action: { playNextTrack() }) {
+                                Image(systemName: "forward.end.fill").font(.system(size: 14))
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            .foregroundColor(playlist.count > 1 ? textCol : textSecCol.opacity(0.35))
+                            .disabled(playlist.count <= 1)
+                            .help("Nächster Titel (⌘→)")
 
                             Button(action: { coordinator.stop() }) {
                                 Image(systemName: "stop.fill")
@@ -707,6 +728,19 @@ public struct MainView: View {
     private func skip(by delta: Double) {
         let target = min(currentDuration, max(0.0, coordinator.elapsedSeconds + delta))
         coordinator.seek(seconds: target)
+    }
+
+    // Vorherigen / Nächsten Titel in der Playlist abspielen.
+    private func playPreviousTrack() {
+        guard playlist.count > 1 else { return }
+        loadTrack(index: playlist.previousIndex(before: currentTrackIdx),
+                  autoplay: coordinator.isPlaying)
+    }
+
+    private func playNextTrack() {
+        guard playlist.count > 1 else { return }
+        loadTrack(index: playlist.nextIndex(after: currentTrackIdx, shuffle: shuffle),
+                  autoplay: coordinator.isPlaying)
     }
 
     @discardableResult
@@ -1136,10 +1170,7 @@ public struct MainView: View {
         }
         NotificationCenter.default.addObserver(forName: NSNotification.Name("menuNextTrack"), object: nil, queue: .main) { _ in
             Task { @MainActor in
-                if playlist.count > 1 {
-                    loadTrack(index: playlist.nextIndex(after: currentTrackIdx, shuffle: shuffle),
-                              autoplay: coordinator.isPlaying)
-                }
+                playNextTrack()
             }
         }
         // Media-Tasten: expliziter Play/Pause/Stop (zusaetzlich zum Toggle) — Play
@@ -1155,10 +1186,7 @@ public struct MainView: View {
         }
         NotificationCenter.default.addObserver(forName: NSNotification.Name("menuPrevTrack"), object: nil, queue: .main) { _ in
             Task { @MainActor in
-                if playlist.count > 1 {
-                    loadTrack(index: playlist.previousIndex(before: currentTrackIdx),
-                              autoplay: coordinator.isPlaying)
-                }
+                playPreviousTrack()
             }
         }
         // Cmd+T schaltet FEST auf das jeweils andere Theme um (verlaesst also den
@@ -1335,5 +1363,54 @@ struct MetaLine: View {
             
             Spacer()
         }
+    }
+}
+
+// Vertikaler Splitter zwischen Seitenleiste und Hauptansicht mit Hover-Cursor und Drag.
+struct SidebarSplitter: View {
+    @Binding var width: Double
+    let minWidth: Double
+    let maxWidth: Double
+    let defaultWidth: Double
+    let borderCol: Color
+
+    @State private var dragStartWidth: Double? = nil
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(borderCol)
+                .frame(width: 1)
+        }
+        .frame(width: 8)
+        .contentShape(Rectangle())
+        #if canImport(AppKit)
+        .onHover { hovering in
+            if hovering {
+                NSCursor.resizeLeftRight.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+        #endif
+        .gesture(
+            DragGesture(minimumDistance: 1)
+                .onChanged { gesture in
+                    if dragStartWidth == nil {
+                        dragStartWidth = width
+                    }
+                    if let start = dragStartWidth {
+                        let newWidth = start + Double(gesture.translation.width)
+                        width = max(minWidth, min(maxWidth, newWidth))
+                    }
+                }
+                .onEnded { _ in
+                    dragStartWidth = nil
+                }
+        )
+        .onTapGesture(count: 2) {
+            width = defaultWidth
+        }
+        .help("Seitenleiste anpassen (Doppelklick zum Zurücksetzen)")
     }
 }

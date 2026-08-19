@@ -26,42 +26,42 @@ public extension Color {
     static let macDarkAccent = Color(red: 10/255, green: 132/255, blue: 255/255) // Apple Dark Blue
 }
 
-// Sleek modern App Icon visualizer overlay (drawing a clean stylized floppy disk and waveform)
+#if canImport(AppKit)
+import AppKit
+#endif
+
+// macOS App Icon fuer die Fenster-Kopfzeile
 public struct ViciousAppIconOverlay: View {
     public init() {}
     public var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(LinearGradient(
-                    colors: [Color.macDarkSidebar, Color.macDarkBg],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.macLightAccent.opacity(0.3), lineWidth: 1.5)
-                )
-            
-            VStack(spacing: 8) {
-                // Waveform path representation
-                HStack(spacing: 2) {
-                    ForEach(0..<8) { i in
-                        RoundedRectangle(cornerRadius: 1)
-                            .fill(Color.macLightAccent)
-                            .frame(width: 4, height: CGFloat([12, 28, 16, 32, 24, 18, 22, 10][i]))
-                    }
-                }
-                
-                Text("SID")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.macLightAccent.opacity(0.8))
-                    .cornerRadius(4)
-            }
+        #if canImport(AppKit)
+        if let icon = NSApp.applicationIconImage {
+            Image(nsImage: icon)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 48, height: 48)
+        } else if let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+                  let icon = NSImage(contentsOf: iconURL) {
+            Image(nsImage: icon)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 48, height: 48)
+        } else {
+            fallbackView
         }
-        .frame(width: 60, height: 60)
-        .shadow(radius: 4)
+        #else
+        fallbackView
+        #endif
+    }
+
+    private var fallbackView: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color.macLightAccent.opacity(0.15))
+            Image(systemName: "music.note")
+                .font(.system(size: 22))
+                .foregroundColor(.macLightAccent)
+        }
+        .frame(width: 48, height: 48)
     }
 }
