@@ -336,8 +336,7 @@ public struct MainView: View {
                 .background(bgSecondary)
                 
                 SidebarSplitter(width: $sidebarWidth,
-                                minWidth: 180.0,
-                                maxWidth: 600.0,
+                                range: 180.0...600.0,
                                 defaultWidth: 240.0,
                                 borderCol: borderCol)
                 
@@ -1366,51 +1365,51 @@ struct MetaLine: View {
     }
 }
 
-// Vertikaler Splitter zwischen Seitenleiste und Hauptansicht mit Hover-Cursor und Drag.
+// Ziehbarer vertikaler Trenn-Handle für die Playlist-Sidebar-Breite.
 struct SidebarSplitter: View {
     @Binding var width: Double
-    let minWidth: Double
-    let maxWidth: Double
+    let range: ClosedRange<Double>
     let defaultWidth: Double
     let borderCol: Color
 
-    @State private var dragStartWidth: Double? = nil
+    @State private var startValue: Double? = nil
 
     var body: some View {
+        let thickness: CGFloat = 1
+        let hitSize: CGFloat = 11
+
         ZStack {
             Rectangle()
                 .fill(borderCol)
-                .frame(width: 1)
+                .frame(width: thickness)
         }
-        .frame(width: 8)
+        .frame(width: hitSize)
+        .frame(maxHeight: .infinity)
         .contentShape(Rectangle())
-        #if canImport(AppKit)
-        .onHover { hovering in
-            if hovering {
-                NSCursor.resizeLeftRight.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
-        #endif
-        .gesture(
-            DragGesture(minimumDistance: 1)
-                .onChanged { gesture in
-                    if dragStartWidth == nil {
-                        dragStartWidth = width
-                    }
-                    if let start = dragStartWidth {
-                        let newWidth = start + Double(gesture.translation.width)
-                        width = max(minWidth, min(maxWidth, newWidth))
-                    }
+        .highPriorityGesture(
+            DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { value in
+                    let base = startValue ?? width
+                    if startValue == nil { startValue = width }
+                    let raw = Double(value.translation.width)
+                    width = min(range.upperBound, max(range.lowerBound, base + raw))
                 }
-                .onEnded { _ in
-                    dragStartWidth = nil
-                }
+                .onEnded { _ in startValue = nil }
         )
         .onTapGesture(count: 2) {
             width = defaultWidth
         }
-        .help("Seitenleiste anpassen (Doppelklick zum Zurücksetzen)")
+        .onContinuousHover { phase in
+            #if canImport(AppKit)
+            switch phase {
+            case .active:
+                NSCursor.resizeLeftRight.set()
+            case .ended:
+                NSCursor.arrow.set()
+            }
+            #endif
+        }
+        .help("Ziehen, um die Playlist-Breite anzupassen (Doppelklick zum Zurücksetzen)")
+        .frame(width: thickness)
     }
 }
