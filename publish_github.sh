@@ -83,27 +83,20 @@ fi
 # und waere nach dem Push oeffentlich abrufbar — der aktuelle Baum sieht dabei
 # vollkommen sauber aus. Frueher schaute hier nur `git ls-files` nach, also
 # ausgerechnet an der Stelle, an der nichts mehr zu finden ist.
-FORBIDDEN_PATTERN='(^audio/|\.sid$|\.mod$|\.wav$|\.aiff?$|\.mp3$|\.flac$|\.dmg$|\.app/|\.zip$|\.tar(\.gz)?$)'
+#
+# Die Pruefung selbst steht in `publish-lib.sh`, damit der Test in
+# `Tests/publish-history-filter.sh` denselben Code laufen laesst und nicht eine
+# eigene Kopie davon.
+source "$(dirname "$0")/publish-lib.sh"
 
-FORBIDDEN_NOW="$(git ls-files | grep -E -i "$FORBIDDEN_PATTERN" || true)"
+FORBIDDEN_NOW="$(forbidden_paths_now)"
 if [[ -n "$FORBIDDEN_NOW" ]]; then
     echo "ABBRUCH: Nicht veroeffentlichbare Artefakte sind getrackt:" >&2
     echo "$FORBIDDEN_NOW" >&2
     exit 1
 fi
 
-# `git rev-list --objects` schreibt "<objekt-id> <pfad>" — und der Pfad darf
-# Leerzeichen enthalten. `awk '{print $2}'` nahm davon nur das erste Wort: Aus
-# "Sammlung/My Tune.sid" wurde "Sammlung/My", was weder auf .sid endet noch
-# unter audio/ liegt und deshalb durch den Filter rutschte. Eine spaeter
-# geloeschte SID-Datei mit Leerzeichen im Pfad waere so trotz Sperre
-# oeffentlich geworden (Review-Fund 2026-08-17). `cut -d' ' -f2-` entfernt
-# genau die Objekt-ID und laesst den Rest des Pfads unangetastet; Zeilen ohne
-# Pfad (nackte Commit-/Tree-Objekte) fallen durch das grep sowieso heraus.
-FORBIDDEN_EVER="$(git rev-list --objects --all \
-    | grep ' ' \
-    | cut -d' ' -f2- \
-    | grep -E -i "$FORBIDDEN_PATTERN" | sort -u || true)"
+FORBIDDEN_EVER="$(forbidden_paths_ever)"
 if [[ -n "$FORBIDDEN_EVER" ]]; then
     echo "ABBRUCH: Nicht veroeffentlichbare Artefakte stecken in der Git-HISTORIE:" >&2
     echo "$FORBIDDEN_EVER" >&2
@@ -115,12 +108,79 @@ if [[ -n "$FORBIDDEN_EVER" ]]; then
     exit 1
 fi
 
+# Prueft, ob das DMG wirklich ein Release-Artefakt dieser Version ist.
+#
+# Dass die Datei DA ist, sagt genau nichts: `build_dmg.sh` legt auch ohne
+# `--notarize` ein Image an genau diesem Pfad ab, und ein liegengebliebenes
+# Image der Vorversion sieht von aussen identisch aus. Beides waere frueher
+# unter dem aktuellen Tag hochgeladen worden, obwohl das Projekt ausschliesslich
+# doppelt notarisierte, versionsgleiche Artefakte zusagt (Review-Fund
+# 2026-08-20).
+#
+# Geprueft wird deshalb dreierlei: Notary-Ticket am Image, Gatekeeper-Akzeptanz
+# und — im geoeffneten Image — Version und eigenes Ticket der enthaltenen App.
+verify_release_dmg() {
+    local dmg="$1" expected="$2" tool
+    for tool in xcrun hdiutil spctl plutil; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            echo "ABBRUCH: '$tool' fehlt — die Release-Pruefung laeuft nur auf macOS." >&2
+            return 1
+        fi
+    done
+
+    echo "Pruefe Release-Artefakt: $dmg"
+    if ! xcrun stapler validate "$dmg" >/dev/null 2>&1; then
+        echo "ABBRUCH: Am DMG haengt kein Notary-Ticket: $dmg" >&2
+        echo "Release-Artefakte entstehen ausschliesslich ueber ./release.sh." >&2
+        return 1
+    fi
+    if ! spctl -a -t open --context context:primary-signature "$dmg" >/dev/null 2>&1; then
+        echo "ABBRUCH: Gatekeeper akzeptiert das DMG nicht: $dmg" >&2
+        return 1
+    fi
+
+    local mount status=0 app version
+    mount="$(mktemp -d)"
+    if ! hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount" >/dev/null; then
+        echo "ABBRUCH: DMG laesst sich nicht oeffnen: $dmg" >&2
+        rmdir "$mount" 2>/dev/null || true
+        return 1
+    fi
+
+    app="$(find "$mount" -maxdepth 1 -name '*.app' -print -quit)"
+    if [[ -z "$app" ]]; then
+        echo "ABBRUCH: Im DMG steckt keine App." >&2
+        status=1
+    else
+        version="$(plutil -extract CFBundleShortVersionString raw -o - \
+            "$app/Contents/Info.plist" 2>/dev/null || true)"
+        if [[ "$version" != "$expected" ]]; then
+            echo "ABBRUCH: Die App im DMG hat Version '$version', VERSION sagt '$expected'." >&2
+            echo "Das DMG stammt aus einem aelteren Lauf — neu bauen mit ./release.sh." >&2
+            status=1
+        fi
+        # Die App braucht ihr EIGENES Ticket, nicht nur das Image: Sonst meckert
+        # Gatekeeper, sobald jemand sie aus dem DMG herauszieht.
+        if ! xcrun stapler validate "$app" >/dev/null 2>&1; then
+            echo "ABBRUCH: Der App im DMG fehlt ihr eigenes Notary-Ticket." >&2
+            status=1
+        fi
+    fi
+
+    hdiutil detach "$mount" -quiet 2>/dev/null \
+        || hdiutil detach "$mount" -force -quiet 2>/dev/null \
+        || true
+    rmdir "$mount" 2>/dev/null || true
+    return $status
+}
+
 if [[ "$DO_RELEASE" == "1" ]]; then
     if [[ ! -f "$DMG_PATH" ]]; then
         echo "ABBRUCH: DMG fehlt: $DMG_PATH" >&2
-        echo "Vorher ausfuehren: bash build_app.sh && bash build_dmg.sh --notarize" >&2
+        echo "Vorher ausfuehren: ./release.sh" >&2
         exit 1
     fi
+    verify_release_dmg "$DMG_PATH" "$VERSION"
     if ! command -v gh >/dev/null 2>&1; then
         echo "ABBRUCH: GitHub CLI 'gh' fehlt. Fuer Releases installieren oder manuell hochladen." >&2
         exit 1
@@ -132,8 +192,15 @@ fi
 # stur "origin" gesetzt, entstuende ein zweites Remote auf dieselbe Adresse.
 # Gepusht wird so oder so nur nach $REMOTE_URL — der Name ist beliebig, die
 # Adresse ist die Zusicherung.
+#
+# Geprueft werden BEIDE Adressen eines Remotes. `git remote get-url` liefert nur
+# die Fetch-Adresse; ein Remote kann zusaetzlich eine eigene `pushurl` haben, und
+# genau die benutzt `git push`. Mit nur der Fetch-Pruefung waere die Zusage
+# „gepusht wird nur nach $REMOTE_URL" schlicht falsch gewesen
+# (Review-Fund 2026-08-20).
 REMOTE_NAME="$(git remote | while read -r name; do
-    if [[ "$(git remote get-url "$name" 2>/dev/null)" == "$REMOTE_URL" ]]; then
+    if [[ "$(git remote get-url "$name" 2>/dev/null)" == "$REMOTE_URL" ]] \
+       && [[ "$(git remote get-url --push "$name" 2>/dev/null)" == "$REMOTE_URL" ]]; then
         echo "$name"
         break
     fi
@@ -147,6 +214,23 @@ if [[ -z "$REMOTE_NAME" ]]; then
     else
         run git remote add "$REMOTE_NAME" "$REMOTE_URL"
     fi
+    # Eine bereits gesetzte abweichende Push-Adresse ueberschreibt `set-url`
+    # nicht — sie muss ausdruecklich mit umgebogen werden.
+    run git remote set-url --push "$REMOTE_NAME" "$REMOTE_URL"
+fi
+
+# Letzte Zusicherung unmittelbar vor dem Push. Im Trockenlauf kann das Remote
+# noch gar nicht existieren, weil `run` das Anlegen nur angezeigt hat.
+if git remote get-url --push "$REMOTE_NAME" >/dev/null 2>&1; then
+    ACTUAL_PUSH_URL="$(git remote get-url --push "$REMOTE_NAME")"
+    if [[ "$ACTUAL_PUSH_URL" != "$REMOTE_URL" ]]; then
+        echo "ABBRUCH: Push-Adresse von '$REMOTE_NAME' ist $ACTUAL_PUSH_URL," >&2
+        echo "erwartet war $REMOTE_URL." >&2
+        exit 1
+    fi
+elif [[ "$DRY_RUN" != "1" ]]; then
+    echo "ABBRUCH: Remote '$REMOTE_NAME' existiert nicht." >&2
+    exit 1
 fi
 
 echo "Remote: $REMOTE_NAME -> $REMOTE_URL"
@@ -154,7 +238,20 @@ echo "Branch: $BRANCH"
 run git push -u "$REMOTE_NAME" "$BRANCH"
 
 if [[ "$DO_RELEASE" == "1" ]]; then
-    if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+    # Ein schon vorhandener Tag wurde bisher blind weitergereicht. Zeigt er auf
+    # einen aelteren Commit, haengt am Ende das frische DMG (per `--clobber`) am
+    # Release eines alten Quellstands — Quelle und Auslieferung liefen dauerhaft
+    # auseinander (Review-Fund 2026-08-20).
+    BRANCH_COMMIT="$(git rev-parse "${BRANCH}^{commit}")"
+    if git rev-parse -q --verify "${TAG}^{commit}" >/dev/null; then
+        TAG_COMMIT="$(git rev-parse "${TAG}^{commit}")"
+        if [[ "$TAG_COMMIT" != "$BRANCH_COMMIT" ]]; then
+            echo "ABBRUCH: Tag $TAG zeigt auf $TAG_COMMIT," >&2
+            echo "Branch $BRANCH steht aber auf $BRANCH_COMMIT." >&2
+            echo "Entweder VERSION erhoehen oder den Tag bewusst umsetzen." >&2
+            exit 1
+        fi
+    else
         run git tag -a "$TAG" -m "Vicious SID Player ${VERSION}"
     fi
     run git push "$REMOTE_NAME" "$TAG"

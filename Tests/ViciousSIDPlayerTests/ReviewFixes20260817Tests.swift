@@ -1,4 +1,9 @@
 import XCTest
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 @testable import ViciousSIDPlayerCore
 
 /// Regressionstests zu den Funden des Nacht-Reviews vom 2026-08-17.
@@ -41,6 +46,19 @@ final class ReviewFixes20260817Tests: XCTestCase {
         try (Data(bytes) + Data([0x60, 0xEA])).write(to: url)
     }
 
+    /// Ueberspringt einen Test, der Unlesbarkeit ueber Dateirechte herstellt,
+    /// wenn der Testlauf als root laeuft.
+    ///
+    /// Root umgeht die Rechtebits: Ein `chmod 000` bleibt fuer ihn lesbar. Der
+    /// Test scheiterte dann nicht am Produktcode, sondern an einer
+    /// Voraussetzung, die es gar nicht gibt. Genau das ist der Fall im
+    /// Linux-CI: Der Job laeuft im Container `swift:6.0` als UID 0. Dieselbe
+    /// Vorsichtsmassnahme steht in `LibraryTests` (Review-Fund 2026-08-20).
+    private func skipIfRootIgnoresFilePermissions() throws {
+        try XCTSkipIf(geteuid() == 0,
+                      "Laeuft als root: Dateirechte greifen nicht, die Voraussetzung dieses Tests fehlt.")
+    }
+
     /// Ein Unterordner ohne Leserecht (0o000).
     private func makeUnreadableFolder(_ name: String) throws -> URL {
         let url = root.appendingPathComponent(name, isDirectory: true)
@@ -50,6 +68,7 @@ final class ReviewFixes20260817Tests: XCTestCase {
     }
 
     func testTeilergebnisBehaeltDieLesbarenDateien() throws {
+        try skipIfRootIgnoresFilePermissions()
         // Review-Fund 2026-08-17: Ein einziger unlesbarer Unterordner liess
         // auch alle bereits gefundenen, LESBAREN Titel verschwinden — die App
         // meldete dann „Keine .sid Dateien gefunden".
@@ -94,9 +113,17 @@ final class ReviewFixes20260817Tests: XCTestCase {
         // Review-Fund 2026-08-17: `initSubtune` ist oeffentlich und speicherte
         // negative Werte unveraendert. `min(-1, 31)` ergibt wieder -1, und der
         // Zugriff auf `timermode[-1]` beendete den Prozess mit einem Index-Trap.
+        //
+        // Die SID MUSS hier wirklich geladen sein. Ohne geladene Datei kehrt
+        // `initEmulation` vor dem `timermode`-Zugriff zurueck — der Test waere
+        // auch mit dem alten, abstuerzenden Code gruen gewesen und haette gar
+        // nichts abgesichert (Review-Fund 2026-08-20).
+        try writeSID("Prozessor/tune.sid")
+        let data = try Data(contentsOf: root.appendingPathComponent("Prozessor/tune.sid"))
+        let sidFile = try SidParser.parse(data: data)
         let processor = ViciousProcessor(sampleRate: 44100)
-        // Ohne geladene Datei tut initEmulation nichts — genau das ist hier der
-        // Punkt: Der Aufruf darf unter keinen Umstaenden abstuerzen.
+        _ = processor.loadSID(sidFile: sidFile)
+
         processor.initSubtune(sub: -1)
         processor.initSubtune(sub: Int.min)
         processor.initSubtune(sub: Int.max)

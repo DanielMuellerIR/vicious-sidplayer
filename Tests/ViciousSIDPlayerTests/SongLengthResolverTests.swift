@@ -322,6 +322,43 @@ final class SongLengthResolverTests: XCTestCase {
                      "Nach dem Abbruch darf das Ergebnis nicht mehr wirken")
     }
 
+    // MARK: - Cache-Schreibschutz
+
+    /// Eine entwertete Rechnung darf nicht mehr in den Cache schreiben.
+    ///
+    /// Der Abbruch ueber `Task.checkCancellation()` deckt das nicht ab: Zwischen
+    /// der letzten Pruefung und dem Schreiben kann der Hintergrund-Thread
+    /// beliebig lange pausieren. In dieser Luecke konnte die Bibliothek
+    /// zurueckgesetzt und ihr Cache geleert werden — und danach legte die alte
+    /// Rechnung dort einen Eintrag zu einer laengst geloeschten Datei an
+    /// (Review-Fund 2026-08-20).
+    func testStaleEstimateDoesNotWriteToTheCache() {
+        let resolver = makeResolver()
+        guard case .estimate(let alt) = resolver.plan(md5: md5, subtune: 0,
+                                                      databaseLengths: nil, fileURL: file) else {
+            return XCTFail("erster Aufruf muss rechnen")
+        }
+
+        // Genau das macht `resetLibrary`, bevor es den Cache leert.
+        resolver.cancel()
+
+        resolver.storeIfCurrent(ticket: alt, seconds: 123.0)
+        XCTAssertNil(cache.length(md5: md5, subtune: 0),
+                     "Eine entwertete Rechnung darf keinen Cache-Eintrag hinterlassen")
+    }
+
+    /// Gegenprobe: Die noch aktuelle Rechnung schreibt weiterhin.
+    func testCurrentEstimateStillWritesToTheCache() {
+        let resolver = makeResolver()
+        guard case .estimate(let ticket) = resolver.plan(md5: md5, subtune: 0,
+                                                         databaseLengths: nil, fileURL: file) else {
+            return XCTFail("Aufruf muss rechnen")
+        }
+
+        resolver.storeIfCurrent(ticket: ticket, seconds: 123.0)
+        XCTAssertEqual(cache.length(md5: md5, subtune: 0), 123.0)
+    }
+
     // MARK: - Die effektive Dauer
 
     func testDurationLadderPrefersDatabaseThenComputedThenFallback() {

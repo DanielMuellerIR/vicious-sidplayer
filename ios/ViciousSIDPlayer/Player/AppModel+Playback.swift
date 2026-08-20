@@ -602,15 +602,38 @@ extension AppModel {
         guard currentTrackID == nil, !tracks.isEmpty else { return }
 
         if shuffle {
+            // Gesichert wird nicht nur der WERT, sondern auch, ob es den
+            // Schluessel ueberhaupt gab. `defaults.integer`/`double` liefern fuer
+            // einen fehlenden Schluessel 0, und ein Zurueckschreiben dieser 0
+            // legte ihn erst an. Zusammen mit der ID, die `loadTrack` bei
+            // eingeschalteter Sitzungswiederherstellung selbst speichert, entstand
+            // so aus dem Nichts eine wiederherstellbare Sitzung: Wer Shuffle
+            // spaeter ausschaltete, bekam den nur vorbereiteten Zufallstitel als
+            // angeblich letzten Stand zurueck (Review-Fund 2026-08-20).
             let savedID = defaults.string(forKey: Keys.lastTrackID)
+            let subtuneVorhanden = defaults.object(forKey: Keys.lastSubtune) != nil
+            let posVorhanden = defaults.object(forKey: Keys.lastPosition) != nil
             let savedSubtune = defaults.integer(forKey: Keys.lastSubtune)
             let savedPos = defaults.double(forKey: Keys.lastPosition)
             if let random = tracks.randomElement() {
                 loadTrack(id: random.id, autoplay: false)
-                // Die gespeicherte Sitzung nicht durch die zufaellige Vorbereitung ueberschreiben
-                if let savedID { defaults.set(savedID, forKey: Keys.lastTrackID) }
-                defaults.set(savedSubtune, forKey: Keys.lastSubtune)
-                defaults.set(savedPos, forKey: Keys.lastPosition)
+                // Den vorigen Stand exakt wiederherstellen — fehlende Schluessel
+                // bleiben danach fehlend.
+                if let savedID {
+                    defaults.set(savedID, forKey: Keys.lastTrackID)
+                } else {
+                    defaults.removeObject(forKey: Keys.lastTrackID)
+                }
+                if subtuneVorhanden {
+                    defaults.set(savedSubtune, forKey: Keys.lastSubtune)
+                } else {
+                    defaults.removeObject(forKey: Keys.lastSubtune)
+                }
+                if posVorhanden {
+                    defaults.set(savedPos, forKey: Keys.lastPosition)
+                } else {
+                    defaults.removeObject(forKey: Keys.lastPosition)
+                }
             }
             return
         }

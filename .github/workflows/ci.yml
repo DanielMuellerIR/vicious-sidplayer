@@ -69,3 +69,14 @@ jobs:
 
       - name: Historienfilter der Veroeffentlichung
         run: bash Tests/publish-history-filter.sh
+
+      # Die beiden Fleet-Regeln vom 2026-08-03 stehen als Quelltest da, liefen
+      # aber in keiner CI: Nach /Applications gelangt nur ein Bundle mit
+      # angeheftetem Notary-Ticket, und kein absoluter Pfad des Build-Rechners
+      # darf im ausgelieferten Bundle landen. Eine Regression in den Release-
+      # oder Installationsskripten waere bisher gruen durchgelaufen
+      # (Review-Fund 2026-08-20). Der Test liest nur Quellen; die Probe am
+      # gebauten Bundle ueberspringt er hier von selbst, weil im Linux-Container
+      # keines existiert.
+      - name: Fleet-Regeln (Notary-Ticket, keine Build-Pfade)
+        run: bash Tests/fleet-rules.sh

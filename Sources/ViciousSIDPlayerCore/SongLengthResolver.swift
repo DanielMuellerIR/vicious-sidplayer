@@ -174,8 +174,30 @@ public final class SongLengthResolver: @unchecked Sendable {
         let sidFile = try SidParser.parse(data: data)
         let result = try SongLengthEstimator.estimate(sidFile: sidFile, subtune: ticket.subtune)
         try Task.checkCancellation()
-        cache.store(md5: ticket.md5, subtune: ticket.subtune, seconds: result ?? -1)
+        storeIfCurrent(ticket: ticket, seconds: result ?? -1)
         return result
+    }
+
+    /// Legt das Ergebnis nur ab, wenn dieses Ticket noch das aktuelle ist.
+    ///
+    /// `Task.checkCancellation()` oben allein reicht nicht: Zwischen der Pruefung
+    /// und dem Schreiben kann der Hintergrund-Thread beliebig lange pausieren.
+    /// Genau in dieser Luecke konnte die Bibliothek zurueckgesetzt und ihr Cache
+    /// geleert werden — und danach legte die abgemeldete Rechnung dort einen
+    /// Eintrag zu einer geloeschten Datei an (Review-Fund 2026-08-20).
+    ///
+    /// Die Sperre entscheidet das jetzt: Wer die Buchfuehrung entwertet
+    /// (Titelwechsel, `cancel()`, und damit auch das Zuruecksetzen), sperrt
+    /// zugleich jeden spaeteren Schreibversuch des alten Tickets aus.
+    ///
+    /// Nicht `private`, damit die Tests genau diese Entscheidung pruefen
+    /// koennen: Ueber `runEstimate` ginge das nur mit einer vollen
+    /// Sechs-Minuten-Emulation.
+    func storeIfCurrent(ticket: SongLengthEstimateTicket, seconds: Double) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard isCurrentLocked(ticket) else { return }
+        cache.store(md5: ticket.md5, subtune: ticket.subtune, seconds: seconds)
     }
 
     // MARK: - Schritt 3: Ergebnis annehmen oder verwerfen

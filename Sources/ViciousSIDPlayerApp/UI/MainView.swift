@@ -827,9 +827,15 @@ public struct MainView: View {
             }
             return
         }
+        // Der Pfad wird nur GEHASHT protokolliert: Er ist ein absoluter Pfad aus
+        // der Sammlung des Nutzers und enthaelt damit dessen Benutzer- und
+        // Ordnernamen. Das Unified Log wird gespeichert und weitergegeben,
+        // `.public` haette diese Namen unmaskiert hinterlassen (Review-Fund
+        // 2026-08-20). Zum Wiedererkennen zweier Meldungen reicht der Hash; den
+        // wirklichen Pfad zeigt die Oberflaeche unten sowieso an, und die sieht
+        // nur der Nutzer selbst.
         if let blocked = unreadable.first {
-            loadLog.error("handleDroppedURLs: Ast nicht lesbar: \(blocked, privacy: .public)")
-            self.errorMessage = "Ein Ordner war nicht lesbar: \(blocked)"
+            loadLog.error("handleDroppedURLs: Ast nicht lesbar: \(blocked, privacy: .private(mask: .hash))")
         }
         loadLog.info("handleDroppedURLs: \(sidFiles.count, privacy: .public) .sid Datei(en) gefunden")
 
@@ -839,6 +845,15 @@ public struct MainView: View {
         // wer sie erneut hereinzieht, will sie hoeren.
         if let index = additions.firstIndex {
             loadTrack(index: index, autoplay: true)
+        }
+
+        // Die Teilscan-Warnung ERST JETZT setzen. `loadTrack` leert
+        // `errorMessage` zu Beginn — vorher gesetzt, war die Meldung sofort
+        // wieder weg, und die App spielte einen Titel, ohne zu sagen, dass Teile
+        // des hereingezogenen Ordners ungelesen blieben (Review-Fund
+        // 2026-08-20). Ein echter Ladefehler hat Vorrang und bleibt stehen.
+        if let blocked = unreadable.first, self.errorMessage == nil {
+            self.errorMessage = "Ein Ordner war nicht lesbar: \(blocked)"
         }
     }
 

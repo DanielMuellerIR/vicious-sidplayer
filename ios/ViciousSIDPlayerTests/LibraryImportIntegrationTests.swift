@@ -408,4 +408,63 @@ final class LibraryImportIntegrationTests: XCTestCase {
                        "Ohne Shuffle wird der gespeicherte Titel wiederhergestellt")
         XCTAssertFalse(model.coordinator.isPlaying)
     }
+
+    // MARK: - Review-Fund 2026-08-20
+
+    /// Der Shuffle-Zweig muss auch dann greifen, wenn die gespeicherte ID gar
+    /// nicht mehr existiert.
+    ///
+    /// Der Test oben allein reichte nicht: Dort ist die gespeicherte ID gueltig,
+    /// und die normale Wiederherstellung haette denselben Titel geladen. Entfernt
+    /// jemand den Shuffle-Sonderfall, bliebe er gruen. Mit einer UNGUELTIGEN ID
+    /// scheitert die normale Wiederherstellung an ihrer eigenen Pruefung — es
+    /// kann also nur der Shuffle-Zweig sein, der hier noch einen Titel bereitlegt.
+    func testShuffleRestoreWorksEvenWhenTheSavedTrackIsGone() async throws {
+        try write("A/eins.sid", payload: [0x60, 0x01])
+        try write("A/zwei.sid", payload: [0x60, 0x02])
+        await importSource()
+
+        defaults.set("Gibt/Es/Nicht.sid", forKey: "lastTrackID")
+        model.setCurrentTrackID(nil)
+        model.shuffle = true
+
+        model.restoreSessionIfPossible()
+
+        let vorbereitet = try XCTUnwrap(model.currentTrackID,
+                                        "Shuffle muss auch ohne brauchbare gespeicherte ID einen Titel bereitstellen")
+        XCTAssertTrue(model.tracks.contains { $0.id == vorbereitet })
+        XCTAssertFalse(model.coordinator.isPlaying)
+        XCTAssertEqual(defaults.string(forKey: "lastTrackID"), "Gibt/Es/Nicht.sid",
+                       "Die gespeicherte Sitzung darf die Zufallsvorbereitung nicht mitbekommen")
+    }
+
+    /// Ohne frueheren Sitzungsstand darf ein Shuffle-Start auch keinen anlegen.
+    ///
+    /// `loadTrack` speichert die geladene ID selbst, wenn die
+    /// Sitzungswiederherstellung eingeschaltet ist. Der Shuffle-Zweig legte den
+    /// vorherigen Stand nur mit `if let` zurueck — war vorher gar nichts
+    /// gespeichert, blieb die zufaellige ID stehen und tauchte spaeter, nach dem
+    /// Ausschalten von Shuffle, als angeblich letzter Nutzungsstand wieder auf
+    /// (Review-Fund 2026-08-20).
+    func testShuffleStartWithoutAPreviousSessionLeavesNoSession() async throws {
+        try write("A/eins.sid", payload: [0x60, 0x01])
+        try write("A/zwei.sid", payload: [0x60, 0x02])
+        await importSource()
+
+        defaults.removeObject(forKey: "lastTrackID")
+        defaults.removeObject(forKey: "lastSubtune")
+        defaults.removeObject(forKey: "lastPosition")
+        model.setCurrentTrackID(nil)
+        model.shuffle = true
+
+        model.restoreSessionIfPossible()
+
+        XCTAssertNotNil(model.currentTrackID, "Shuffle stellt trotzdem einen Titel bereit")
+        XCTAssertNil(defaults.object(forKey: "lastTrackID"),
+                     "Ohne frueheren Stand darf kein Titel als Sitzung zurueckbleiben")
+        XCTAssertNil(defaults.object(forKey: "lastSubtune"),
+                     "Ohne frueheren Stand darf kein Subtune als Sitzung zurueckbleiben")
+        XCTAssertNil(defaults.object(forKey: "lastPosition"),
+                     "Ohne frueheren Stand darf keine Position als Sitzung zurueckbleiben")
+    }
 }

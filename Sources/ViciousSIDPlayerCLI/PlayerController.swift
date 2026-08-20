@@ -326,11 +326,24 @@ final class PlayerController: @unchecked Sendable {
     }
 
     /// Blockiert, bis die Wiedergabe endet, und liefert den Grund.
+    ///
+    /// Auch der natuerliche Abschluss ist eine ganze BEDIENOPERATION und braucht
+    /// deshalb dieselbe Sperre wie play/pause/stop. Ohne sie konnte ein
+    /// gleichzeitiger Befehl von der Tastatur oder ueber MPRIS den gerade
+    /// gesetzten Zustand wieder ueberschreiben: Endete der Sink zwischen der
+    /// Zustandspruefung in `pauseLocked()` und dessen `currentState = .paused`,
+    /// meldete der Player nach tatsaechlich beendeter Ausgabe weiter „Paused"
+    /// statt „Stopped" (Review-Fund 2026-08-20).
+    ///
+    /// Gewartet wird VOR der Sperre — sonst bliebe jeder andere Befehl so lange
+    /// haengen, wie die Wiedergabe noch dauert.
     func waitUntilFinished() -> PCMSinkFinishReason {
         let reason = sink.waitUntilFinished()
+        operationLock.lock()
         lock.lock()
         currentState = .stopped
         lock.unlock()
+        operationLock.unlock()
         notifyObserver()
         return reason
     }
