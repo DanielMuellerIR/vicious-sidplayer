@@ -104,8 +104,13 @@ Verifiziert auf dem lokalen Linux-Testrechner (Mint 22.2, x86_64) im Container
   unverändert bestätigt. Schlägt er fehl, ist entweder die Emulation bewusst geändert
   (Hash nur nach Abgleich mit den SID-Referenzfällen neu setzen!) oder die
   Plattform-Unabhängigkeit kaputt — dann NICHT den Hash anpassen.
-- **Pfeiltasten** werden nicht ausgewertet: `readKey()` liefert bewusst ein Byte,
-  Escape-Sequenzen (`0x1B [ A`) bräuchten das Einsammeln der Folgebytes.
+- ~~**Pfeiltasten** werden nicht ausgewertet.~~ **Erledigt 2026-08-23 (v1.9.20).**
+  `readKey()` liefert weiterhin ein Byte; das Zusammensetzen macht jetzt
+  `TerminalKeyDecoder` im Core (10 Tests). → und ← schalten den Subtune vor und
+  zurück, ein einzelner Druck auf Escape löst nichts aus, und eine unbekannte
+  Sequenz wird verschluckt statt als Buchstabe missverstanden. An einem echten
+  Pseudoterminal geprüft. Oben und unten bleiben unbelegt: Der CLI-Controller
+  kann weder springen noch die Lautstärke regeln.
 - **Ehrlichkeitslücke in `ALSAPCMSink`:** wird `waitUntilFinished()` aus dem
   Renderblock heraus gerufen, kann es nicht warten und liefert `.notStarted`, obwohl
   gerade gespielt wird. Im Code benannt.

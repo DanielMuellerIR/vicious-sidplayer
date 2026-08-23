@@ -34,8 +34,8 @@ Optionen:
 
 Tasten während der Wiedergabe (nur am Terminal):
   Leertaste       Pause / Weiter
-  n / +           nächster Subtune
-  p / -           vorheriger Subtune
+  n / + / →       nächster Subtune
+  p / - / ←       vorheriger Subtune
   q / Strg-C      beenden
 
 Beispiele:
@@ -260,30 +260,48 @@ func runInteractive(controller: PlayerController) -> PCMSinkFinishReason {
         note("Subtune \(controller.currentSubtune + 1)/\(controller.subtunesCount)")
     }
 
-    // Solange kein Endgrund vorliegt: Tasten lesen. readKey() wartet hoechstens
-    // ~100 ms und liefert dann nil — dadurch bleibt die Schleife reaktionsfaehig
-    // und merkt auch, wenn das Stueck von selbst zu Ende geht.
-    while box.reason == nil {
-        guard let key = terminal.readKey() else { continue }
-
+    /// Fuehrt eine fertig erkannte Taste aus.
+    func handle(_ key: TerminalKeyDecoder.Key) {
         switch key {
-        case UInt8(ascii: " "):
+        case .byte(UInt8(ascii: " ")):
             controller.playPause()
             note(controller.state == .paused ? "Pause." : "Weiter.")
-        case UInt8(ascii: "n"), UInt8(ascii: "+"):
+        case .byte(UInt8(ascii: "n")), .byte(UInt8(ascii: "+")), .right:
             controller.next()
             reportSubtune()
-        case UInt8(ascii: "p"), UInt8(ascii: "-"):
+        case .byte(UInt8(ascii: "p")), .byte(UInt8(ascii: "-")), .left:
             controller.previous()
             reportSubtune()
-        case UInt8(ascii: "q"), 0x03:
+        case .byte(UInt8(ascii: "q")), .byte(0x03):
             // 0x03 ist Strg-C. Weil der Rohmodus ISIG abschaltet, kommt es als
             // ganz normales Byte herein statt als Signal — genau deshalb koennen
             // wir hier sauber aufraeumen, statt hart abgeschossen zu werden.
             controller.stop()
         default:
+            // Oben, unten und alles Unbekannte: Es gibt hier nichts, was sie
+            // sinnvoll tun koennten (der Controller kann weder springen noch
+            // die Lautstaerke regeln).
             break
         }
+    }
+
+    // Solange kein Endgrund vorliegt: Tasten lesen. readKey() wartet hoechstens
+    // ~100 ms und liefert dann nil — dadurch bleibt die Schleife reaktionsfaehig
+    // und merkt auch, wenn das Stueck von selbst zu Ende geht.
+    // Pfeiltasten senden drei Bytes (`0x1B [ C`). Der Decoder setzt sie wieder
+    // zusammen; ohne ihn landete bei „links" ein „D" als Buchstabe hier unten.
+    // Er steht im Core, weil ein ausfuehrbares Ziel nicht testbar ist.
+    var keys = TerminalKeyDecoder()
+
+    while box.reason == nil {
+        guard let byte = terminal.readKey() else {
+            // Nichts gekommen: Eine angefangene Escape-Sequenz gilt damit als
+            // abgebrochen — sonst haenge ein einzelner Druck auf Escape ewig.
+            if let key = keys.idleTimeout() { handle(key) }
+            continue
+        }
+        guard let key = keys.feed(byte) else { continue }
+        handle(key)
     }
 
     return box.reason ?? .stopped
@@ -315,7 +333,7 @@ defer { mpris.stop() }
 // druecken koennte — dann einfach warten.
 let finishReason: PCMSinkFinishReason
 if RawTerminal.isInteractive {
-    note("Tasten:   [Leer] Pause · [n]/[p] Subtune vor/zurück · [q] Ende")
+    note("Tasten:   [Leer] Pause · [n]/[p] oder [→]/[←] Subtune vor/zurück · [q] Ende")
     finishReason = runInteractive(controller: controller)
 } else {
     finishReason = controller.waitUntilFinished()
