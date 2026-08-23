@@ -72,6 +72,11 @@ struct OscilloscopeView: View {
         // letzten Werte stehen, damit das Bild nicht zusammenklappt.
         let showWave = coordinator.isPlaying || coordinator.isPaused
         let channelHeight = height / 3
+        // Die Anzeigewerte werden hier beim Zeichnen geholt, nicht ueber
+        // `@Published` zugestellt: So wirft die Emulation nicht 50-mal je
+        // Sekunde den ganzen Rumpf der Oberflaeche neu auf (siehe
+        // `ViciousCoordinator`).
+        let visuals = showWave ? coordinator.currentVisuals() : .silent
 
         for voice in 0..<3 {
             drawVoice(voice,
@@ -79,6 +84,7 @@ struct OscilloscopeView: View {
                       width: width,
                       channelHeight: channelHeight,
                       showWave: showWave,
+                      visuals: visuals,
                       time: time)
         }
 
@@ -114,14 +120,15 @@ struct OscilloscopeView: View {
                            width: CGFloat,
                            channelHeight: CGFloat,
                            showWave: Bool,
+                           visuals: VoiceVisuals,
                            time: TimeInterval) {
         let baselineY = channelHeight * CGFloat(voice) + channelHeight / 2
 
-        let rawFrequency = showWave ? coordinator.frequencies[voice] : 0
-        let envelope = showWave ? Double(coordinator.envelopes[voice]) : 0.0
-        let gate = showWave ? coordinator.gates[voice] : 0
-        let waveform = showWave ? coordinator.waveforms[voice] : 0
-        let duty = Double(coordinator.pulsewidths[voice])
+        let rawFrequency = showWave ? visuals.frequencies[voice] : 0
+        let envelope = showWave ? Double(visuals.envelopes[voice]) : 0.0
+        let gate = showWave ? visuals.gates[voice] : 0
+        let waveform = showWave ? visuals.waveforms[voice] : 0
+        let duty = Double(visuals.pulsewidths[voice])
 
         // Umrechnung SID-Frequenzregister -> Hertz (Faktor der PAL-Taktrate).
         let frequencyHz = Double(rawFrequency) * 0.0587

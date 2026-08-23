@@ -61,6 +61,11 @@ public struct OscilloscopeView: View {
         TimelineView(.animation(paused: !coordinator.isPlaying)) { timeline in
             Canvas { context, size in
                 let time = timeline.date.timeIntervalSinceReferenceDate
+                // Die Anzeigewerte werden hier beim Zeichnen geholt, nicht ueber
+                // `@Published` zugestellt: So wirft die Emulation nicht 50-mal je
+                // Sekunde den ganzen Rumpf der Oberflaeche neu auf (siehe
+                // `ViciousCoordinator`).
+                let visuals = coordinator.currentVisuals()
                 let W = size.width
                 let H = size.height
 
@@ -97,11 +102,11 @@ public struct OscilloscopeView: View {
 
                 for c in 0..<3 {
                     let baselineY = channelH * CGFloat(c) + channelH / 2
-                    let rawFreq = showWave ? coordinator.frequencies[c] : 0
-                    let env = showWave ? Double(coordinator.envelopes[c]) : 0.0
-                    let gate = showWave ? coordinator.gates[c] : 0
-                    let wf = showWave ? coordinator.waveforms[c] : 0
-                    let duty = Double(coordinator.pulsewidths[c])
+                    let rawFreq = showWave ? visuals.frequencies[c] : 0
+                    let env = showWave ? Double(visuals.envelopes[c]) : 0.0
+                    let gate = showWave ? visuals.gates[c] : 0
+                    let wf = showWave ? visuals.waveforms[c] : 0
+                    let duty = Double(visuals.pulsewidths[c])
 
                     let freqHz = Double(rawFreq) * 0.0587
 

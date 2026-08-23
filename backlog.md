@@ -102,11 +102,14 @@ Der erste Lasttest der Mac-App mit einer Sammlung in HVSC-Größe. Zwei Abstürz
 der Speicherverbrauch sind behoben (siehe CLAUDE.md, Abschnitt „UI- und
 Systemverhalten"). Was dabei auffiel und **offen** bleibt:
 
-- Die App braucht im Leerlauf mit einem laufenden Titel rund **50 % eines
-  Prozessorkerns** — unabhängig von der Sammlungsgröße, also SID-Emulation plus
-  Oszilloskop. Bei 50.001 Titeln sind es 55 %, bei 29 Titeln 47 %. Nicht gemessen
-  ist, wie sich das aufteilt und ob der Zeichentakt (`uiUpdateInterval`, 50 Hz)
-  gesenkt werden kann, ohne dass das Oszilloskop ruckelt.
+- ~~Rund 50 % eines Prozessorkerns im laufenden Betrieb~~ — **aufgeklärt und zur
+  Hälfte behoben am 2026-08-23 (v1.9.17).** Es war weder die Emulation noch das
+  Zeichnen: Das Oszilloskop einzufrieren änderte nichts (48 %), den 50-Hz-Takt zu
+  drosseln dagegen alles (25 % bei 5 Hz). Schuld war die Zustellung der
+  Anzeigewerte über `@Published` — sie warf 50-mal je Sekunde den ganzen Rumpf
+  der Oberfläche neu auf. Jetzt 31 %. Der Rest ist die eigentliche
+  SID-Emulation plus das Zeichnen; ob und wie weit sich das noch senken lässt,
+  ist ungemessen.
 - Die Titelliste kostet auch als `LazyVStack` noch rund **4 KB je Titel**
   (362 MB gegen 157 MB Grundverbrauch). Woher genau, ist nicht untersucht;
   Kandidaten sind die je Zeile neu gebauten `Font`- und `Image`-Werte und der

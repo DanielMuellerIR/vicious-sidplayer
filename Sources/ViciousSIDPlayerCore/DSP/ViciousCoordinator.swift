@@ -59,6 +59,39 @@ public final class RealtimeVisualsBuffer: @unchecked Sendable {
     }
 }
 
+/// Der Anzeigestand der drei SID-Stimmen fuer die Oszilloskope.
+///
+/// Ein Wert und kein Strom von Benachrichtigungen: Wer ihn braucht, holt ihn
+/// sich beim Zeichnen ab (`ViciousCoordinator.currentVisuals()`).
+public struct VoiceVisuals: Sendable, Equatable {
+    /// Huellkurve je Stimme, 0…1.
+    public let envelopes: [Float]
+    /// Roher SID-Frequenzwert je Stimme.
+    public let frequencies: [Int]
+    /// Gate-Bit je Stimme (0 oder 1).
+    public let gates: [Int]
+    /// Wellenform-Bits je Stimme.
+    public let waveforms: [Int]
+    /// Pulsbreite je Stimme, 0…1.
+    public let pulsewidths: [Float]
+
+    public init(envelopes: [Float], frequencies: [Int], gates: [Int],
+                waveforms: [Int], pulsewidths: [Float]) {
+        self.envelopes = envelopes
+        self.frequencies = frequencies
+        self.gates = gates
+        self.waveforms = waveforms
+        self.pulsewidths = pulsewidths
+    }
+
+    /// Alles still — der Stand im Stop-Zustand.
+    public static let silent = VoiceVisuals(envelopes: [0, 0, 0],
+                                            frequencies: [0, 0, 0],
+                                            gates: [0, 0, 0],
+                                            waveforms: [0, 0, 0],
+                                            pulsewidths: [0.5, 0.5, 0.5])
+}
+
 // Der Coordinator selbst ist Apple-only: Er haengt an AVAudioEngine (Audioausgabe) und
 // an Combine/ObservableObject (@Published fuer die SwiftUI-Bindung). Beides gibt es unter
 // Linux nicht, deshalb faellt die ganze Klasse dort aus der Uebersetzung heraus.
@@ -85,12 +118,16 @@ public final class ViciousCoordinator: ObservableObject {
     @Published public var voiceMuted: [Bool] = [false, false, false]
     @Published public var filterEnabled = true
 
-    // Live visual data bound to the UI
-    @Published public var envelopes: [Float] = [0.0, 0.0, 0.0]
-    @Published public var frequencies: [Int] = [0, 0, 0]
-    @Published public var gates: [Int] = [0, 0, 0]
-    @Published public var waveforms: [Int] = [0, 0, 0]
-    @Published public var pulsewidths: [Float] = [0.5, 0.5, 0.5]
+    // Die Anzeigewerte der drei Stimmen (Huellkurve, Frequenz, Gate, Wellenform,
+    // Pulsbreite) sind BEWUSST nicht `@Published`.
+    //
+    // Sie aendern sich 50-mal je Sekunde — einmal je C64-Bild. Als
+    // `@Published` warf jede dieser Aenderungen den kompletten Rumpf der
+    // Oberflaeche neu auf, und das kostete rund die Haelfte der gesamten
+    // Prozessorlast der App (gemessen am 2026-08-23: 48 % gegen 25 % bei
+    // gedrosseltem Takt). Gelesen werden sie ohnehin nur von den beiden
+    // Oszilloskopen, und die zeichnen in ihrem eigenen Takt — sie holen sich
+    // den Stand jetzt direkt ueber `currentVisuals()`.
 
     // Veraenderbar, nicht `let`: Nach einem Neustart des System-Audiodienstes
     // (`AVAudioSession.mediaServicesWereReset` auf iOS) sind die Engine und
@@ -281,12 +318,9 @@ public final class ViciousCoordinator: ObservableObject {
         self.elapsedSeconds = 0.0
         visualsBuffer.updatePlaytime(0.0)
 
-        // Reset visuals
-        self.envelopes = [0.0, 0.0, 0.0]
-        self.frequencies = [0, 0, 0]
-        self.gates = [0, 0, 0]
-        self.waveforms = [0, 0, 0]
-        self.pulsewidths = [0.5, 0.5, 0.5]
+        // Die Anzeigewerte muessen hier nicht zurueckgesetzt werden: Die
+        // Oszilloskope zeichnen im Stop-Zustand die Null-Linie und lesen den
+        // Puffer gar nicht erst.
     }
 
     /// Wirft die Audio-Engine weg und legt eine neue an.
@@ -407,14 +441,30 @@ public final class ViciousCoordinator: ObservableObject {
         uiUpdateTimer = nil
     }
 
-    private func updateUI() {
+    /// Der aktuelle Anzeigestand der drei Stimmen, an SwiftUI vorbei.
+    ///
+    /// Gedacht fuer Ansichten, die ohnehin in ihrem eigenen Takt zeichnen (die
+    /// Oszilloskope). Sie holen sich den Stand beim Zeichnen ab, statt ihn sich
+    /// 50-mal je Sekunde zustellen zu lassen — siehe die Begruendung oben bei
+    /// den Anzeigewerten.
+    public func currentVisuals() -> VoiceVisuals {
         let b = visualsBuffer.read()
-        self.envelopes = [b.envelopes.0, b.envelopes.1, b.envelopes.2]
-        self.frequencies = [b.frequencies.0, b.frequencies.1, b.frequencies.2]
-        self.gates = [b.gates.0, b.gates.1, b.gates.2]
-        self.waveforms = [b.waveforms.0, b.waveforms.1, b.waveforms.2]
-        self.pulsewidths = [b.pulsewidths.0, b.pulsewidths.1, b.pulsewidths.2]
-        self.elapsedSeconds = b.playtime
+        return VoiceVisuals(envelopes: [b.envelopes.0, b.envelopes.1, b.envelopes.2],
+                            frequencies: [b.frequencies.0, b.frequencies.1, b.frequencies.2],
+                            gates: [b.gates.0, b.gates.1, b.gates.2],
+                            waveforms: [b.waveforms.0, b.waveforms.1, b.waveforms.2],
+                            pulsewidths: [b.pulsewidths.0, b.pulsewidths.1, b.pulsewidths.2])
+    }
+
+    private func updateUI() {
+        // Nur noch die Spielzeit geht durch SwiftUI — und auch die nur, wenn
+        // sie sich um mindestens ein Zehntel geaendert hat. Der Zeitanzeige und
+        // dem Positionsregler genuegt das; jede Zuweisung wirft sonst den
+        // Rumpf der Oberflaeche neu auf.
+        let playtime = visualsBuffer.read().playtime
+        if abs(playtime - elapsedSeconds) >= 0.1 || playtime == 0.0 {
+            self.elapsedSeconds = playtime
+        }
     }
 }
 #endif

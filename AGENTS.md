@@ -42,6 +42,14 @@ Releaseartefakte bleiben unversioniert.
 - Native Wiedergabe: `play()` baut den Processor neu oder setzt einen pausierten
   Zustand fort; `pause()` erhält Emulationszustand, `stop()` setzt zurück. Seek ohne
   aktiven Processor wird gepuffert und beim nächsten Play angewandt.
+- Die Anzeigewerte der Stimmen (Hüllkurve, Frequenz, Gate, Wellenform,
+  Pulsbreite) sind **nicht** `@Published` und dürfen es nicht wieder werden. Sie
+  ändern sich 50-mal je Sekunde; als veröffentlichte Werte warf jede Änderung den
+  kompletten Rumpf der Oberfläche neu auf und kostete rund die Hälfte der
+  Prozessorlast der App (gemessen 2026-08-23: 48 % gegen 31 % danach). Die
+  Oszilloskope holen sich den Stand beim Zeichnen über
+  `ViciousCoordinator.currentVisuals()`. Auch `elapsedSeconds` wird nur
+  weitergegeben, wenn es sich um mindestens ein Zehntel geändert hat.
 - UI-/Visualizer-Timer bleibt im `.common`-RunLoop, damit Slider-Drag das
   Oszilloskop nicht anhält.
 - 2SID/3SID-Stereo und Pro-Chip-Modellflags erhalten. Nutzer-Override wirkt global;
