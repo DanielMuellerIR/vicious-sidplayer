@@ -329,7 +329,11 @@ extension AppModel {
         let position = coordinator.elapsedSeconds
         let wasPlaying = coordinator.isPlaying
 
-        coordinator.stop()
+        // Nicht nur `stop()`: Nach dem Neustart des Audiodienstes ist die
+        // AVAudioEngine selbst ungueltig. Wird sie weiterbenutzt, bleibt die
+        // App dauerhaft stumm, obwohl Titel und Status wiederhergestellt
+        // aussehen.
+        coordinator.rebuildAudioEngine()
         guard loadTrack(id: id, autoplay: false) else { return }
         if subtune > 0 { coordinator.setSubtune(sub: subtune) }
         coordinator.seek(seconds: position)

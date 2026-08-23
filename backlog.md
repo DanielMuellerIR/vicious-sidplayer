@@ -30,15 +30,12 @@
   nicht als kaputt, aber eben auch nicht als geprüft.
 - `setPreferredIOBufferDuration(10 ms)` ist ein Startwert aus dem Plan, kein
   Messergebnis. Auf dem Gerät nachmessen und gegebenenfalls anpassen.
-- Nach einem Media-Services-Reset (`mediaServicesWereReset`) baut die App den
-  Titel zwar neu auf, verwendet dabei aber weiterhin die einmal erzeugte
-  `AVAudioEngine` (`ViciousCoordinator` hält sie als `let`). Nach diesem
-  System-Reset sind Engine und abhängige Audio-Objekte laut Apple-Doku ungültig
-  und müssen neu erzeugt werden — sonst kann die Wiedergabe dauerhaft stumm
-  bleiben, obwohl Titel und Status restauriert aussehen. Umbau im Coordinator
-  (Engine neu erzeugbar machen, dann SID/Subtune/Position/Status
-  wiederherstellen); im Simulator nicht auslösbar, Abnahme nur auf echter
-  Hardware (Prüfliste [`ios/GERAETETEST.md`](ios/GERAETETEST.md)).
+- ~~Media-Services-Reset~~ **behoben am 2026-08-23 (v1.9.16).**
+  `ViciousCoordinator.rebuildAudioEngine()` legt die `AVAudioEngine` neu an, der
+  iOS-Wiederaufbau ruft sie statt `stop()`. Belegt ist auf dem Mac, dass die
+  Wiedergabe nach dem Neuaufbau wieder läuft (erster Test des Koordinators
+  überhaupt). Der echte Reset ist im Simulator nicht auslösbar; die Abnahme
+  steht als Punkt 9 in [`ios/GERAETETEST.md`](ios/GERAETETEST.md).
 - Entschieden (2026-08-06): Der Sessionauftrag `goal-prompt.md` ist aus dem
   Arbeitsstand entfernt; der Architekturplan `tasks/2026-07-26-ios-app/plan.md`
   bleibt als dauerhaft relevante Entscheidungsgrundlage im Repo.

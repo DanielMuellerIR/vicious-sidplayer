@@ -92,7 +92,12 @@ public final class ViciousCoordinator: ObservableObject {
     @Published public var waveforms: [Int] = [0, 0, 0]
     @Published public var pulsewidths: [Float] = [0.5, 0.5, 0.5]
 
-    private let audioEngine = AVAudioEngine()
+    // Veraenderbar, nicht `let`: Nach einem Neustart des System-Audiodienstes
+    // (`AVAudioSession.mediaServicesWereReset` auf iOS) sind die Engine und
+    // alles, was an ihr haengt, laut Apple ungueltig. Wer sie dann
+    // weiterbenutzt, bekommt dauerhafte Stille — obwohl Titel, Position und
+    // Status in der Oberflaeche richtig aussehen. Siehe `rebuildAudioEngine`.
+    private var audioEngine = AVAudioEngine()
     private var sourceNode: AVAudioSourceNode?
 
     // codereview-ok: activeSid ist die Quelle, aus der play() den Processor neu erzeugt (2026-07-01)
@@ -283,6 +288,26 @@ public final class ViciousCoordinator: ObservableObject {
         self.waveforms = [0, 0, 0]
         self.pulsewidths = [0.5, 0.5, 0.5]
     }
+
+    /// Wirft die Audio-Engine weg und legt eine neue an.
+    ///
+    /// Gebraucht wird das nach `mediaServicesWereReset`: Der Audiodienst des
+    /// Systems ist neu gestartet, die alte Engine ist tot. `stop()` allein
+    /// genuegt nicht — es baut zwar den Source-Node ab und wirft den Emulator
+    /// weg, benutzt danach aber weiter dieselbe (ungueltige) Engine.
+    ///
+    /// Der Aufrufer baut anschliessend seinen Titel neu auf; der Zustand hier
+    /// ist danach derselbe wie nach `stop()`, also Anfang.
+    public func rebuildAudioEngine() {
+        stop()
+        audioEngine = AVAudioEngine()
+        audioEngineGeneration &+= 1
+    }
+
+    /// Wie oft die Engine schon neu angelegt wurde. Nur zur Diagnose (und um
+    /// den Neuaufbau ueberhaupt pruefbar zu machen) — die Wiedergabe rechnet
+    /// nicht damit.
+    public private(set) var audioEngineGeneration = 0
 
     public func setVolume(_ vol: Float) {
         self.currentVolume = vol

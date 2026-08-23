@@ -116,6 +116,10 @@ Releaseartefakte bleiben unversioniert.
   darüber existiert nicht. Die Datei wird wie die Songlängen-Datenbank als Kopie
   in den Support-Ordner übernommen, und die Zuordnung läuft über ein
   eindeutiges Pfadende (`STILDatabase.resolvedPath`).
+- Nach `mediaServicesWereReset` genügt `coordinator.stop()` **nicht**: Die
+  `AVAudioEngine` selbst ist dann ungültig, und die App bliebe dauerhaft stumm,
+  obwohl Titel und Status richtig aussehen. `ViciousCoordinator.rebuildAudioEngine()`
+  legt sie neu an; der Aufrufer baut danach seinen Titel wieder auf.
 - Kopfhörer abziehen (`.oldDeviceUnavailable`) pausiert. Niemals laut über den
   Lautsprecher weiterspielen. Nach einer Unterbrechung nur bei `.shouldResume`
   fortsetzen.

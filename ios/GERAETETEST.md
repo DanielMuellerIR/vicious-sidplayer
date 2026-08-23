@@ -106,6 +106,16 @@ Jeder Punkt ist einzeln zu quittieren. Ein „läuft schon irgendwie“ zählt n
 - [ ] Danach funktioniert ein erneuter Import.
 - [ ] Mit „Favoriten behalten“ bleiben die Favoriten erhalten, ohne sie sind sie weg.
 
+### 9. Neustart des System-Audiodienstes
+
+Selten, aber real: iOS startet seinen Audiodienst neu (`mediaServicesWereReset`),
+etwa nach einem Absturz im Audiosystem. Auslösen lässt sich das nicht auf Knopfdruck
+— wenn es passiert, ist dies der Prüfpunkt:
+
+- [ ] Nach dem Zurückkommen spielt derselbe Titel an derselben Stelle weiter
+      (höchstens eine Lücke), statt dauerhaft stumm zu bleiben. Seit v1.9.16 legt
+      die App dabei die `AVAudioEngine` neu an; vorher benutzte sie die tote weiter.
+
 ## Was tun, wenn etwas nicht stimmt
 
 Fehlerbild notieren (welcher Punkt, was passiert stattdessen) und dazu, falls
