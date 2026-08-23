@@ -69,6 +69,43 @@ public enum PlaylistTrackID {
     }
 }
 
+/// Welcher Ausschnitt der Playlist in ein Aufklappmenue gehoert.
+///
+/// Hintergrund: Der Titelwaehler oben im Mac-Player war ein `Picker` ueber die
+/// GANZE Liste. Auf macOS wird daraus ein Menue mit einem Eintrag je Titel —
+/// bei einer HVSC-Sammlung also 50.000 Menueeintraege. Gemessen am 2026-08-23
+/// kostete das rund 100 KB je Titel (5,2 GB bei 50.001 Titeln) und liess die
+/// App beim Start abstuerzen. Deshalb zeigt das Menue ab einer Obergrenze nur
+/// noch einen Ausschnitt rund um den laufenden Titel; gesucht wird in der
+/// Titelliste der Seitenleiste.
+public enum PlaylistMenuWindow {
+
+    /// So viele Eintraege zeigt das Menue hoechstens.
+    public static let defaultLimit = 300
+
+    /// Die Positionen, die ins Menue gehoeren.
+    ///
+    /// - Parameters:
+    ///   - count: Laenge der Playlist.
+    ///   - anchor: Position des laufenden Titels; -1, wenn keiner laeuft.
+    ///   - limit: Obergrenze der Eintraege.
+    /// - Returns: bei kurzen Listen alle Positionen, sonst ein Fenster von
+    ///   `limit` Positionen, das den laufenden Titel moeglichst mittig enthaelt
+    ///   und die Listengrenzen nie ueberschreitet.
+    public static func indices(count: Int,
+                               anchor: Int,
+                               limit: Int = defaultLimit) -> [Int] {
+        guard count > 0, limit > 0 else { return [] }
+        guard count > limit else { return Array(0..<count) }
+
+        let center = (anchor >= 0 && anchor < count) ? anchor : 0
+        // Erst mittig setzen, dann an den Rand schieben, falls das Fenster
+        // sonst vor dem Anfang oder hinter dem Ende der Liste laege.
+        let start = min(max(0, center - limit / 2), count - limit)
+        return Array(start..<(start + limit))
+    }
+}
+
 /// Ein Eintrag der Playlist.
 ///
 /// Bewusst schlank und ohne Titel/Komponist aus dem Datei-Header: die stehen
@@ -226,6 +263,18 @@ public struct Playlist: Equatable, Sendable {
 
     public private(set) var tracks: [PlaylistTrack]
 
+    /// Zaehlt jede Aenderung der Liste mit.
+    ///
+    /// Die Mac-Oberflaeche baut ihre Titelliste nur dann neu auf, wenn dieser
+    /// Wert sich geaendert hat. Noetig ist das, weil der Koordinator 50-mal je
+    /// Sekunde neue Anzeigewerte schickt: Ohne den Zaehler wuerde die Liste in
+    /// diesem Takt mitgebaut, und ein Vergleich der Titel selbst waere bei einer
+    /// HVSC-Sammlung viel zu teuer (50.000 Zeichenketten je Bild).
+    ///
+    /// Der Zaehler laeuft ueber (`&+`) statt abzustuerzen; auf Gleichheit
+    /// geprueft wird er, nicht auf Groesse.
+    public private(set) var revision: Int = 0
+
     public init(tracks: [PlaylistTrack] = []) {
         self.tracks = tracks
     }
@@ -246,6 +295,7 @@ public struct Playlist: Equatable, Sendable {
 
     public mutating func removeAll() {
         tracks.removeAll()
+        revision &+= 1
     }
 
     // MARK: - Aufbau
@@ -265,6 +315,28 @@ public struct Playlist: Equatable, Sendable {
             .sorted(by: Playlist.isOrderedBefore)
         let external = tracks.filter(\.isExternal)
         tracks = libraryTracks + external
+        revision &+= 1
+    }
+
+    /// Wie `setLibrary`, haelt dabei aber den laufenden Titel fest.
+    ///
+    /// Gebraucht wird das, seit der Abgleich mit dem Dateisystem im Hintergrund
+    /// laeuft: Das Ergebnis trifft ein, waehrend schon gespielt wird. Die Liste
+    /// wird dabei neu aufgebaut und sortiert, der laufende Titel steht danach
+    /// also an einer anderen POSITION — ein einfach beibehaltener Index zeigte
+    /// auf einen fremden Titel. Wiedergefunden wird er ueber seine stabile ID.
+    ///
+    /// - Parameter currentIndex: Position des laufenden Titels vor dem Abgleich.
+    /// - Returns: seine Position danach, oder -1, wenn vorher keiner lief oder
+    ///   der Titel nicht mehr in der Liste steht (aus der Bibliothek geloescht).
+    @discardableResult
+    public mutating func setLibrary(_ entries: [MusicLibraryEntry],
+                                    root: URL,
+                                    keepingTrackAt currentIndex: Int) -> Int {
+        let keptID = track(at: currentIndex)?.id
+        setLibrary(entries, root: root)
+        guard let keptID else { return -1 }
+        return index(forID: keptID) ?? -1
     }
 
     /// Nimmt Dateien in die Liste auf, ohne Doppelte.
@@ -290,6 +362,7 @@ public struct Playlist: Equatable, Sendable {
             if firstIndex == nil { firstIndex = tracks.count - 1 }
         }
 
+        if !addedIDs.isEmpty { revision &+= 1 }
         return PlaylistAdditions(addedIDs: addedIDs, firstIndex: firstIndex)
     }
 

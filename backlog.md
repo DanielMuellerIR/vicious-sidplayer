@@ -58,10 +58,10 @@ belegt, keiner ist eine Vermutung.
    **Songlängen-Auflösung**: Reihenfolge der Quellen, negativer Cache und die
    Buchführung über die laufende Berechnung stehen jetzt in `SongLengthResolver`,
    die Leiter zur effektiven Dauer in `SongLengthSelection` — beide Apps benutzen
-   dieselbe Instanz der Regel, und sie ist erstmals getestet (20 Tests). Offen
-   bleibt: der Bibliotheks-Scan läuft auf dem Mac weiterhin **synchron** beim Start —
-   bei den >50.000 Dateien einer HVSC würde die Oberfläche dabei sichtbar stehen (so
-   war es vorher auch schon; die iPhone-App macht es bereits im Hintergrund).
+   dieselbe Instanz der Regel, und sie ist erstmals getestet (20 Tests). Der
+   Bibliotheks-Scan der Mac-App lief zuletzt noch **synchron** beim Start; das ist
+   mit v1.9.11 erledigt (Hintergrund-Scan, Liste sofort aus dem gespeicherten
+   Index).
 
 2. **`AVAudioEnginePCMSink.stop()` baut außerhalb des Locks ab.** `sourceNode` und der
    Zwischenpuffer werden ohne Sperre freigegeben, obwohl das Protokoll ausdrücklich
@@ -91,6 +91,26 @@ belegt, keiner ist eine Vermutung.
    der Zeichentakt des Oszilloskops muss über `TimelineView(paused:)` an
    `isSceneActive` hängen. Beides ist korrekt umgesetzt, aber an SwiftUI-Strukturen
    ist kein sinnvoller Test aufzuhängen.
+
+## Gemessen am 2026-08-23 an 50.001 Titeln (v1.9.11)
+
+Der erste Lasttest der Mac-App mit einer Sammlung in HVSC-Größe. Zwei Abstürze und
+der Speicherverbrauch sind behoben (siehe CLAUDE.md, Abschnitt „UI- und
+Systemverhalten"). Was dabei auffiel und **offen** bleibt:
+
+- Die App braucht im Leerlauf mit einem laufenden Titel rund **50 % eines
+  Prozessorkerns** — unabhängig von der Sammlungsgröße, also SID-Emulation plus
+  Oszilloskop. Bei 50.001 Titeln sind es 55 %, bei 29 Titeln 47 %. Nicht gemessen
+  ist, wie sich das aufteilt und ob der Zeichentakt (`uiUpdateInterval`, 50 Hz)
+  gesenkt werden kann, ohne dass das Oszilloskop ruckelt.
+- Die Titelliste kostet auch als `LazyVStack` noch rund **4 KB je Titel**
+  (362 MB gegen 157 MB Grundverbrauch). Woher genau, ist nicht untersucht;
+  Kandidaten sind die je Zeile neu gebauten `Font`- und `Image`-Werte und der
+  Tooltip-Text.
+- Der Hintergrund-Scan über 50.001 Dateien dauert headless 4,2 s, in der
+  laufenden App aber 3,6 bis 24 s — er läuft mit niedriger Priorität neben der
+  Wiedergabe. Erträglich, aber ungemessen ist, ob ein Zwischenstand der Liste
+  (statt „alles am Ende") sich lohnt.
 
 In Arbeit: Linux-Port (CLI + Audio-Backend) nach `tasks/2026-07-05-linux-port/plan.md`.
 

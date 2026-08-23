@@ -151,6 +151,97 @@ final class PlaylistTests: XCTestCase {
                        "Wurzel zuerst, dann Ordner alphabetisch; Zahlen der Groesse nach")
     }
 
+    // MARK: - Hintergrund-Abgleich: laufender Titel bleibt der laufende Titel
+
+    // Seit v1.9.11 scannt die Mac-App im Hintergrund; das Ergebnis trifft ein,
+    // waehrend schon gespielt wird. Weil die Liste dabei neu sortiert wird,
+    // waere ein beibehaltener Index der falsche Titel.
+    func testBackgroundReloadFollowsThePlayingTrackToItsNewPosition() {
+        var playlist = Playlist()
+        playlist.setLibrary([entry("Hubbard/Sanxion.sid")], root: root)
+        XCTAssertEqual(playlist.tracks.map(\.id), ["Hubbard/Sanxion.sid"])
+
+        // Der Scan findet einen Ordner, der alphabetisch VOR dem laufenden Titel
+        // steht: Sanxion rutscht von Position 0 auf Position 1.
+        let newIndex = playlist.setLibrary([entry("Hubbard/Sanxion.sid"),
+                                            entry("Galway/Rambo.sid")],
+                                           root: root,
+                                           keepingTrackAt: 0)
+
+        XCTAssertEqual(playlist.tracks.map(\.id), ["Galway/Rambo.sid", "Hubbard/Sanxion.sid"])
+        XCTAssertEqual(newIndex, 1, "Der laufende Titel wird ueber seine ID wiedergefunden, nicht ueber die Position")
+    }
+
+    func testBackgroundReloadReportsMinusOneWhenThePlayingTrackIsGone() {
+        var playlist = Playlist()
+        playlist.setLibrary([entry("Sanxion.sid"), entry("Commando.sid")], root: root)
+        let playing = playlist.index(forID: "Sanxion.sid")!
+
+        // Zwischen zwei Scans hat der Nutzer die Datei geloescht.
+        let newIndex = playlist.setLibrary([entry("Commando.sid")],
+                                           root: root,
+                                           keepingTrackAt: playing)
+
+        XCTAssertEqual(newIndex, -1, "Ein verschwundener Titel darf nicht auf einen fremden Eintrag zeigen")
+    }
+
+    func testBackgroundReloadWithoutASelectionStaysWithoutOne() {
+        var playlist = Playlist()
+        let newIndex = playlist.setLibrary([entry("Sanxion.sid")], root: root, keepingTrackAt: -1)
+
+        XCTAssertEqual(newIndex, -1)
+        XCTAssertEqual(playlist.count, 1)
+    }
+
+    // Ein hereingezogener Fremdtitel steht hinter der Bibliothek; waechst die
+    // Bibliothek beim Abgleich, verschiebt er sich mit.
+    func testBackgroundReloadFollowsADroppedTrack() {
+        var playlist = Playlist()
+        let dropped = URL(fileURLWithPath: "/Users/test/Downloads/Fremd.sid")
+        playlist.append([dropped], root: root)
+        let playing = playlist.index(forID: dropped.path)!
+        XCTAssertEqual(playing, 0)
+
+        let newIndex = playlist.setLibrary([entry("Sanxion.sid"), entry("Commando.sid")],
+                                           root: root,
+                                           keepingTrackAt: playing)
+
+        XCTAssertEqual(newIndex, 2, "Hereingezogene Titel ruecken hinter die Bibliothek")
+        XCTAssertEqual(playlist.track(at: newIndex)?.id, dropped.path)
+    }
+
+    // MARK: - Ausschnitt fuer das Titelmenue
+
+    func testMenuShowsEveryTrackWhileTheListIsShort() {
+        XCTAssertEqual(PlaylistMenuWindow.indices(count: 5, anchor: 2, limit: 10), [0, 1, 2, 3, 4])
+    }
+
+    func testMenuCentersTheWindowOnThePlayingTrack() {
+        let window = PlaylistMenuWindow.indices(count: 1000, anchor: 500, limit: 10)
+        XCTAssertEqual(window, Array(495..<505))
+    }
+
+    // Am Anfang und am Ende der Liste kann das Fenster nicht mittig liegen —
+    // es darf dann aber auch nicht ueber die Grenzen hinausragen.
+    func testMenuWindowStaysInsideTheListAtBothEnds() {
+        XCTAssertEqual(PlaylistMenuWindow.indices(count: 1000, anchor: 1, limit: 10), Array(0..<10))
+        XCTAssertEqual(PlaylistMenuWindow.indices(count: 1000, anchor: 999, limit: 10), Array(990..<1000))
+    }
+
+    func testMenuWithoutASelectionStartsAtTheTop() {
+        XCTAssertEqual(PlaylistMenuWindow.indices(count: 1000, anchor: -1, limit: 10), Array(0..<10))
+    }
+
+    func testMenuWindowNeverExceedsItsLimit() {
+        XCTAssertEqual(PlaylistMenuWindow.indices(count: 50_001, anchor: 25_000).count,
+                       PlaylistMenuWindow.defaultLimit,
+                       "Bei einer HVSC-Sammlung darf das Menue nicht 50.000 Eintraege bauen")
+    }
+
+    func testMenuOfAnEmptyPlaylistIsEmpty() {
+        XCTAssertEqual(PlaylistMenuWindow.indices(count: 0, anchor: -1), [])
+    }
+
     // MARK: - Suche und Favoritenfilter
 
     func testSearchCoversNameAndFolder() {

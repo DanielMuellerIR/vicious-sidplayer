@@ -73,6 +73,17 @@ public struct MainView: View {
     // bewusst nicht wechselt — bei einer Aenderung wird sie neu gebaut.
     @State private var library: MusicLibrary? = nil
 
+    // Der Abgleich der Bibliothek mit dem Dateisystem laeuft im Hintergrund:
+    // Bei einer HVSC-Sammlung mit ueber 50.000 Dateien dauert er Sekunden, und
+    // solange er (wie bis v1.9.10) im Hauptthread lief, stand die Oberflaeche
+    // sichtbar still. Genau ein Abgleich zur Zeit; die Generation entscheidet,
+    // wer sein Ergebnis noch eintragen darf — ein Ordnerwechsel in den
+    // Einstellungen macht einen laufenden Scan gegenstandslos.
+    @State private var libraryScanTask: Task<Void, Never>? = nil
+    @State private var libraryScanGeneration = 0
+    /// Zeigt in der Seitenleiste an, dass gerade abgeglichen wird.
+    @State private var isScanningLibrary = false
+
     // Playlist-Filter: Live-Suche nach Titel + Ordner sowie "nur Favoriten".
     // Beide filtern NUR die Anzeige (sichtbare Indizes) — Auswahl, Auto-Next
     // und Shuffle arbeiten weiter auf der vollen Liste mit globalen Indizes.
@@ -81,12 +92,12 @@ public struct MainView: View {
     // Favoriten als stabile Titel-IDs, persistent in UserDefaults.
     @State private var favorites = PlaylistFavorites()
 
-    private var visibleTrackIndices: [Int] {
-        playlist.visibleIndices(searchText: searchText,
-                                favoritesOnly: favoritesOnly,
-                                favorites: favorites)
+    // Der Ausschnitt der Playlist, den das Titelmenue oben zeigt. Die Rechnung
+    // steht im Core (`PlaylistMenuWindow`) und ist dort getestet.
+    private var tuneMenuIndices: [Int] {
+        PlaylistMenuWindow.indices(count: playlist.count, anchor: currentTrackIdx)
     }
-    
+
     @State private var showFileImporter = false
     @State private var dragOver = false
     @State private var errorMessage: String? = nil
@@ -209,6 +220,18 @@ public struct MainView: View {
                         Text("PLAYLIST")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundColor(textSecCol)
+                        // Solange die Bibliothek gegen das Dateisystem
+                        // abgeglichen wird, ist die Liste schon benutzbar (sie
+                        // steht aus dem gespeicherten Index) — aber eben noch
+                        // nicht vollstaendig. Das sagt dieser Ring.
+                        if isScanningLibrary {
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                                .controlSize(.small)
+                                .scaleEffect(0.6)
+                                .frame(width: 12, height: 12)
+                                .help("Bibliothek wird abgeglichen …")
+                        }
                         Spacer()
                         // Filter "nur Favoriten" (Stern) neben dem Papierkorb.
                         if !playlist.isEmpty {
@@ -260,57 +283,16 @@ public struct MainView: View {
                     .padding(.horizontal, 12)
                     .padding(.bottom, 6)
 
-                    ScrollView {
-                        VStack(spacing: 2) {
-                            ForEach(visibleTrackIndices, id: \.self) { idx in
-                                let track = playlist.tracks[idx]
-                                let isActive = idx == currentTrackIdx
-                                let isFavorite = favorites.contains(track.id)
+                    TrackListView(playlist: playlist,
+                                  currentTrackIdx: currentTrackIdx,
+                                  searchText: searchText,
+                                  favoritesOnly: favoritesOnly,
+                                  favorites: favorites,
+                                  isLight: isLight,
+                                  onSelect: selectTrack,
+                                  onToggleFavorite: toggleFavorite)
+                        .equatable()
 
-                                // Zeile = Auswahl-Button + separater Stern-Button
-                                // (Favorit an/aus), beide auf gemeinsamem Hintergrund.
-                                HStack(spacing: 4) {
-                                    Button(action: { selectTrack(at: idx) }) {
-                                        HStack(spacing: 8) {
-                                            Image(systemName: isActive ? "play.circle.fill" : "music.note")
-                                                .font(.system(size: 12))
-                                            Text(track.name)
-                                                .font(.system(size: 13))
-                                                .lineLimit(1)
-                                            Spacer()
-                                        }
-                                        .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-                                    // Der Ordner steht im Tooltip statt in einer
-                                    // zweiten Zeile: in einer nach Komponisten
-                                    // sortierten Sammlung gibt es denselben
-                                    // Dateinamen mehrfach, und die Seitenleiste
-                                    // ist mit 220 px zu schmal fuer beides.
-                                    .help(track.folderPath.isEmpty ? track.name : "\(track.folderPath)/\(track.name)")
-
-                                    Button(action: { toggleFavorite(at: idx) }) {
-                                        Image(systemName: isFavorite ? "star.fill" : "star")
-                                            .font(.system(size: 10))
-                                            .foregroundColor(isFavorite
-                                                             ? .yellow
-                                                             : (isActive ? .white : textSecCol.opacity(0.45)))
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-                                    .help(isFavorite ? "Favorit entfernen" : "Als Favorit markieren")
-                                }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(isActive ? accentCol : Color.clear)
-                                .foregroundColor(isActive ? .white : textCol)
-                                .cornerRadius(6)
-                            }
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                    }
-                    .background(isLight ? Color.macLightSurface : Color.macDarkSurface)
-                    
                     Divider()
                         .background(borderCol)
                     
@@ -348,25 +330,35 @@ public struct MainView: View {
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(textSecCol)
                         
-                        // codereview-ok: loadTrack setzt currentTrackIdx auf den gepickten Index (2026-07-01)
-                        Picker("", selection: Binding(
-                            get: { self.currentTrackIdx },
-                            set: { val in if val != -1 { self.selectTrack(at: val) } }
-                        )) {
-                            Text("— Auswählen —").tag(-1)
-                            ForEach(0..<playlist.count, id: \.self) { idx in
-                                Text(playlist.tracks[idx].name).tag(idx)
+                        // Titelwaehler. Frueher ein `Picker` ueber die GANZE
+                        // Playlist — daraus baute macOS ein Menue mit einem
+                        // Eintrag je Titel. Bei 50.001 Titeln waren das rund
+                        // 5,2 GB Arbeitsspeicher, und die App stuerzte beim
+                        // Start im Ansichtsaufbau von SwiftUI ab (gemessen am
+                        // 2026-08-23). Jetzt zeigt das Menue hoechstens
+                        // `PlaylistMenuWindow.defaultLimit` Titel rund um den
+                        // laufenden — wer in einer grossen Sammlung sucht, tut
+                        // das in der Titelliste links.
+                        Menu {
+                            ForEach(tuneMenuIndices, id: \.self) { idx in
+                                if let track = playlist.track(at: idx) {
+                                    Button(track.name) { selectTrack(at: idx) }
+                                }
                             }
+                            if playlist.count > PlaylistMenuWindow.defaultLimit {
+                                Divider()
+                                Text("… \(playlist.count - PlaylistMenuWindow.defaultLimit) weitere Titel: links in der Liste suchen")
+                            }
+                        } label: {
+                            Text(playlist.track(at: currentTrackIdx)?.name ?? "— Auswählen —")
+                                .lineLimit(1)
                         }
-                        .pickerStyle(DefaultPickerStyle())
-                        // Breiter Songnamen-Picker: zeigt mehr vom Titel und fuellt den
-                        // zuvor ungenutzten Platz oben. Definite Breite, weil ein
-                        // maxWidth-Rahmen den Pop-up-Button optisch NICHT fuellt. 260
-                        // ist so gewaehlt, dass es bei Minimalbreite (unten) auch dann
-                        // noch passt, wenn der Subtune-Block sichtbar ist — dann fuellt
-                        // der Picker den Platz komplett; ohne Subtunes bleibt ein kleiner
-                        // Rest zum Transport.
+                        // Definite Breite, weil ein maxWidth-Rahmen den
+                        // Pop-up-Button optisch NICHT fuellt. 260 ist so
+                        // gewaehlt, dass es bei Minimalbreite auch dann noch
+                        // passt, wenn der Subtune-Block sichtbar ist.
                         .frame(width: 260)
+                        .help("Titel wählen")
 
                         Button("Öffnen…") {
                             showFileImporter = true
@@ -920,6 +912,7 @@ public struct MainView: View {
     private func clearPlaylist() {
         coordinator.stop()
         cancelLengthEstimate()
+        cancelLibraryScan()
         playlist.removeAll()
         currentTrackIdx = -1
         errorMessage = nil
@@ -957,18 +950,96 @@ public struct MainView: View {
         library = lib
         migrateStoredIDs(root: lib.root)
 
-        // Abgleich mit dem Dateisystem. Scheitert er (Ordner verschwunden,
-        // Netzlaufwerk offline), bleibt der zuletzt gespeicherte Index dieser
-        // Wurzel stehen — besser eine bekannte Liste als gar keine.
-        do {
-            try lib.refresh()
-        } catch {
-            loadLog.error("Bibliotheks-Scan fehlgeschlagen: \(error.localizedDescription, privacy: .public)")
+        // Zuerst der beim letzten Start gespeicherte Index: Er steht sofort, die
+        // Liste ist damit ohne Wartezeit da und die Wiedergabe kann beginnen.
+        // Beim allerersten Start gibt es ihn noch nicht — dann bleibt die Liste
+        // leer, bis der Scan unten fertig ist.
+        playlist.setLibrary(lib.entries, root: lib.root)
+        let startedFromStoredIndex = !playlist.isEmpty
+        if startedFromStoredIndex {
+            startInitialPlayback(restoreSession: restoreSession)
         }
 
-        playlist.setLibrary(lib.entries, root: lib.root)
-        guard !playlist.isEmpty else { return }
+        // Der Abgleich mit dem Dateisystem laeuft danach im Hintergrund und
+        // zieht die Liste nach: neu hinzugekommene Dateien kommen dazu,
+        // geloeschte verschwinden.
+        refreshLibraryInBackground(lib,
+                                   restoreSession: restoreSession,
+                                   startPlaybackWhenDone: !startedFromStoredIndex)
+    }
+
+    /// Gleicht die Bibliothek abseits des Hauptthreads gegen das Dateisystem ab
+    /// und zieht die Playlist danach nach.
+    ///
+    /// - Parameters:
+    ///   - lib: die Bibliothek zur aktuellen Wurzel.
+    ///   - restoreSession: ob die letzte Sitzung fortgesetzt werden soll (nur
+    ///     beim allerersten Laden).
+    ///   - startPlaybackWhenDone: `true`, wenn oben noch nichts gestartet werden
+    ///     konnte, weil es keinen gespeicherten Index gab. Dann beginnt die
+    ///     Wiedergabe mit dem Ergebnis dieses Scans.
+    private func refreshLibraryInBackground(_ lib: MusicLibrary,
+                                            restoreSession: Bool,
+                                            startPlaybackWhenDone: Bool) {
+        // Ein noch laufender Scan gehoert zu einer aelteren Wurzel oder ist
+        // durch diesen Aufruf ueberholt: abbestellen. Der Scan selbst laesst
+        // sich nicht mittendrin anhalten (`MusicLibrary.refresh` liest das
+        // Dateisystem am Stueck); die Generation sorgt dafuer, dass sein
+        // Ergebnis nichts mehr ueberschreibt.
+        libraryScanTask?.cancel()
+        libraryScanGeneration &+= 1
+        let generation = libraryScanGeneration
+        isScanningLibrary = true
+        loadLog.info("Bibliotheks-Abgleich gestartet (Generation \(generation, privacy: .public))")
+        libraryScanTask = Task.detached(priority: .utility) {
+            // Scheitert der Abgleich (Ordner verschwunden, Netzlaufwerk
+            // offline), bleibt der zuletzt gespeicherte Index dieser Wurzel
+            // stehen — besser eine bekannte Liste als gar keine.
+            do {
+                _ = try lib.refresh()
+            } catch {
+                loadLog.error("Bibliotheks-Scan fehlgeschlagen: \(error.localizedDescription, privacy: .public)")
+            }
+            let entries = lib.entries
+            await MainActor.run {
+                guard libraryScanGeneration == generation else { return }
+                libraryScanTask = nil
+                isScanningLibrary = false
+                applyScannedLibrary(entries,
+                                    root: lib.root,
+                                    restoreSession: restoreSession,
+                                    startPlayback: startPlaybackWhenDone)
+            }
+        }
+    }
+
+    /// Traegt das Scan-Ergebnis in die Playlist ein.
+    ///
+    /// Der laufende Titel behaelt seine Position nicht: Die Liste wird neu
+    /// sortiert. Ihn ueber seine stabile ID wiederzufinden, ist Sache des Cores
+    /// (`Playlist.setLibrary(_:root:keepingTrackAt:)`) und dort getestet.
+    @MainActor
+    private func applyScannedLibrary(_ entries: [MusicLibraryEntry],
+                                     root: URL,
+                                     restoreSession: Bool,
+                                     startPlayback: Bool) {
+        currentTrackIdx = playlist.setLibrary(entries,
+                                              root: root,
+                                              keepingTrackAt: currentTrackIdx)
+        loadLog.info("Bibliotheks-Abgleich fertig: \(entries.count, privacy: .public) Titel")
+        guard startPlayback, !playlist.isEmpty else { return }
         startInitialPlayback(restoreSession: restoreSession)
+    }
+
+    /// Bricht einen laufenden Bibliotheks-Abgleich ab und macht sein Ergebnis
+    /// ungueltig. Noetig ueberall dort, wo die Liste bewusst geleert oder neu
+    /// aufgebaut wird — sonst fuellte der spaeter fertig werdende Scan sie
+    /// wieder auf, obwohl der Nutzer gerade auf den Papierkorb geklickt hat.
+    private func cancelLibraryScan() {
+        libraryScanTask?.cancel()
+        libraryScanTask = nil
+        libraryScanGeneration &+= 1
+        isScanningLibrary = false
     }
 
     // Womit die App nach dem Aufbau der Start-Playlist beginnt.
@@ -1353,6 +1424,121 @@ public struct MainView: View {
 }
 
 // Helper view for metadata lines
+// Die Titelliste der Seitenleiste.
+//
+// Sie ist aus zwei Gruenden eine EIGENE Ansicht und kennt den Koordinator
+// bewusst nicht:
+//
+//  1. Der Koordinator schickt 50-mal je Sekunde neue Anzeigewerte (Huellkurven,
+//     Frequenzen, Spielzeit). Stuende die Liste weiter im Rumpf von `MainView`,
+//     baute SwiftUI sie in diesem Takt mit auf. Bei 50.000 Titeln lief dabei ein
+//     Prozessorkern voll. `Equatable` plus der Aenderungszaehler der Playlist
+//     entscheiden jetzt in wenigen Vergleichen, dass sich nichts geaendert hat.
+//  2. `LazyVStack` statt `VStack`: Ein VStack baut jede Zeile sofort auf, auch
+//     die 49.000, die niemand sieht. Bei 50.001 Titeln sprengte das den
+//     Ansichtsaufbau von SwiftUI, und die App brach beim Start mit "abort()"
+//     ab — am 2026-08-23 dreimal reproduziert. Gemessen wurde am selben Tag
+//     auch die Alternative `List` (auf macOS eine NSTableView): Sie stuerzt
+//     zwar nicht ab, legt die Zeilen aber trotzdem alle an — 804 MB gegen
+//     362 MB beim LazyVStack, bei rund 20 Prozentpunkten mehr Prozessorlast.
+//
+// Die Auswahl arbeitet weiter mit Positionen in der VOLLEN Liste: Suche und
+// Favoritenfilter aendern nur, was zu sehen ist, nicht was gespielt wird.
+struct TrackListView: View, Equatable {
+    let playlist: Playlist
+    let currentTrackIdx: Int
+    let searchText: String
+    let favoritesOnly: Bool
+    let favorites: PlaylistFavorites
+    let isLight: Bool
+    let onSelect: (Int) -> Void
+    let onToggleFavorite: (Int) -> Void
+
+    // Was die Liste aussehen laesst, haengt nur an diesen Werten. Die beiden
+    // Aktionen sind Funktionen und lassen sich nicht vergleichen — sie greifen
+    // ohnehin immer auf den aktuellen Zustand von `MainView` zu.
+    nonisolated static func == (lhs: TrackListView, rhs: TrackListView) -> Bool {
+        lhs.playlist.revision == rhs.playlist.revision
+            && lhs.currentTrackIdx == rhs.currentTrackIdx
+            && lhs.searchText == rhs.searchText
+            && lhs.favoritesOnly == rhs.favoritesOnly
+            && lhs.favorites == rhs.favorites
+            && lhs.isLight == rhs.isLight
+    }
+
+    private var visibleIndices: [Int] {
+        playlist.visibleIndices(searchText: searchText,
+                                favoritesOnly: favoritesOnly,
+                                favorites: favorites)
+    }
+
+    var body: some View {
+        let textCol = isLight ? Color.macLightText : Color.macDarkText
+        let textSecCol = isLight ? Color.macLightSecondary : Color.macDarkSecondary
+        let accentCol = isLight ? Color.macLightAccent : Color.macDarkAccent
+        let surfaceCol = isLight ? Color.macLightSurface : Color.macDarkSurface
+
+        ScrollView {
+            LazyVStack(spacing: 2) {
+                ForEach(visibleIndices, id: \.self) { idx in
+                    row(idx, textCol: textCol, textSecCol: textSecCol, accentCol: accentCol)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+        }
+        .background(surfaceCol)
+    }
+
+    // Zeile = Auswahl-Button + separater Stern-Button (Favorit an/aus), beide
+    // auf gemeinsamem Hintergrund.
+    @ViewBuilder
+    private func row(_ idx: Int,
+                     textCol: Color,
+                     textSecCol: Color,
+                     accentCol: Color) -> some View {
+        if let track = playlist.track(at: idx) {
+            let isActive = idx == currentTrackIdx
+            let isFavorite = favorites.contains(track.id)
+
+            HStack(spacing: 4) {
+                Button(action: { onSelect(idx) }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: isActive ? "play.circle.fill" : "music.note")
+                            .font(.system(size: 12))
+                        Text(track.name)
+                            .font(.system(size: 13))
+                            .lineLimit(1)
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PlainButtonStyle())
+                // Der Ordner steht im Tooltip statt in einer zweiten Zeile: in
+                // einer nach Komponisten sortierten Sammlung gibt es denselben
+                // Dateinamen mehrfach, und die Seitenleiste ist zu schmal fuer
+                // beides.
+                .help(track.folderPath.isEmpty ? track.name : "\(track.folderPath)/\(track.name)")
+
+                Button(action: { onToggleFavorite(idx) }) {
+                    Image(systemName: isFavorite ? "star.fill" : "star")
+                        .font(.system(size: 10))
+                        .foregroundColor(isFavorite
+                                         ? .yellow
+                                         : (isActive ? .white : textSecCol.opacity(0.45)))
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help(isFavorite ? "Favorit entfernen" : "Als Favorit markieren")
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(isActive ? accentCol : Color.clear)
+            .foregroundColor(isActive ? .white : textCol)
+            .cornerRadius(6)
+        }
+    }
+}
+
 struct MetaLine: View {
     let label: String
     let value: String

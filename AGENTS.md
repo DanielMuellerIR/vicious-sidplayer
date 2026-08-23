@@ -136,6 +136,24 @@ Quick-Look-Controls auf macOS nicht zuverlässig sind, und stoppt beim Schließe
   nicht zwingend in `swift run`.
 - Autoplay-Ordnerauflösung bleibt im Core testbar; eine Settings-Änderung lädt die
   Playlist sofort neu. Keine persönlichen Pfade hartkodieren.
+- Große Sammlungen (Ziel: HVSC mit über 50.000 Titeln): Keine Stelle der
+  Mac-Oberfläche darf alle Titel auf einmal aufbauen. Am 2026-08-23 an einer
+  Sammlung aus 50.001 Dateien gemessen — beide Fallen sind echt aufgetreten:
+  - Der Titelwähler oben ist ein `Menu` über einen begrenzten Ausschnitt
+    (`PlaylistMenuWindow` im Core). Als `Picker` über die ganze Playlist baute
+    macOS daraus ein Menü mit einem Eintrag je Titel: 5,2 GB Arbeitsspeicher
+    und ein voll ausgelasteter Prozessorkern.
+  - Die Titelliste steht in einem `LazyVStack`. Ein einfacher `VStack` legt
+    jede Zeile sofort an; die App brach damit beim Start mit `abort()` im
+    Ansichtsaufbau von SwiftUI ab (dreimal reproduziert). `List` stürzt zwar
+    nicht ab, materialisiert aber ebenfalls alle Zeilen: 804 MB gegen 362 MB.
+  Mit beidem zusammen: 340 MB und Grundlast statt Absturz.
+- Der Bibliotheks-Scan der Mac-App läuft im Hintergrund. Die Liste steht sofort
+  aus dem gespeicherten Index, die Wiedergabe beginnt vor dem Scan; das Ergebnis
+  zieht die Liste danach nach und findet den laufenden Titel über seine ID
+  wieder (`Playlist.setLibrary(_:root:keepingTrackAt:)`). Wer die Liste leert
+  oder den Ordner wechselt, muss den laufenden Scan mit `cancelLibraryScan`
+  entwerten — sonst füllt dessen Ergebnis die gerade geleerte Liste wieder auf.
 - DMG-Hintergrund bleibt Retina-TIFF aus 1x/2x-Quellen.
 
 ## Lizenzen und öffentliche Hygiene
