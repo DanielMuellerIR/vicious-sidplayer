@@ -7,7 +7,7 @@
 <h1 align="center">Vicious SID Player</h1>
 
 <p align="center">
-  <strong>Commodore-64-SID-Chiptune-Player als Single-File-HTML5-Version und native SwiftUI-macOS-App.</strong>
+  <strong>Commodore-64-SID-Chiptune-Player: Single-File-HTML5-Version, native SwiftUI-Apps für macOS und iPhone, Kommandozeilen-Player für Linux.</strong>
 </p>
 
 <p align="center">

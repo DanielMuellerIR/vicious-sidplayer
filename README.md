@@ -7,7 +7,7 @@
 <h1 align="center">Vicious SID Player</h1>
 
 <p align="center">
-  <strong>Commodore 64 SID chiptune player as a single-file HTML5 version and a native SwiftUI macOS app.</strong>
+  <strong>Commodore 64 SID chiptune player: a single-file HTML5 version, native SwiftUI apps for macOS and iPhone, and a command-line player for Linux.</strong>
 </p>
 
 <p align="center">
