@@ -233,9 +233,21 @@ elif [[ "$DRY_RUN" != "1" ]]; then
     exit 1
 fi
 
+# Zielrepo als <owner/repo> aus der bereits geprueften Adresse ableiten und `gh`
+# ausdruecklich darauf festnageln — sonst raet es aus dem Arbeitsverzeichnis.
+REPO_SLUG="$(printf '%s\n' "$REMOTE_URL" | sed -E 's#^https://github\.com/##; s#^git@github\.com:##; s#\.git$##')"
+if [[ ! "$REPO_SLUG" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    echo "ABBRUCH: Aus $REMOTE_URL laesst sich kein <owner/repo> ableiten." >&2
+    exit 1
+fi
+
 echo "Remote: $REMOTE_NAME -> $REMOTE_URL"
 echo "Branch: $BRANCH"
-run git push -u "$REMOTE_NAME" "$BRANCH"
+# --no-follow-tags ausdruecklich, nicht bloss weggelassen: Steht irgendwo
+# `push.followTags=true`, haengt Git an JEDEN Push die erreichbaren annotierten
+# Tags an. In diesem Repo liegen interne Sicherungs-Tags (etwa
+# `pre-github-flatten`), die auf GitHub nichts zu suchen haben.
+run git push --no-follow-tags -u "$REMOTE_NAME" "$BRANCH"
 
 if [[ "$DO_RELEASE" == "1" ]]; then
     # Ein schon vorhandener Tag wurde bisher blind weitergereicht. Zeigt er auf
@@ -243,8 +255,11 @@ if [[ "$DO_RELEASE" == "1" ]]; then
     # Release eines alten Quellstands — Quelle und Auslieferung liefen dauerhaft
     # auseinander (Review-Fund 2026-08-20).
     BRANCH_COMMIT="$(git rev-parse "${BRANCH}^{commit}")"
-    if git rev-parse -q --verify "${TAG}^{commit}" >/dev/null; then
-        TAG_COMMIT="$(git rev-parse "${TAG}^{commit}")"
+    # Vollstaendig qualifiziert pruefen: Ein Branch desselben Namens loeste den
+    # nackten Namen genauso auf, und das Skript hielte einen fehlenden Tag
+    # faelschlich fuer vorhanden.
+    if git rev-parse -q --verify "refs/tags/${TAG}^{commit}" >/dev/null; then
+        TAG_COMMIT="$(git rev-parse "refs/tags/${TAG}^{commit}")"
         if [[ "$TAG_COMMIT" != "$BRANCH_COMMIT" ]]; then
             echo "ABBRUCH: Tag $TAG zeigt auf $TAG_COMMIT," >&2
             echo "Branch $BRANCH steht aber auf $BRANCH_COMMIT." >&2
@@ -254,14 +269,33 @@ if [[ "$DO_RELEASE" == "1" ]]; then
     else
         run git tag -a "$TAG" -m "Vicious SID Player ${VERSION}"
     fi
-    run git push "$REMOTE_NAME" "$TAG"
+    # Refspec vollstaendig ausgeschrieben: So kann kein gleichnamiger Branch
+    # dazwischenrutschen und kein weiterer Tag mitwandern.
+    run git push --no-follow-tags "$REMOTE_NAME" "refs/tags/${TAG}:refs/tags/${TAG}"
 
-    if gh release view "$TAG" >/dev/null 2>&1; then
+    # Ankunft nachweisen, bevor das Release entsteht. Verglichen werden die
+    # Hashes desselben Ref-Typs (annotiertes Tag hier wie dort), nicht der
+    # lokale Commit gegen den ungepeelten Remote-Ref.
+    if [[ "$DRY_RUN" != "1" ]]; then
+        LOCAL_TAG_HASH="$(git rev-parse --verify "refs/tags/${TAG}")"
+        REMOTE_TAG_HASH="$(git ls-remote --exit-code --tags "$REMOTE_NAME" "refs/tags/${TAG}" | awk 'NR==1 {print $1}')"
+        if [[ "$LOCAL_TAG_HASH" != "$REMOTE_TAG_HASH" ]]; then
+            echo "ABBRUCH: Tag $TAG ist nicht wie erwartet angekommen." >&2
+            echo "lokal: $LOCAL_TAG_HASH  remote: ${REMOTE_TAG_HASH:-<fehlt>}" >&2
+            exit 1
+        fi
+        echo "Tag $TAG auf dem Remote bestaetigt."
+    fi
+
+    if gh release view "$TAG" -R "$REPO_SLUG" >/dev/null 2>&1; then
         echo "Release ${TAG} existiert. Lade DMG neu hoch."
-        run gh release upload "$TAG" "$DMG_PATH" --clobber
+        run gh release upload "$TAG" "$DMG_PATH" --clobber -R "$REPO_SLUG"
     else
         echo "Lege Release ${TAG} an."
-        run gh release create "$TAG" "$DMG_PATH"             --title "Vicious SID Player ${VERSION}"             --notes "macOS-App als DMG. SID-Dateien sind nicht enthalten; Musik wird lokal per Drag & Drop oder aus einem lokalen audio-Ordner geladen."
+        # --verify-tag bricht ab, falls der Remote-Tag doch fehlt; ohne die
+        # Option legte `gh` stattdessen einen neuen Tag am Default-Branch an.
+        # Die Release-Notizen kommen aus der Datei statt aus einem Einzeiler.
+        run gh release create "$TAG" "$DMG_PATH" --verify-tag -R "$REPO_SLUG"             --title "Vicious SID Player ${VERSION}"             --notes-file "RELEASE_NOTES.md"
     fi
 fi
 
