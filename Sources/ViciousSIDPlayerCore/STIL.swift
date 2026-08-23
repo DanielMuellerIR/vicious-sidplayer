@@ -97,6 +97,12 @@ public struct STILDatabase: Sendable {
     private let files: [String: STILEntry]
     /// Eintraege zu ganzen Ordnern, Schluessel kleingeschrieben MIT Schlussschraegstrich.
     private let folders: [String: STILEntry]
+    /// Dateiname (kleingeschrieben) -> alle Pfade, die so heissen.
+    ///
+    /// Damit findet `resolvedPath` einen Titel auch dann, wenn er nicht mehr an
+    /// seinem HVSC-Platz liegt. Gebaut wird der Index einmal beim Parsen: Eine
+    /// Suche ueber alle 50.000 Schluessel bei jedem Bildaufbau waere zu teuer.
+    private let pathsByFileName: [String: [String]]
 
     /// Anzahl der Datei-Eintraege — was der Nutzer als "so viele Titel kennt die
     /// Datenbank" versteht.
@@ -110,6 +116,13 @@ public struct STILDatabase: Sendable {
     public init(files: [String: STILEntry] = [:], folders: [String: STILEntry] = [:]) {
         self.files = files
         self.folders = folders
+        var byName: [String: [String]] = [:]
+        for key in files.keys {
+            guard let slash = key.lastIndex(of: "/") else { continue }
+            let name = String(key[key.index(after: slash)...])
+            byName[name, default: []].append(key)
+        }
+        self.pathsByFileName = byName
     }
 
     // MARK: - Laden
@@ -294,6 +307,62 @@ public struct STILDatabase: Sendable {
         return STILInfo(folder: folder?.global ?? [],
                         file: entry?.global ?? [],
                         subtune: entry?.subtunes[subtune + 1] ?? [])
+    }
+
+    /// Der Eintrag zu einem Pfad, dessen ENDE bekannt ist.
+    ///
+    /// Wozu das noetig ist: Viele Sammlungen sind aus der HVSC herauskopiert.
+    /// Ein Titel steht dann unter "Hubbard_Rob/Commando.sid" statt unter seinem
+    /// vollen HVSC-Pfad, und der exakte Schluessel trifft nicht mehr. Gesucht
+    /// wird deshalb nach einem Eintrag, dessen Pfad auf genau diese Komponenten
+    /// endet — aber NUR, wenn es genau einen gibt. In der HVSC heissen dutzende
+    /// Dateien "Commando.sid"; eine falsch zugeordnete Anmerkung waere
+    /// schlechter als gar keine.
+    public func path(matchingSuffix relativePath: String) -> String? {
+        let key = Self.normalizedKey(relativePath)
+        let components = key.split(separator: "/").map(String.init)
+        guard let name = components.last, let candidates = pathsByFileName[name] else { return nil }
+
+        // Vom laengsten Ende zum kuerzesten: "Hubbard_Rob/Commando.sid" ist
+        // eindeutiger als "Commando.sid". Genommen wird das erste Ende, auf das
+        // GENAU EIN Eintrag passt. Bleiben mehrere uebrig, wird nichts
+        // zugeordnet — in der HVSC heissen dutzende Dateien gleich, und eine
+        // falsche Anmerkung ist schlechter als keine.
+        for length in stride(from: components.count, through: 1, by: -1) {
+            let suffix = "/" + components.suffix(length).joined(separator: "/")
+            let matches = candidates.filter { $0.hasSuffix(suffix) }
+            if matches.count == 1 { return matches[0] }
+        }
+        return nil
+    }
+
+    /// Unter welchem Schluessel die STIL diesen Titel kennt — oder `nil`.
+    ///
+    /// Zwei Wege, in dieser Reihenfolge:
+    ///  1. Der volle Pfad relativ zur HVSC-Wurzel. Das ist der sichere Fall und
+    ///     gilt, solange die Sammlung die HVSC selbst ist.
+    ///  2. Ein eindeutiges Pfadende (siehe `path(matchingSuffix:)`) fuer
+    ///     Sammlungen, die aus der HVSC herauskopiert wurden. Auf iOS ist das
+    ///     der Normalfall, weil die Bibliothek dort immer in `Documents/` liegt.
+    ///
+    /// - Parameters:
+    ///   - fileURL: die Datei auf der Platte; `nil`, wenn nur der relative Pfad
+    ///     bekannt ist.
+    ///   - hvscRoot: Wurzel der HVSC (der Ordner ueber `DOCUMENTS/`); `nil`,
+    ///     wenn sie nicht bekannt ist.
+    ///   - relativePath: der Pfad des Titels in der Bibliothek des Nutzers.
+    public func resolvedPath(forFileURL fileURL: URL?,
+                             hvscRoot: URL?,
+                             relativePath: String?) -> String? {
+        if let fileURL, let hvscRoot,
+           let exact = STILDatabase.hvscPath(for: fileURL, root: hvscRoot),
+           files[Self.normalizedKey(exact)] != nil {
+            return exact
+        }
+        if let relativePath, let matched = path(matchingSuffix: relativePath) {
+            return matched
+        }
+        return nil
     }
 
     /// Vergleichbar machen: Gross-/Kleinschreibung egal, fuehrender Schraegstrich

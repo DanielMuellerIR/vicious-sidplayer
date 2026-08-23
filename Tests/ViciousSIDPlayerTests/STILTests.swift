@@ -141,6 +141,82 @@ final class STILTests: XCTestCase {
                        "Pfad im Text: /MUSICIANS/H/Hubbard_Rob/Commando.sid gehoert dazu.")
     }
 
+    // MARK: - Zuordnung ueber ein eindeutiges Pfadende
+
+    // Viele Sammlungen sind aus der HVSC herauskopiert; dann trifft der volle
+    // Pfad nicht mehr. Auf iOS ist das der Normalfall, weil die Bibliothek dort
+    // immer in `Documents/` liegt.
+    func testSuffixMatchFindsATrackThatWasCopiedOutOfTheCollection() {
+        XCTAssertEqual(db().path(matchingSuffix: "Hubbard_Rob/Commando.sid"),
+                       "/musicians/h/hubbard_rob/commando.sid")
+        XCTAssertEqual(db().path(matchingSuffix: "/Galway_Martin/Wizball.sid"),
+                       "/musicians/g/galway_martin/wizball.sid")
+    }
+
+    func testSuffixMatchAcceptsABareFileNameWhenItIsUnique() {
+        XCTAssertEqual(db().path(matchingSuffix: "Wizball.sid"),
+                       "/musicians/g/galway_martin/wizball.sid")
+    }
+
+    // Der eigentliche Punkt der Regel: In der HVSC heissen dutzende Dateien
+    // gleich. Bei mehreren Kandidaten wird bewusst NICHTS zugeordnet.
+    func testAmbiguousSuffixMatchesNothing() {
+        let text = [
+            "/MUSICIANS/H/Hubbard_Rob/Commando.sid",
+            "COMMENT: Fassung von Rob Hubbard.",
+            "",
+            "/MUSICIANS/G/Galway_Martin/Commando.sid",
+            "COMMENT: Andere Fassung."
+        ].joined(separator: "\n")
+        let parsed = STILDatabase.parse(text: text)
+        XCTAssertNil(parsed.path(matchingSuffix: "Commando.sid"),
+                     "Zwei Treffer heisst: keine Anmerkung, nicht die erstbeste")
+        XCTAssertEqual(parsed.path(matchingSuffix: "Hubbard_Rob/Commando.sid"),
+                       "/musicians/h/hubbard_rob/commando.sid",
+                       "Mit Ordneranteil ist es wieder eindeutig")
+    }
+
+    // Ein Ende wird nur an einer ORDNERGRENZE anerkannt. Passt der Ordnerweg
+    // nicht, faellt die Suche auf das naechstkuerzere Ende zurueck — hier auf
+    // den Dateinamen, der in diesem Bestand eindeutig ist.
+    func testSuffixMatchOnlyBreaksAtFolderBoundaries() {
+        XCTAssertEqual(db().path(matchingSuffix: "bard_Rob/Commando.sid"),
+                       "/musicians/h/hubbard_rob/commando.sid",
+                       "Der halbe Ordnername trifft nicht, der eindeutige Dateiname schon")
+
+        let text = [
+            "/MUSICIANS/H/Hubbard_Rob/Commando.sid",
+            "COMMENT: Fassung von Rob Hubbard.",
+            "",
+            "/MUSICIANS/G/Galway_Martin/Commando.sid",
+            "COMMENT: Andere Fassung."
+        ].joined(separator: "\n")
+        XCTAssertNil(STILDatabase.parse(text: text).path(matchingSuffix: "bard_Rob/Commando.sid"),
+                     "Ohne eindeutigen Dateinamen bleibt es beim Nichts")
+    }
+
+    func testResolvedPathPrefersTheExactPathUnderTheRoot() {
+        let root = URL(fileURLWithPath: "/Volumes/HVSC")
+        let file = root.appendingPathComponent("MUSICIANS/H/Hubbard_Rob/Commando.sid")
+        XCTAssertEqual(db().resolvedPath(forFileURL: file, hvscRoot: root, relativePath: nil),
+                       "/MUSICIANS/H/Hubbard_Rob/Commando.sid")
+    }
+
+    func testResolvedPathFallsBackToTheSuffixWhenTheFileIsElsewhere() {
+        let root = URL(fileURLWithPath: "/Volumes/HVSC")
+        let elsewhere = URL(fileURLWithPath: "/Users/test/Musik/Hubbard_Rob/Commando.sid")
+        XCTAssertEqual(db().resolvedPath(forFileURL: elsewhere,
+                                         hvscRoot: root,
+                                         relativePath: "Hubbard_Rob/Commando.sid"),
+                       "/musicians/h/hubbard_rob/commando.sid")
+    }
+
+    func testResolvedPathOfAnUnknownTrackIsNil() {
+        XCTAssertNil(db().resolvedPath(forFileURL: nil,
+                                       hvscRoot: nil,
+                                       relativePath: "Fremd/Unbekannt.sid"))
+    }
+
     // MARK: - Datei finden und Pfade umrechnen
 
     func testAutodetectFindsTheFileInTheCollectionAndAboveIt() throws {

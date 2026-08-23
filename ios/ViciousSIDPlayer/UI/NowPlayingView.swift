@@ -49,6 +49,8 @@ struct NowPlayingView: View {
                         model.setModelOverride(override)
                     }
 
+                    STILNotesView()
+
                     WAVExportButton()
                 }
                 .padding(.horizontal, 16)
@@ -84,6 +86,43 @@ private struct TrackHeaderView: View {
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Titel-Anmerkungen (STIL)
+
+/// Was die HVSC-Kuratoren zum laufenden Titel und Subtune notiert haben.
+///
+/// Erscheint nur, wenn es etwas gibt: Ohne importierte STIL-Datei — und bei
+/// jedem Titel, den sie nicht eindeutig kennt — bleibt der Block unsichtbar,
+/// statt eine leere Karte in die Ansicht zu setzen.
+private struct STILNotesView: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        if let info = model.currentSTILInfo {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("ANMERKUNGEN (STIL)")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                // Vom Genauen zum Allgemeinen: erst der Subtune, dann die
+                // Datei, zuletzt der Ordner. Die Reihenfolge macht der Core.
+                ForEach(Array(info.orderedFields.enumerated()), id: \.offset) { _, field in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(field.label)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                        Text(field.value)
+                            .font(.footnote)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        }
     }
 }
 

@@ -35,6 +35,59 @@ final class AppModelTests: XCTestCase {
     @MainActor
     private func makeModel() -> AppModel { AppModel(defaults: defaults) }
 
+    // MARK: - Titel-Anmerkungen (STIL)
+
+    // Die Bruecke zwischen Titel-ID und Datenbank. Der Parser selbst steht im
+    // Core und ist dort getestet; hier zaehlt, dass die App die richtige Zeile
+    // findet — auf iOS ueber ein eindeutiges Pfadende, weil die Bibliothek
+    // immer in `Documents/` liegt und nie die HVSC-Ordnerstruktur hat.
+    @MainActor
+    private func modelWithSTIL() -> AppModel {
+        let model = makeModel()
+        model.stilDB = STILDatabase.parse(text: [
+            "/MUSICIANS/H/Hubbard_Rob/",
+            "COMMENT: Anmerkung zum ganzen Ordner.",
+            "",
+            "/MUSICIANS/H/Hubbard_Rob/Commando.sid",
+            "COMMENT: Anmerkung zur Datei.",
+            "(#2)",
+            "  NAME: Highscore"
+        ].joined(separator: "\n"))
+        return model
+    }
+
+    @MainActor
+    func testSTILInfoIsFoundForAFlatlyImportedTrack() {
+        let model = modelWithSTIL()
+        model.setCurrentTrackID("Commando.sid")
+
+        let info = model.currentSTILInfo
+        XCTAssertNotNil(info, "Der eindeutige Dateiname genuegt fuer die Zuordnung")
+        XCTAssertEqual(info?.file.first?.value, "Anmerkung zur Datei.")
+        XCTAssertEqual(info?.folder.first?.value, "Anmerkung zum ganzen Ordner.")
+    }
+
+    @MainActor
+    func testSTILInfoIsEmptyWithoutADatabase() {
+        let model = makeModel()
+        model.setCurrentTrackID("Commando.sid")
+        XCTAssertNil(model.currentSTILInfo)
+    }
+
+    @MainActor
+    func testSTILInfoIsEmptyForAnUnknownTrack() {
+        let model = modelWithSTIL()
+        model.setCurrentTrackID("Irgendwas/Unbekannt.sid")
+        XCTAssertNil(model.currentSTILInfo)
+    }
+
+    @MainActor
+    func testSTILInfoIsEmptyWhileNoTrackIsSelected() {
+        let model = modelWithSTIL()
+        model.setCurrentTrackID(nil)
+        XCTAssertNil(model.currentSTILInfo)
+    }
+
     // MARK: - Zeitformatierung
 
     func testFormatTime() {

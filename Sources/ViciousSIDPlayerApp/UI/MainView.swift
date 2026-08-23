@@ -163,9 +163,16 @@ public struct MainView: View {
     // nicht kennt oder er ausserhalb der HVSC-Wurzel liegt. Lieber nichts
     // anzeigen als die Anmerkung eines fremden Titels.
     private var currentSTILInfo: STILInfo? {
-        guard let stilDB, let stilRoot,
-              let url = playlist.track(at: currentTrackIdx)?.url,
-              let path = STILDatabase.hvscPath(for: url, root: stilRoot) else { return nil }
+        guard let stilDB, let track = playlist.track(at: currentTrackIdx) else { return nil }
+        // Erst der volle Pfad unterhalb der HVSC-Wurzel, sonst ein eindeutiges
+        // Pfadende: Die meisten Sammlungen sind aus der HVSC herauskopiert und
+        // liegen gar nicht mehr unter deren Wurzel. Beide Wege stehen im Core.
+        guard let path = stilDB.resolvedPath(forFileURL: track.url,
+                                             hvscRoot: stilRoot,
+                                             relativePath: track.isExternal
+                                                ? track.url.lastPathComponent
+                                                : track.id)
+        else { return nil }
         let info = stilDB.info(forHVSCPath: path, subtune: coordinator.currentSubtune)
         return info.isEmpty ? nil : info
     }

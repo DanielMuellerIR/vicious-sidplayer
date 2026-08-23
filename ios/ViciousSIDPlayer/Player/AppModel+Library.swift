@@ -36,6 +36,7 @@ extension AppModel {
         coordinator.setVolume(volume)
 
         loadSonglengthDB()
+        loadSTIL()
         reloadLibrary(restoreSession: true)
     }
 

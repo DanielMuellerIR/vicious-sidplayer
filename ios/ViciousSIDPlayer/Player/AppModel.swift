@@ -130,6 +130,9 @@ final class AppModel: ObservableObject {
     /// z.B. „12345 Einträge" oder „keine Datenbank importiert".
     @Published private(set) var songlengthsStatus: String = ""
 
+    /// Dasselbe fuer die STIL-Datei der HVSC (Anmerkungen zu Titel und Subtune).
+    @Published private(set) var stilStatus: String = ""
+
     // MARK: - Sonstiger Zustand
 
     /// Zuletzt aufgetretener Fehler; die UI zeigt ihn als Hinweis und setzt ihn
@@ -166,6 +169,8 @@ final class AppModel: ObservableObject {
 
     /// HVSC-Songlaengen-Datenbank, sofern der Nutzer eine importiert hat.
     var songlengthDB: SonglengthDB?
+    /// HVSC-STIL, sofern der Nutzer eine importiert hat. Siehe `AppModel+STIL`.
+    var stilDB: STILDatabase?
     /// Laengen des aktuellen Titels je Subtune (aus der HVSC-Datenbank).
     var currentTrackLengths: [Double]?
     /// Im Hintergrund berechnete Laenge des aktuellen Subtunes.
@@ -251,6 +256,10 @@ final class AppModel: ObservableObject {
 
     func setSonglengthsStatus(_ status: String) {
         songlengthsStatus = status
+    }
+
+    func setSTILStatus(_ status: String) {
+        stilStatus = status
     }
 
     func setFavorites(_ value: Set<String>) {

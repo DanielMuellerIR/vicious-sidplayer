@@ -3,10 +3,11 @@
 1. ~~STIL-Integration~~ **auf dem Mac erledigt am 2026-08-23 (v1.9.12).** Parser,
    Zuordnung über die HVSC-Wurzel und Auto-Fund stehen im Core (`STIL.swift`,
    18 Tests), die Mac-App zeigt Ordner-, Datei- und Subtune-Anmerkungen in der
-   Seitenleiste und hat einen eigenen Einstellungs-Eintrag. **Offen: dieselbe
-   Anzeige in der iPhone-App**, und die Abnahme an einer echten `STIL.txt` der
-   HVSC — geprüft wurde an einer nachgebauten Datei im dokumentierten Format
-   (mit Windows-Zeilenenden), weil hier keine HVSC vorliegt.
+   Seitenleiste, die iPhone-App unter dem Titelkopf; beide haben einen eigenen
+   Einstellungs-Eintrag zum Auswählen der Datei. **Offen bleibt allein die
+   Abnahme an einer echten `STIL.txt` der HVSC** — geprüft wurde an einer
+   nachgebauten Datei im dokumentierten Format (mit Windows-Zeilenenden), weil
+   hier keine HVSC vorliegt.
 2. HVSC-Browser/Bibliotheksansicht für große Sammlungen statt ausschließlich flacher
    Playlist — **nur noch für die Mac-App offen**. Die iPhone-App hat den aufklappbaren
    Ordnerbaum bereits, und `MusicLibrary` im Core liefert Index und Baum
@@ -112,6 +113,10 @@ Systemverhalten"). Was dabei auffiel und **offen** bleibt:
   (362 MB gegen 157 MB Grundverbrauch). Woher genau, ist nicht untersucht;
   Kandidaten sind die je Zeile neu gebauten `Font`- und `Image`-Werte und der
   Tooltip-Text.
+- Die iOS-Testsuite hinterlässt im Simulator je Test eine eigene
+  UserDefaults-Datei (`vsp-tests-<UUID>.plist`). `removePersistentDomain` leert
+  sie, löscht die Datei aber nicht; nach einigen Läufen liegen dort hunderte.
+  Folgenlos für die App, aber unsauber — beobachtet am 2026-08-23.
 - Der Hintergrund-Scan über 50.001 Dateien dauert headless 4,2 s, in der
   laufenden App aber 3,6 bis 24 s — er läuft mit niedriger Priorität neben der
   Wiedergabe. Erträglich, aber ungemessen ist, ob ein Zwischenstand der Liste

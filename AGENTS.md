@@ -99,6 +99,11 @@ Releaseartefakte bleiben unversioniert.
   im Hintergrund auf 1 Hz. Auto-Next und Sperrbildschirm laufen über einen eigenen
   1-Hz-Task, der **nicht** an der Szenenphase hängt — sonst endet die Wiedergabe am
   ersten Songende.
+- STIL gibt es auf iOS nur als **Import**, nicht per Auto-Fund: Die Bibliothek
+  liegt dort immer in `Documents/`, eine HVSC-Ordnerstruktur mit `DOCUMENTS/`
+  darüber existiert nicht. Die Datei wird wie die Songlängen-Datenbank als Kopie
+  in den Support-Ordner übernommen, und die Zuordnung läuft über ein
+  eindeutiges Pfadende (`STILDatabase.resolvedPath`).
 - Kopfhörer abziehen (`.oldDeviceUnavailable`) pausiert. Niemals laut über den
   Lautsprecher weiterspielen. Nach einer Unterbrechung nur bei `.shouldResume`
   fortsetzen.

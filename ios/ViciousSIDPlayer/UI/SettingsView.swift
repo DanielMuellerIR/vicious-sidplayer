@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var showFinalResetPrompt = false
     /// Auswahldialog fuer die Songlengths-Datei.
     @State private var showSonglengthsImporter = false
+    @State private var showSTILImporter = false
 
     var body: some View {
         NavigationStack {
@@ -22,6 +23,7 @@ struct SettingsView: View {
                 appearanceSection
                 playbackSection
                 songlengthsSection
+                stilSection
                 librarySection
                 aboutSection
             }
@@ -52,6 +54,22 @@ struct SettingsView: View {
                 case .success(let urls):
                     if let url = urls.first {
                         model.importSonglengths(from: url)
+                    }
+                case .failure(let error):
+                    model.errorMessage = error.localizedDescription
+                }
+            }
+            .fileImporter(
+                isPresented: $showSTILImporter,
+                // Auch die STIL.txt hat keinen eigenen Dateityp; als reiner Text
+                // waere sie im Dialog je nach Herkunft nicht waehlbar.
+                allowedContentTypes: [.data],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case .success(let urls):
+                    if let url = urls.first {
+                        model.importSTIL(from: url)
                     }
                 case .failure(let error):
                     model.errorMessage = error.localizedDescription
@@ -111,6 +129,27 @@ struct SettingsView: View {
             Text("Songlängen")
         } footer: {
             Text("Die Datei Songlengths.md5 aus der High Voltage SID Collection liefert die echten Spieldauern für Positionsleiste und automatisches Weiterschalten. Ohne sie berechnet die App die Länge beim ersten Abspielen selbst, sofern das Stück in Stille endet.")
+        }
+    }
+
+    // MARK: - Titel-Anmerkungen (STIL)
+
+    private var stilSection: some View {
+        Section {
+            Button {
+                showSTILImporter = true
+            } label: {
+                Label("STIL.txt importieren …", systemImage: "text.book.closed")
+            }
+            if !model.stilStatus.isEmpty {
+                Text(model.stilStatus)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Titel-Anmerkungen")
+        } footer: {
+            Text("Die Datei STIL.txt aus der High Voltage SID Collection sammelt, was im SID-Dateikopf keinen Platz hat: welche Vorlage ein Stück covert, wer die Melodie geschrieben hat, Anmerkungen zu einzelnen Subtunes. Zugeordnet wird über den Ordnerweg des Titels — nur wenn er eindeutig ist, sonst bleibt die Anzeige leer.")
         }
     }
 

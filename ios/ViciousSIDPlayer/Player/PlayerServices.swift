@@ -49,6 +49,8 @@ final class PlayerServices {
 
     /// Laufender Ladevorgang der HVSC-Songlaengen-Datenbank.
     var songlengthLoadTask: Task<Void, Never>?
+    /// Laufender Ladevorgang der STIL-Datei; genau einer zur Zeit.
+    var stilLoadTask: Task<Void, Never>?
 
     /// Letzter gespeicherter 5-Sekunden-Abschnitt der Sitzung. Ohne diese
     /// Drosselung schriebe die App im Sekundentakt in die Benutzereinstellungen.
