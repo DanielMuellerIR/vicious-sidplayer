@@ -95,7 +95,15 @@ public struct MainView: View {
     @State private var folderTreeTask: Task<Void, Never>? = nil
     @State private var folderTreeGeneration = 0
     /// Pfade der aufgeklappten Ordner.
-    @State private var expandedFolders: Set<String> = []
+    ///
+    /// Bleibt ueber App-Starts erhalten: Wer sich in einer HVSC bis zu seinem
+    /// Komponisten durchgeklickt hat, will nicht bei jedem Start von vorn
+    /// anfangen. Gespeichert wie die Favoriten als Zeichenkettenliste in den
+    /// Einstellungen — `@AppStorage` kann keine Mengen.
+    @State private var expandedFolders: Set<String> = Set(
+        UserDefaults.standard.stringArray(forKey: MainView.expandedFoldersKey) ?? [])
+
+    static let expandedFoldersKey = "sidebarExpandedFolders"
 
     @State private var libraryScanTask: Task<Void, Never>? = nil
     @State private var libraryScanGeneration = 0
@@ -301,6 +309,25 @@ public struct MainView: View {
                             .buttonStyle(PlainButtonStyle())
                             .help(showFolderTree ? "Als flache Liste zeigen" : "Nach Ordnern gliedern")
                         }
+                        // Alles auf- oder zuklappen — nur in der Ordneransicht
+                        // und nur, wenn es ueberhaupt Ordner gibt.
+                        if showFolderTree, !folderTree.subfolders.isEmpty {
+                            Button(action: expandAllFolders) {
+                                Image(systemName: "chevron.down.2")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(textSecCol)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .help("Alle Ordner aufklappen")
+
+                            Button(action: collapseAllFolders) {
+                                Image(systemName: "chevron.up.2")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(textSecCol)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .help("Alle Ordner zuklappen")
+                        }
                         // Filter "nur Favoriten" (Stern) neben dem Papierkorb.
                         if !playlist.isEmpty {
                             Button(action: { favoritesOnly.toggle() }) {
@@ -363,7 +390,6 @@ public struct MainView: View {
                                   onSelect: selectTrack,
                                   onToggleFavorite: toggleFavorite,
                                   onToggleFolder: toggleFolder)
-                        .equatable()
 
                     Divider()
                         .background(borderCol)
@@ -1048,6 +1074,23 @@ public struct MainView: View {
         } else {
             expandedFolders.insert(path)
         }
+        saveExpandedFolders()
+    }
+
+    /// Alle Ordner aufklappen — bei einer HVSC sind das tausende Zeilen, aber
+    /// die Liste laedt sie ohnehin nur bei Bedarf.
+    private func expandAllFolders() {
+        expandedFolders = LibraryOutline.allFolderPaths(of: folderTree)
+        saveExpandedFolders()
+    }
+
+    private func collapseAllFolders() {
+        expandedFolders.removeAll()
+        saveExpandedFolders()
+    }
+
+    private func saveExpandedFolders() {
+        UserDefaults.standard.set(expandedFolders.sorted(), forKey: MainView.expandedFoldersKey)
     }
 
     private func clearPlaylist() {
@@ -1060,7 +1103,7 @@ public struct MainView: View {
         folderTreeGeneration &+= 1
         folderTree = MusicLibrary.folderTree(for: [])
         folderTreeReady = false
-        expandedFolders.removeAll()
+        collapseAllFolders()
         currentTrackIdx = -1
         errorMessage = nil
         // Songlaengen-Zustand des (nicht mehr vorhandenen) Tracks zuruecksetzen.
@@ -1647,7 +1690,7 @@ public struct MainView: View {
 //
 // Die Auswahl arbeitet weiter mit Positionen in der VOLLEN Liste: Suche und
 // Favoritenfilter aendern nur, was zu sehen ist, nicht was gespielt wird.
-struct TrackListView: View, Equatable {
+struct TrackListView: View {
     let playlist: Playlist
     let currentTrackIdx: Int
     let searchText: String
@@ -1665,21 +1708,13 @@ struct TrackListView: View, Equatable {
     let onToggleFavorite: (Int) -> Void
     let onToggleFolder: (String) -> Void
 
-    // Was die Liste aussehen laesst, haengt nur an diesen Werten. Die Aktionen
-    // sind Funktionen und lassen sich nicht vergleichen — sie greifen ohnehin
-    // immer auf den aktuellen Zustand von `MainView` zu. Der Ordnerbaum fehlt
-    // hier bewusst: Er wird zusammen mit der Titelliste neu gesetzt, und deren
-    // Aenderungszaehler steht schon in der ersten Zeile.
-    nonisolated static func == (lhs: TrackListView, rhs: TrackListView) -> Bool {
-        lhs.playlist.revision == rhs.playlist.revision
-            && lhs.currentTrackIdx == rhs.currentTrackIdx
-            && lhs.searchText == rhs.searchText
-            && lhs.favoritesOnly == rhs.favoritesOnly
-            && lhs.favorites == rhs.favorites
-            && lhs.isLight == rhs.isLight
-            && lhs.showTree == rhs.showTree
-            && lhs.expandedFolders == rhs.expandedFolders
-    }
+    // Bewusst NICHT `Equatable` mit `.equatable()`: Der Versuch, den Neuaufbau
+    // der Liste damit zu ueberspringen, hat die Seitenleiste zeitweise leer
+    // stehen lassen — SwiftUI zeigte den alten, noch leeren Stand weiter
+    // (2026-08-23). Gemessen hat die Abkuerzung ohnehin nichts gebracht: mit
+    // und ohne sie liegt die App bei 50.001 Titeln gleichauf, auch mit ganz
+    // aufgeklapptem Baum (386 MB, rund 50 Prozent Prozessorlast — das ist die
+    // Grundlast der Emulation).
 
     private var visibleIndices: [Int] {
         playlist.visibleIndices(searchText: searchText,

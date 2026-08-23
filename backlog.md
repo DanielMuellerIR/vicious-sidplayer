@@ -12,9 +12,9 @@
    Mac-App hat jetzt denselben aufklappbaren Ordnerbaum wie die iPhone-App,
    umschaltbar im Kopf der Seitenleiste. Das Flachklopfen des Baums steht im
    Core (`LibraryOutline`, 10 Tests) und wird von beiden Apps benutzt — vorher
-   stand es ungetestet im iOS-App-Ziel. Offen bleibt Kleinkram: Der aufgeklappte
-   Zustand überlebt keinen App-Start, und ein „alles auf-/zuklappen" wie auf iOS
-   fehlt auf dem Mac.
+   stand es ungetestet im iOS-App-Ziel. Der aufgeklappte Zustand bleibt über
+   App-Starts erhalten, „alles auf-/zuklappen" gibt es im Kopf der Seitenleiste
+   (v1.9.15).
 3. Mini-Player mit Titel und Transportsteuerung — **nur noch für die Mac-App offen**
    (auf iOS erledigt).
 4. HTTP-Remote oder URL-Schema nur als kleiner, abgesicherter Agenteneinstieg; CLI ist

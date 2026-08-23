@@ -263,18 +263,6 @@ public struct Playlist: Equatable, Sendable {
 
     public private(set) var tracks: [PlaylistTrack]
 
-    /// Zaehlt jede Aenderung der Liste mit.
-    ///
-    /// Die Mac-Oberflaeche baut ihre Titelliste nur dann neu auf, wenn dieser
-    /// Wert sich geaendert hat. Noetig ist das, weil der Koordinator 50-mal je
-    /// Sekunde neue Anzeigewerte schickt: Ohne den Zaehler wuerde die Liste in
-    /// diesem Takt mitgebaut, und ein Vergleich der Titel selbst waere bei einer
-    /// HVSC-Sammlung viel zu teuer (50.000 Zeichenketten je Bild).
-    ///
-    /// Der Zaehler laeuft ueber (`&+`) statt abzustuerzen; auf Gleichheit
-    /// geprueft wird er, nicht auf Groesse.
-    public private(set) var revision: Int = 0
-
     public init(tracks: [PlaylistTrack] = []) {
         self.tracks = tracks
     }
@@ -295,7 +283,6 @@ public struct Playlist: Equatable, Sendable {
 
     public mutating func removeAll() {
         tracks.removeAll()
-        revision &+= 1
     }
 
     // MARK: - Aufbau
@@ -315,7 +302,6 @@ public struct Playlist: Equatable, Sendable {
             .sorted(by: Playlist.isOrderedBefore)
         let external = tracks.filter(\.isExternal)
         tracks = libraryTracks + external
-        revision &+= 1
     }
 
     /// Wie `setLibrary`, haelt dabei aber den laufenden Titel fest.
@@ -362,7 +348,6 @@ public struct Playlist: Equatable, Sendable {
             if firstIndex == nil { firstIndex = tracks.count - 1 }
         }
 
-        if !addedIDs.isEmpty { revision &+= 1 }
         return PlaylistAdditions(addedIDs: addedIDs, firstIndex: firstIndex)
     }
 

@@ -74,6 +74,12 @@ Releaseartefakte bleiben unversioniert.
   einer nach Komponisten sortierten Sammlung ganze Ordner unerreichbar blieben).
   Gespeicherte absolute Pfade rechnet die App beim Start einmalig um; diesen
   Migrationspfad nicht entfernen, sonst verliert der Nutzer seine Favoriten.
+- Die Titelliste der Mac-App bekommt **kein** `.equatable()`. Der Versuch, ihren
+  Neuaufbau damit zu überspringen, ließ die Seitenleiste zeitweise leer stehen
+  (SwiftUI zeigte den alten, noch leeren Stand weiter; 2026-08-23 in v1.9.14
+  aufgetreten und in v1.9.15 zurückgenommen). Gemessen bringt die Abkürzung
+  nichts: mit und ohne sie liegt die App bei 50.001 Titeln gleichauf, auch mit
+  ganz aufgeklapptem Baum.
 - Der Ordnerbaum steht seit v1.9.14 vollständig im Core: `MusicLibrary.folderTree`
   baut ihn, `LibraryOutline` klopft ihn für die Anzeige flach (nur aufgeklappte
   Ordner werden betreten, sortiert wird natürlich). Beide Apps benutzen dieselbe
