@@ -500,11 +500,12 @@ public struct MainView: View {
                             Text(playlist.track(at: currentTrackIdx)?.name ?? "— Auswählen —")
                                 .lineLimit(1)
                         }
-                        // Definite Breite, weil ein maxWidth-Rahmen den
-                        // Pop-up-Button optisch NICHT fuellt. 260 ist so
-                        // gewaehlt, dass es bei Minimalbreite auch dann noch
-                        // passt, wenn der Subtune-Block sichtbar ist.
-                        .frame(width: 260)
+                        // 260 ist die Wunschbreite. Nachgeben darf der
+                        // Titelwaehler trotzdem: Bei Minimalbreite des Fensters
+                        // (1140 pt) war die Kopfzeile sonst zu eng, und der
+                        // Knopf „Öffnen…" daneben verlor seine Beschriftung —
+                        // er stand dann als leere Pille da (2026-08-23).
+                        .frame(minWidth: 150, idealWidth: 260, maxWidth: 260)
                         .help("Titel wählen")
 
                         Button("Öffnen…") {
@@ -512,6 +513,9 @@ public struct MainView: View {
                         }
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(textCol)
+                        // Beschriftung nie wegkuerzen: Ein Knopf ohne Aufschrift
+                        // sagt nichts mehr.
+                        .fixedSize()
                         .help("SID-Datei(en) öffnen")
 
                         Toggle("AUTO NEXT", isOn: $autoNext)

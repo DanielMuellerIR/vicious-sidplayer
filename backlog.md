@@ -130,9 +130,6 @@ Systemverhalten"). Was dabei auffiel und **offen** bleibt:
   UserDefaults-Datei (`vsp-tests-<UUID>.plist`). `removePersistentDomain` leert
   sie, löscht die Datei aber nicht; nach einigen Läufen liegen dort hunderte.
   Folgenlos für die App, aber unsauber — beobachtet am 2026-08-23.
-- Bei minimaler Fensterbreite (1140 pt) verliert der Knopf „Öffnen…" oben seine
-  Beschriftung und bleibt als leere Pille stehen; die Kopfzeile ist dort zu eng.
-  Kosmetisch, beobachtet am 2026-08-23.
 - Der Hintergrund-Scan über 50.001 Dateien dauert headless 4,2 s, in der
   laufenden App aber 3,6 bis 24 s — er läuft mit niedriger Priorität neben der
   Wiedergabe. Erträglich, aber ungemessen ist, ob ein Zwischenstand der Liste
