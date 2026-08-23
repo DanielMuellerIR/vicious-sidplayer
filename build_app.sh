@@ -154,6 +154,22 @@ cat <<EOF > "$CONTENTS_DIR/Info.plist"
             <string>AppIcon</string>
         </dict>
     </array>
+    <!-- Fernsteuerung ueber ein URL-Schema: "open vicioussid://next" steuert die
+         laufende App, ohne Netzwerkdienst und ohne offenen Port. Was das Schema
+         darf (und was bewusst nicht), steht im Core in RemoteCommand.swift. -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.viben.ViciousSIDPlayer.remote</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>vicioussid</string>
+            </array>
+        </dict>
+    </array>
     <!-- Eigener UTI fuer .sid: darueber findet Quick Look unsere Preview-
          Extension (QLSupportedContentTypes in der appex-Info.plist). -->
     <key>UTExportedTypeDeclarations</key>

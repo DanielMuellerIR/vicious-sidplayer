@@ -792,6 +792,7 @@ public struct MainView: View {
             // liegen schon im Puffer des AppDelegate -> jetzt nachziehen (Kaltstart;
             // Warmstart laeuft zusaetzlich ueber die "openSIDFiles"-Notification).
             drainPendingOpenURLs()
+            drainPendingRemoteCommands()
             applyAppearance()
         }
         // Erscheinungsbild-Modus geaendert (Einstellungen oder Cmd+T) -> AppKit-
@@ -1690,6 +1691,9 @@ public struct MainView: View {
             }
         }
         // Doppelklick / "Oeffnen mit" bei bereits laufender App (Warmstart).
+        NotificationCenter.default.addObserver(forName: NSNotification.Name("remoteCommands"), object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { drainPendingRemoteCommands() }
+        }
         NotificationCenter.default.addObserver(forName: NSNotification.Name("openSIDFiles"), object: nil, queue: .main) { _ in
             Task { @MainActor in
                 drainPendingOpenURLs()
@@ -1802,6 +1806,51 @@ public struct MainView: View {
     }
 
     // Zieht die vom AppDelegate gepufferten Open-URLs und laedt sie wie ein Drop.
+    /// Arbeitet die per URL-Schema hereingereichten Fernsteuerbefehle ab.
+    ///
+    /// Geprueft sind sie schon (`RemoteCommand.parse` im Core) — hier bleibt nur
+    /// das Ausfuehren. Was das Schema kann und was bewusst nicht, steht dort.
+    private func drainPendingRemoteCommands() {
+        let commands = AppDelegate.pendingCommands
+        AppDelegate.pendingCommands = []
+        guard !commands.isEmpty else { return }
+        loadLog.info("Fernsteuerung: \(commands.count, privacy: .public) Befehl(e)")
+        for command in commands { perform(command) }
+    }
+
+    private func perform(_ command: RemoteCommand) {
+        switch command {
+        case .play:
+            if !coordinator.isPlaying { togglePlayPause() }
+        case .pause:
+            if coordinator.isPlaying { togglePlayPause() }
+        case .playPause:
+            togglePlayPause()
+        case .stop:
+            coordinator.stop()
+        case .next:
+            playNextTrack()
+        case .previous:
+            playPreviousTrack()
+        case .seek(let seconds):
+            // Nicht ueber das Ende hinaus: Der Positionsregler kennt dieselbe
+            // Grenze, und ein Sprung dahinter liesse den Titel sofort enden.
+            coordinator.seek(seconds: min(seconds, currentDuration))
+        case .subtune(let index):
+            // setSubtune prueft den Bereich gegen die Datei selbst.
+            coordinator.setSubtune(sub: index)
+            resolveComputedLengthIfNeeded()
+        case .track(let id):
+            // Nur was wirklich in der Liste steht. Ein unbekannter Pfad wird
+            // ignoriert statt geraten.
+            if let index = playlist.index(forID: id) {
+                selectTrack(at: index)
+            } else {
+                loadLog.error("Fernsteuerung: Titel nicht in der Liste (\(id, privacy: .private(mask: .hash)))")
+            }
+        }
+    }
+
     private func drainPendingOpenURLs() {
         let urls = AppDelegate.pendingURLs
         AppDelegate.pendingURLs = []

@@ -46,6 +46,17 @@ versioniert. Sie lässt sich ohne Webserver direkt im Browser öffnen.
 - **Titel-Anmerkungen (STIL)**: Liest die `STIL.txt` der HVSC (in den Einstellungen wählbar oder automatisch neben der Sammlung gefunden) und zeigt zum laufenden Titel, was im SID-Dateikopf keinen Platz hat — welche Vorlage ein Tune covert, wer die Melodie geschrieben hat, Anmerkungen zu einzelnen Subtunes. Die Datenbank gehört dem HVSC-Projekt und wird nicht mitgeliefert.
 - **Ordneransicht**: Die Seitenleiste zeigt die Sammlung wahlweise als flache Titelliste oder als aufklappbaren Ordnerbaum — bei einer HVSC mit zehntausenden Dateien der einzig brauchbare Weg. Umschalter im Kopf der Playlist; Suche und Favoritenfilter zeigen weiterhin die flache Trefferliste.
 - **Mini-Player**: ⌘⌥M schaltet das Fenster auf eine schmale Leiste mit Titel, Spielzeit und Transport um — zum Nebenherlaufen. Zurück geht es mit demselben Kürzel; das Fenster nimmt wieder seine vorherige Größe an.
+- **Fernsteuerung per URL-Schema**: Die laufende App lässt sich aus Skripten und Kurzbefehlen steuern, ohne Netzwerkdienst:
+
+```bash
+open "vicioussid://playpause"
+open "vicioussid://next"
+open "vicioussid://seek?seconds=90"
+open "vicioussid://subtune?index=1"
+open "vicioussid://track?path=Hubbard_Rob/Commando.sid"
+```
+
+Der Titelpfad gilt relativ zum Autoplay-Ordner. Absolute Pfade, `..` und alles, was keine `.sid`-Datei ist, werden abgewiesen — ein URL-Schema kann jede Webseite auslösen, deshalb gibt es hier nur Wiedergabesteuerung.
 - **2SID / 3SID stereo**: Multi-SID-Tunes (PSID v3/v4) spielen mit allen Chips, im Stereo-Panorama verteilt, inklusive Chip-eigener 6581/8580-Modellwahl aus dem Datei-Header.
 - **Session-Restore**: Bei ausgeschaltetem Shuffle setzt die App beim Start den letzten Song an der letzten Position fort (inklusive Subtune).
 - **Suche & Favoriten**: Live-Suche in der Playlist plus Stern pro Titel (persistent) mit „nur Favoriten"-Filter.

@@ -46,6 +46,17 @@ not tracked. It opens directly in the browser without a web server.
 - **Tune notes (STIL)**: Reads the HVSC `STIL.txt` (chosen in the settings or found automatically next to your collection) and shows what does not fit into the SID file header — which original a tune covers, who wrote the melody, notes on individual subtunes. The database belongs to the HVSC project and is not bundled.
 - **Folder view**: The sidebar shows your collection either as a flat track list or as an expandable folder tree — the only workable way through an HVSC with tens of thousands of files. Toggle it in the playlist header; search and the favourites filter still show the flat list of matches.
 - **Mini player**: ⌘⌥M shrinks the window to a slim bar with title, elapsed time and transport controls, for keeping it around while you work. The same shortcut brings the full window back at its previous size.
+- **Remote control via URL scheme**: Drive the running app from scripts and shortcuts, with no network service:
+
+```bash
+open "vicioussid://playpause"
+open "vicioussid://next"
+open "vicioussid://seek?seconds=90"
+open "vicioussid://subtune?index=1"
+open "vicioussid://track?path=Hubbard_Rob/Commando.sid"
+```
+
+Track paths are relative to the autoplay folder. Absolute paths, `..` and anything that is not a `.sid` file are rejected — any web page can trigger a URL scheme, so playback control is all this offers.
 - **2SID / 3SID stereo**: Multi-SID tunes (PSID v3/v4) play with all chips, panned in stereo, including per-chip 6581/8580 model preferences from the file header.
 - **Session restore**: With shuffle off, the app resumes the last tune, subtune, and position on launch.
 - **Search & favorites**: Live playlist search plus a star per track (persistent) with a favorites-only filter.

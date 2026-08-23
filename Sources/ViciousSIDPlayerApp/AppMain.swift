@@ -10,6 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MainView.onAppear seinen Observer registriert. Deshalb hier zwischenlagern
     // und beim Erscheinen der View nachziehen. (Alles Main-Thread -> static ok.)
     @MainActor static var pendingURLs: [URL] = []
+    /// Dasselbe fuer Fernsteuerbefehle aus dem URL-Schema.
+    @MainActor static var pendingCommands: [RemoteCommand] = []
 
     // Die App-Appearance schon VOR dem Erzeugen des Fensters gemaess dem
     // gespeicherten Erscheinungsbild-Modus setzen, damit System-Controls
@@ -35,9 +37,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        AppDelegate.pendingURLs.append(contentsOf: urls)
-        // Warmstart (App lief schon): View hoert mit und zieht den Puffer sofort.
-        NotificationCenter.default.post(name: NSNotification.Name("openSIDFiles"), object: nil)
+        // Zwei Arten von URLs kommen hier an: Dateien (Doppelklick, "Oeffnen
+        // mit") und Fernsteuerbefehle ueber das eigene Schema
+        // ("open vicioussid://next"). Die Befehle werden geprueft, bevor sie
+        // die App erreichen — siehe `RemoteCommand` im Core.
+        var files: [URL] = []
+        for url in urls {
+            if url.isFileURL {
+                files.append(url)
+            } else if let command = RemoteCommand.parse(url) {
+                AppDelegate.pendingCommands.append(command)
+            }
+            // Alles andere wird bewusst verworfen: Eine halb verstandene URL
+            // auszufuehren waere schlimmer, als sie zu ignorieren.
+        }
+
+        if !files.isEmpty {
+            AppDelegate.pendingURLs.append(contentsOf: files)
+            // Warmstart (App lief schon): View hoert mit und zieht den Puffer sofort.
+            NotificationCenter.default.post(name: NSNotification.Name("openSIDFiles"), object: nil)
+        }
+        if !AppDelegate.pendingCommands.isEmpty {
+            NotificationCenter.default.post(name: NSNotification.Name("remoteCommands"), object: nil)
+        }
     }
 
     // Single-Window-App: schliesst man das Fenster, soll die App beenden

@@ -23,8 +23,14 @@
    Fensters**, nicht als zweites Fenster — die App ist bewusst eine
    Ein-Fenster-App (siehe `AppMain.swift`), ein zweites Fenster brächte einen
    zweiten Koordinator und damit doppelte Wiedergabe.
-4. HTTP-Remote oder URL-Schema nur als kleiner, abgesicherter Agenteneinstieg; CLI ist
-   bereits der primäre Headless-Weg.
+4. ~~Agenteneinstieg~~ **erledigt am 2026-08-23 (v1.9.19)** — als **URL-Schema**,
+   nicht als HTTP-Server. `open vicioussid://next` steuert die laufende Mac-App;
+   ein Netzwerkdienst bräuchte Bindeadresse, Zugangsschutz und Pflege und wäre
+   die deutlich größere Angriffsfläche. Erlaubt sind Wiedergabesteuerung, Sprung,
+   Subtune und die Auswahl eines Titels **aus der Bibliothek**; alles andere wird
+   verworfen (`RemoteCommand` im Core, 12 Tests). Bewusst nicht dabei: Zugriff auf
+   beliebige Dateien, Einstellungen, Export, Beenden — ein URL-Schema kann jede
+   Webseite auslösen.
 5. Filter-Cutoff-Tuning für 6581. Ersetzt dauerhaft einen vollständigen reSIDfp-Port
    (Entscheidung 2026-07-15): holt den hörbaren Teil des Gewinns ohne Engine-Umbau.
 

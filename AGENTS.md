@@ -175,6 +175,13 @@ Quick-Look-Controls auf macOS nicht zuverlässig sind, und stoppt beim Schließe
   damit jeder Weg zum Umschalten (Knopf, Menü, Einstellung von außen) dasselbe
   tut. Das AppKit-Fenster kommt über `WindowAccessor`, nicht über
   `NSApp.windows.first`: Einstellungen und Panels sind auch Fenster.
+- Die Fernsteuerung läuft über das URL-Schema `vicioussid://`, nicht über einen
+  Netzwerkdienst. Was sie darf, steht abschließend in `RemoteCommand` im Core und
+  wird dort geprüft, bevor irgendetwas ausgeführt wird: Wiedergabesteuerung,
+  Sprung, Subtune und Titelauswahl **unterhalb des Autoplay-Ordners**. Kein
+  Zugriff auf beliebige Dateien, keine Einstellungen, kein Export, kein Beenden —
+  ein URL-Schema kann jede Webseite auslösen. Diese Grenze nicht aufweichen; neue
+  Befehle gehören mit Test in `RemoteCommand`.
 - Media-Tasten/Now Playing verwenden `MPRemoteCommandCenter` und
   `MPNowPlayingInfoCenter`. Sie funktionieren vollständig nur im echten App-Bundle,
   nicht zwingend in `swift run`.
