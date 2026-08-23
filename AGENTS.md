@@ -48,6 +48,14 @@ Releaseartefakte bleiben unversioniert.
   1SID bleibt mittig. WAV-Export ist bei Multi-SID stereo, sonst mono.
 - Voice-Mute entfernt nur den Mixbeitrag; Emulation läuft weiter. Filter-Bypass hält
   Filterzustand warm. Keine zustandsverändernde „Optimierung“ beim Muten.
+- STIL (`DOCUMENTS/STIL.txt` der HVSC) liefert die Anmerkungen zu Titel und
+  Subtune. Parser und Zuordnung stehen im Core (`STIL.swift`), die Datei wird nie
+  mitgeliefert. Zugeordnet wird ausschließlich über den Pfad des Titels relativ
+  zur HVSC-Wurzel (der Ordner über `DOCUMENTS/`) — nie über den Dateinamen: In
+  einer HVSC gibt es dutzende `Commando.sid`, und eine falsch zugeordnete
+  Anmerkung ist schlechter als gar keine. Liegt ein Titel außerhalb der Wurzel,
+  bleibt die Anzeige leer. Subtunes zählt die Datei ab 1, der Player ab 0;
+  `STILDatabase.info(forHVSCPath:subtune:)` rechnet das um.
 - Songlänge: HVSC `Songlengths.md5` → berechneter Cache → 360-s-Fallback. Der
   Hintergrund-Estimator erkennt Ende erst nach mindestens drei Sekunden Stille und
   cached auch Loop-/Negativergebnisse. Diese Reihenfolge steuert Scrubber, Auto-Next,

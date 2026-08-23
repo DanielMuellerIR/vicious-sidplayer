@@ -143,6 +143,33 @@ public struct MainView: View {
     // Pfad zur Songlengths.md5 aus den Einstellungen ("" = automatisch suchen).
     @AppStorage("songlengthsPath") private var songlengthsPath = ""
 
+    // STIL — die "SID Tune Information List" der HVSC. Sie sammelt, was im
+    // SID-Dateikopf keinen Platz hat: welche Vorlage ein Tune covert, wer die
+    // Melodie geschrieben hat, Anmerkungen zu einzelnen Subtunes. Die Datei
+    // gehoert dem HVSC-Projekt und wird nicht mitgeliefert; die App liest die
+    // Fassung des Nutzers (Einstellungen oder Auto-Fund).
+    //
+    // `stilRoot` ist die HVSC-Wurzel zur gefundenen Datei. Ohne sie ist die
+    // Datenbank wertlos: Die STIL kennt ihre Titel unter Pfaden wie
+    // "/MUSICIANS/H/Hubbard_Rob/Commando.sid", und nur relativ zu dieser Wurzel
+    // laesst sich eine Datei auf der Platte in genau diesen Pfad umrechnen.
+    @AppStorage("stilPath") private var stilPath = ""
+    @State private var stilDB: STILDatabase? = nil
+    @State private var stilRoot: URL? = nil
+    @State private var stilLoadTask: Task<Void, Never>? = nil
+    @State private var stilLoadGeneration = 0
+
+    // Was die STIL zum laufenden Titel und Subtune sagt — `nil`, wenn sie ihn
+    // nicht kennt oder er ausserhalb der HVSC-Wurzel liegt. Lieber nichts
+    // anzeigen als die Anmerkung eines fremden Titels.
+    private var currentSTILInfo: STILInfo? {
+        guard let stilDB, let stilRoot,
+              let url = playlist.track(at: currentTrackIdx)?.url,
+              let path = STILDatabase.hvscPath(for: url, root: stilRoot) else { return nil }
+        let info = stilDB.info(forHVSCPath: path, subtune: coordinator.currentSubtune)
+        return info.isEmpty ? nil : info
+    }
+
     // Effektive Dauer des aktuellen Subtunes — bestimmt Scrubber, Auto-Next,
     // Now-Playing und WAV-Export-Dauer. Die Leiter aus den drei Quellen steht im
     // Core, damit Mac und iPhone nicht auseinanderlaufen.
@@ -302,6 +329,40 @@ public struct MainView: View {
                         MetaLine(label: "TITLE", value: coordinator.trackName, theme: theme)
                         MetaLine(label: "COMPOSER", value: coordinator.composer, theme: theme)
                         MetaLine(label: "INFO", value: coordinator.info, theme: theme)
+
+                        // Anmerkungen der HVSC-Kuratoren zum laufenden Titel
+                        // (STIL). Sie erscheinen nur, wenn es welche gibt —
+                        // ohne HVSC-Sammlung bleibt der Bereich unsichtbar
+                        // statt leer herumzustehen.
+                        if let stil = currentSTILInfo {
+                            Divider()
+                                .background(borderCol)
+                                .padding(.vertical, 2)
+                            Text("STIL")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundColor(textSecCol)
+                            // Eigener Rollbereich mit fester Hoehe: Manche
+                            // Kommentare der HVSC sind Absaetze, die sonst die
+                            // ganze Seitenleiste auseinanderziehen wuerden.
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    ForEach(Array(stil.orderedFields.enumerated()), id: \.offset) { _, field in
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text(field.label)
+                                                .font(.system(size: 9, weight: .semibold))
+                                                .foregroundColor(textSecCol)
+                                            Text(field.value)
+                                                .font(.system(size: 11))
+                                                .foregroundColor(textCol)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                                .textSelection(.enabled)
+                                        }
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 140)
+                        }
 
                         // codereview-ok: stilistisch, kein Bug (2026-07-01)
                         if let err = errorMessage {
@@ -624,6 +685,8 @@ public struct MainView: View {
                 // Songlengths-DB (HVSC) im Hintergrund laden — VOR der Playlist,
                 // damit der erste Track seine Laenge moeglichst schon findet.
                 loadSonglengthDB()
+                // Die Titel-Anmerkungen der HVSC ebenfalls im Hintergrund.
+                loadSTIL()
                 // Start-Playlist aus dem Autoplay-Ordner laden (siehe Einstellungen)
                 // und die letzte Sitzung fortsetzen.
                 loadLocalAudioFolder(restoreSession: true)
@@ -644,7 +707,11 @@ public struct MainView: View {
             loadLocalAudioFolder()
             // Auto-Fund der Songlengths-DB haengt am Autoplay-Ordner -> neu suchen.
             if songlengthsPath.isEmpty { loadSonglengthDB() }
+            // Fuer die STIL gilt dasselbe.
+            if stilPath.isEmpty { loadSTIL() }
         }
+        // STIL-Datei in den Einstellungen geaendert -> neu laden.
+        .onChange(of: stilPath) { _ in loadSTIL() }
         // "Now Playing"-Infos bei jedem relevanten Zustandswechsel aktualisieren
         // (nicht bei jedem elapsed-Tick — Titel/Status/Position genuegen dem System).
         .onChange(of: coordinator.isPlaying) { _ in updateNowPlayingInfo() }
@@ -1160,6 +1227,59 @@ public struct MainView: View {
                     if songlengthLoadGeneration == generation {
                         songlengthLoadTask = nil
                     }
+                }
+            }
+        }
+    }
+
+    // Laedt die STIL.txt im Hintergrund: konfigurierter Pfad aus den
+    // Einstellungen oder Auto-Fund (DOCUMENTS/STIL.txt im/ueber dem
+    // Autoplay-Ordner). Die echte Datei der HVSC hat ueber 200.000 Zeilen —
+    // im Hauptthread geparst stuende die Oberflaeche dabei.
+    //
+    // Aufgebaut wie `loadSonglengthDB`: genau ein Task, und eine Generation
+    // entscheidet, wer sein Ergebnis noch eintragen darf. Ohne sie ueberschriebe
+    // ein langsames altes Laden die inzwischen gewaehlte Datei.
+    private func loadSTIL() {
+        stilLoadTask?.cancel()
+        stilLoadGeneration &+= 1
+        let generation = stilLoadGeneration
+        let configured = stilPath
+        let autoplayPath = autoplayFolderPath
+        stilLoadTask = Task.detached(priority: .utility) {
+            do {
+                try Task.checkCancellation()
+                let fm = FileManager.default
+                let url: URL?
+                if !configured.isEmpty {
+                    url = URL(fileURLWithPath: (configured as NSString).expandingTildeInPath)
+                } else {
+                    let folder = AutoplayFolder.resolve(configuredPath: autoplayPath, fm: fm)
+                    url = folder.flatMap { STILDatabase.autodetect(nearFolder: $0, fm: fm) }
+                }
+                let db: STILDatabase?
+                if let url {
+                    db = try? STILDatabase.loadCancellable(url: url)
+                } else {
+                    db = nil
+                }
+                try Task.checkCancellation()
+                let root = url.map { STILDatabase.hvscRoot(forSTILFile: $0) }
+                await MainActor.run {
+                    guard stilLoadGeneration == generation else { return }
+                    stilLoadTask = nil
+                    stilDB = db
+                    stilRoot = db == nil ? nil : root
+                    if let db {
+                        loadLog.info("STIL geladen: \(db.count, privacy: .public) Titel, \(db.folderCount, privacy: .public) Ordner")
+                    }
+                }
+            } catch is CancellationError {
+                // Erwartet bei Pfad-/Autoplay-Wechsel; die neuere Generation ist
+                // bereits unterwegs und allein schreibberechtigt.
+            } catch {
+                await MainActor.run {
+                    if stilLoadGeneration == generation { stilLoadTask = nil }
                 }
             }
         }

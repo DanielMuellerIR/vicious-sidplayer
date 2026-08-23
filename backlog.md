@@ -1,7 +1,12 @@
 # Aktiver Backlog
 
-1. STIL-Integration aus einer vom Nutzer bereitgestellten HVSC-`STIL.txt`; Auto-Fund
-   nach dem vorhandenen Songlength-Muster, kein Bundling der Datenbank.
+1. ~~STIL-Integration~~ **auf dem Mac erledigt am 2026-08-23 (v1.9.12).** Parser,
+   Zuordnung über die HVSC-Wurzel und Auto-Fund stehen im Core (`STIL.swift`,
+   18 Tests), die Mac-App zeigt Ordner-, Datei- und Subtune-Anmerkungen in der
+   Seitenleiste und hat einen eigenen Einstellungs-Eintrag. **Offen: dieselbe
+   Anzeige in der iPhone-App**, und die Abnahme an einer echten `STIL.txt` der
+   HVSC — geprüft wurde an einer nachgebauten Datei im dokumentierten Format
+   (mit Windows-Zeilenenden), weil hier keine HVSC vorliegt.
 2. HVSC-Browser/Bibliotheksansicht für große Sammlungen statt ausschließlich flacher
    Playlist — **nur noch für die Mac-App offen**. Die iPhone-App hat den aufklappbaren
    Ordnerbaum bereits, und `MusicLibrary` im Core liefert Index und Baum

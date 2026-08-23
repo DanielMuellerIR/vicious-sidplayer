@@ -17,6 +17,9 @@ struct SettingsView: View {
     // Pfad zur HVSC-Songlengths.md5 ("" = automatisch im/ueber dem Autoplay-
     // Ordner suchen: DOCUMENTS/Songlengths.md5). MainView beobachtet den Key.
     @AppStorage("songlengthsPath") private var songlengthsPath = ""
+    // Pfad zur HVSC-STIL.txt ("" = automatisch im/ueber dem Autoplay-Ordner
+    // suchen: DOCUMENTS/STIL.txt). MainView beobachtet den Key.
+    @AppStorage("stilPath") private var stilPath = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -88,6 +91,30 @@ struct SettingsView: View {
                         .help("Zurück zur automatischen Suche im Autoplay-Ordner")
                 }
             }
+
+            Divider()
+                .padding(.vertical, 4)
+
+            Text("Titel-Anmerkungen (HVSC-STIL)")
+                .font(.headline)
+            Text("Die STIL.txt der High Voltage SID Collection sammelt, was im SID-Dateikopf keinen Platz hat: welche Vorlage ein Tune covert, wer die Melodie geschrieben hat, Anmerkungen zu einzelnen Subtunes. Ohne Angabe wird sie automatisch unter DOCUMENTS/ im Autoplay-Ordner gesucht. Zugeordnet wird über den Pfad des Titels unterhalb der HVSC-Wurzel — bei einer Auswahl außerhalb der Sammlung bleibt die Anzeige deshalb leer.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 8) {
+                Text(displaySTILPath)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(displaySTILPath)
+                Spacer()
+                Button("Auswählen…", action: chooseSTILFile)
+                    .help("STIL.txt manuell festlegen")
+                if !stilPath.isEmpty {
+                    Button("Automatisch", action: { stilPath = "" })
+                        .help("Zurück zur automatischen Suche im Autoplay-Ordner")
+                }
+            }
         }
         .padding(20)
         .frame(width: 480)
@@ -118,6 +145,34 @@ struct SettingsView: View {
             return "Automatisch: " + (found.path as NSString).abbreviatingWithTildeInPath
         }
         return "Automatisch: keine gefunden"
+    }
+
+    // Anzeige der STIL-Quelle: konfigurierte Datei oder Auto-Fund-Status.
+    private var displaySTILPath: String {
+        if !stilPath.isEmpty {
+            return (stilPath as NSString).abbreviatingWithTildeInPath
+        }
+        let fm = FileManager.default
+        if let folder = AutoplayFolder.resolve(configuredPath: autoplayFolderPath, fm: fm),
+           let found = STILDatabase.autodetect(nearFolder: folder, fm: fm) {
+            return "Automatisch: " + (found.path as NSString).abbreviatingWithTildeInPath
+        }
+        return "Automatisch: keine gefunden"
+    }
+
+    // Datei-Auswahl fuer die STIL.txt.
+    private func chooseSTILFile() {
+        #if canImport(AppKit)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Auswählen"
+        panel.message = "STIL.txt aus der HVSC wählen (DOCUMENTS/STIL.txt)"
+        if panel.runModal() == .OK, let url = panel.url {
+            stilPath = url.path
+        }
+        #endif
     }
 
     // Datei-Auswahl fuer die Songlengths.md5.
