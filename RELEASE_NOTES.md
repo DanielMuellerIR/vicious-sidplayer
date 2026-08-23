@@ -1,83 +1,111 @@
-Vicious SID Player 1.9.0 adds a native iPhone app that shares the existing
-emulation core, and moves the music library — index, recursive import, reset —
-into that core as platform-neutral, tested logic. The iPhone app is its first
-user; the macOS app still runs on its previous playlist code and will migrate
-to the shared library later. The notarized macOS app and Quick Look extension
-remain included in the DMG; macOS behaviour is unchanged.
+Vicious SID Player 1.9.21 is about making the macOS app work with a real
+collection. Tested against 50,001 files — the size of a full High Voltage SID
+Collection — the previous version crashed on launch. It now starts in a fraction
+of a second and stays there. On top of that: the folder view the iPhone app
+already had, the HVSC tune notes (STIL), a mini player, a remote-control URL
+scheme, and roughly half the idle CPU load. The iPhone app gains the same tune
+notes and a fix that would otherwise have left it silent after a system audio
+restart.
 
-## iOS app (iPhone)
+## Large collections on macOS
 
-- A native SwiftUI app in `ios/`, built from source and sideloaded with your own
-  Apple Developer team. No private APIs, a privacy manifest, and clean UTIs, so
-  the App Store route stays open.
-- Background playback with lock-screen, Control Center and AirPods controls via
-  `MPRemoteCommandCenter` and `MPNowPlayingInfoCenter`.
-- Audio session handling for the cases a music app must get right: an incoming
-  call pauses and resumes only when the system allows it, and unplugging
-  headphones pauses instead of switching to the speaker.
-- Recursive folder import that keeps the directory structure, skips duplicates by
-  content, reports progress, can be cancelled, and collects per-file errors
-  instead of aborting the whole run. Placeholder files from file providers such
-  as iCloud Drive or Nextcloud are materialised before copying.
-- Finder file sharing: connect the iPhone by cable and drag whole folders into
-  the app. Files added or removed from outside are reconciled automatically.
-- Reset library, confirmed twice, with an option to keep favorites.
-- Oscilloscope, subtunes, voice muting, filter bypass, SID model selection, song
-  lengths, search, favorites, shuffle, session restore, theme and WAV export.
-- The oscilloscope and all UI timers only run in the foreground; in the
-  background the audio keeps playing and the drawing stops.
-- German and English, following the system language.
+- **The app no longer crashes with a large library.** Two independent causes,
+  both found by measurement: the "TUNE:" chooser was a picker over the entire
+  playlist, which macOS turns into a menu with one item per track — 5.2 GB of
+  memory at 50,001 tracks — and the track list built every row up front, which
+  exhausted the SwiftUI view graph. The chooser is now a menu over a bounded
+  window around the current track, and the list only builds the rows it shows.
+  Result: 340 MB instead of a crash.
+- **The library scan runs in the background.** The list appears immediately from
+  the stored index and playback starts before the scan finishes; the result is
+  merged in afterwards and the playing track is followed by its identity, not by
+  its position in the list.
+- **Folder view.** The sidebar shows the collection either as a flat track list
+  or as an expandable folder tree with a track count per folder, switched in the
+  playlist header. Expand and collapse all, and the expanded state survives a
+  restart. Search and the favourites filter still show the flat list of matches.
+- Collapsed folders cost nothing: at 50,001 tracks the tree renders 100 rows
+  instead of 50,100.
 
-## Shared core
+## Tune notes from the HVSC (STIL)
 
-- The music library moved into `ViciousSIDPlayerCore`: index, recursive scan and
-  reconcile, importer, and reset are platform-neutral and covered by tests.
-- Track identity is a path relative to the library root rather than an absolute
-  URL, so favorites and session restore survive a reinstall.
-- Library reset can only delete below the library root; the check compares path
-  components rather than string prefixes.
-- `SidFileType` holds the `.sid` extension and the `com.viben.sid-tune` UTI in
-  one place. The macOS open dialog now filters on it instead of offering every
-  file.
-- The core builds for iOS as well; two Foundation calls that do not exist there
-  were replaced without changing macOS behaviour.
+- The app reads the `STIL.txt` of the High Voltage SID Collection and shows what
+  does not fit into the SID file header: which original a tune covers, who wrote
+  the melody, and notes on individual subtunes — ordered from the subtune to the
+  file to the folder.
+- On macOS the file is found automatically under `DOCUMENTS/` in or above the
+  autoplay folder, or picked in the settings. On iOS it is imported once, like
+  the song length database.
+- Tunes are matched by their path below the HVSC root; for collections copied out
+  of the HVSC, a unique path ending is used instead. Ambiguous matches are
+  dropped — a wrong note is worse than none. The database itself is not bundled;
+  it belongs to the HVSC project.
 
-## Fixes from the 2026-08-07 code review
+## Mini player and remote control
 
-All 16 findings of an in-depth review were verified against the code; 15 were
-fixed (one turned out to be partly incorrect and was corrected where it was
-right):
+- **Mini player** (⌘⌥M): the window shrinks to a slim bar with app icon, title,
+  composer, elapsed time and transport controls, and returns to its previous
+  size with the same shortcut.
+- **Remote control via a URL scheme**, for scripts and shortcuts:
+  `open "vicioussid://next"`, `playpause`, `stop`, `previous`,
+  `seek?seconds=90`, `subtune?index=1`, `track?path=Hubbard_Rob/Commando.sid`.
+  Deliberately not an HTTP server: a URL scheme is delivered locally and opens no
+  port. Because any web page can trigger one, the scheme offers playback control
+  only — track paths must stay below the autoplay folder and end in `.sid`, and
+  anything else is rejected before it reaches the app.
 
-- Resetting the library keeps favorites if the reset fails halfway, refuses to
-  start while another reset is running, and no longer treats a failed root
-  re-creation as success.
-- Files imported from the system share sheet are cleaned up from the app's
-  inbox after import, and the inbox no longer appears as a regular library
-  folder. Importing a track that already lives in the library no longer
-  creates a flat duplicate.
-- A library scan that hits unreadable folders reports a partial result with
-  errors instead of pretending the library is empty, and an unreadable source
-  root is reported as such rather than as a per-file error.
-- Import progress can no longer exceed its total (no more "8/7"), and the
-  running time estimate actually updates while importing.
-- The session state no longer falls back to track 0/0 after a system media
-  services reset, and the release notes no longer promise an engine rebuild
-  that does not happen.
-- Build hardening: a build with signing disabled can no longer produce an
-  unsigned app bundle unnoticed, and the symbol-strip step is checked
-  statically.
+## Performance
+
+- Idle CPU load with a tune playing dropped from 48 % to 31 % of a core. The
+  cause was neither the emulation nor the drawing: the per-voice display values
+  (envelope, frequency, gate, waveform, pulse width) were published 50 times a
+  second and rebuilt the entire user interface each time. The oscilloscopes now
+  read them when they draw, and the elapsed time is only forwarded when it has
+  changed by at least a tenth of a second.
+
+## Correctness fixes since 1.9.0
+
+- **Song lengths with Windows line endings were ignored entirely.** The HVSC
+  ships `Songlengths.md5` with CRLF, and in Swift `"\r\n"` is a single character
+  — splitting on `"\n"` found one giant line and therefore no entries at all.
+- A prepared database with an infinite or absurd duration no longer reaches the
+  scrubber or auto-advance.
+- A malformed SID claiming an absurd number of subtunes no longer crashes the
+  parser.
+- The pulse waveform of the native engine matched the HTML5 engine only by
+  accident; both now follow the same definition.
+- Quick Look could crash on a file whose playing time could not be computed.
+- Playlist, deduplication, search, favourites and the next-track calculation moved
+  from the macOS view into the shared core, as did the song length resolution —
+  both apps now follow the same tested rule instead of two similar ones.
+- Track identity on macOS is a path relative to the autoplay folder. Two files
+  with the same name in different folders are two tracks; previously entire
+  folders were unreachable in a collection sorted by composer.
+- **iOS:** after a system audio services restart the app rebuilt the tune but kept
+  using the now invalid `AVAudioEngine`, which would have left it permanently
+  silent while title and status looked correct. The engine is now recreated.
+- **Linux CLI:** the arrow keys switch subtunes. Escape sequences are assembled
+  instead of falling through as individual letters.
+- The sidebar splitter no longer jitters, and the header keeps its labels at the
+  minimum window width.
 
 ## Verification
 
-- The Swift suite covers the new library logic, including structure-preserving
-  import, deduplication, cancellation, reconcile against outside changes, and the
-  reset path guard.
-- A simulator suite covers the app model, the Info.plist contract, the privacy
-  manifest, and a full import round-trip against a synthetic nested tree.
-- Background playback, lock-screen control, AirPods, incoming calls and
-  unplugging headphones **cannot be verified in the simulator** and are therefore
-  not claimed as verified. The manual checklist for a real device is in
+- 192 tests in the Swift suite, including the new library outline, the STIL
+  parser, the remote command validation, the terminal key decoder and the first
+  test of the audio coordinator.
+- The macOS app was measured against a synthetic collection of 50,001 files:
+  memory, CPU load and scan duration, plus window captures of the folder tree,
+  the tune notes and the mini player. The collection was generated locally and
+  deleted afterwards.
+- The iPhone app builds without warnings of its own and its simulator suite is
+  green.
+- Background playback, lock screen, AirPods, incoming calls, unplugging headphones
+  and a media services reset **cannot be verified in the simulator** and are
+  therefore not claimed as verified. The manual checklist for a real device is in
   `ios/GERAETETEST.md`.
+- The tune notes were verified against a rebuilt `STIL.txt` in the documented
+  format, not against a real HVSC file — none was available here.
 - No SID music files are bundled. The HTML5 player is generated locally from the
   repository sources with `python3 build.py`.
 
