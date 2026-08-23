@@ -38,7 +38,7 @@ final class AppModel: ObservableObject {
 
     /// Ordnerbaum ueber `tracks` — die Bibliotheksansicht klappt ihn auf und zu.
     /// HVSC-Sammlungen sind tief verschachtelt; eine flache Liste waere unbenutzbar.
-    @Published private(set) var folderTree: LibraryFolder = .empty
+    @Published private(set) var folderTree: MusicLibraryFolder = AppModel.emptyFolderTree
 
     /// Relativer Pfad des gerade geladenen Titels, `nil` = keiner.
     @Published private(set) var currentTrackID: String?
@@ -199,6 +199,10 @@ final class AppModel: ObservableObject {
 
     /// UserDefaults-Schluessel an einer Stelle, damit Schreiber und Leser sich
     /// nicht auseinanderentwickeln.
+    /// Leerer Ordnerbaum — der Startwert und der Zustand nach dem
+    /// Zuruecksetzen der Bibliothek.
+    static let emptyFolderTree = MusicLibrary.folderTree(for: [])
+
     enum Keys {
         static let shuffle = "shuffleEnabled"
         static let autoNext = "autoNext"
@@ -235,7 +239,7 @@ final class AppModel: ObservableObject {
 
     /// Setzt die sichtbare Titelliste und den Ordnerbaum. Wird vom
     /// Bibliotheks-Teil aufgerufen (`AppModel+Library.swift`).
-    func applyLibrary(tracks: [LibraryTrack], folderTree: LibraryFolder) {
+    func applyLibrary(tracks: [LibraryTrack], folderTree: MusicLibraryFolder) {
         self.tracks = tracks
         self.folderTree = folderTree
         // Ist der laufende Titel verschwunden (z.B. per Finder geloescht),
@@ -342,22 +346,6 @@ struct LibraryTrack: Identifiable, Hashable, Sendable {
     /// Absolute URL, aufgeloest gegen die aktuelle Bibliothekswurzel.
     func url(in root: URL) -> URL {
         root.appendingPathComponent(id)
-    }
-}
-
-/// Knoten des Ordnerbaums der Bibliotheksansicht.
-struct LibraryFolder: Identifiable, Hashable, Sendable {
-    /// Relativer Pfad des Ordners, "" fuer die Wurzel.
-    let id: String
-    let name: String
-    var subfolders: [LibraryFolder]
-    var trackIDs: [String]
-
-    static let empty = LibraryFolder(id: "", name: "", subfolders: [], trackIDs: [])
-
-    /// Anzahl der Titel in diesem Ordner und allen darunter.
-    var totalTrackCount: Int {
-        trackIDs.count + subfolders.reduce(0) { $0 + $1.totalTrackCount }
     }
 }
 

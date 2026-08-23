@@ -8,12 +8,13 @@
    Abnahme an einer echten `STIL.txt` der HVSC** — geprüft wurde an einer
    nachgebauten Datei im dokumentierten Format (mit Windows-Zeilenenden), weil
    hier keine HVSC vorliegt.
-2. HVSC-Browser/Bibliotheksansicht für große Sammlungen statt ausschließlich flacher
-   Playlist — **nur noch für die Mac-App offen**. Die iPhone-App hat den aufklappbaren
-   Ordnerbaum bereits, und `MusicLibrary` im Core liefert Index und Baum
-   plattformneutral. Die Mac-App nutzt seit v1.9.8 den Index, aber noch nicht den
-   Baum: ihre Playlist bleibt eine flache Liste, der Ordner erscheint nur im
-   Tooltip und in der Suche.
+2. ~~HVSC-Browser/Bibliotheksansicht~~ **erledigt am 2026-08-23 (v1.9.14).** Die
+   Mac-App hat jetzt denselben aufklappbaren Ordnerbaum wie die iPhone-App,
+   umschaltbar im Kopf der Seitenleiste. Das Flachklopfen des Baums steht im
+   Core (`LibraryOutline`, 10 Tests) und wird von beiden Apps benutzt — vorher
+   stand es ungetestet im iOS-App-Ziel. Offen bleibt Kleinkram: Der aufgeklappte
+   Zustand überlebt keinen App-Start, und ein „alles auf-/zuklappen" wie auf iOS
+   fehlt auf dem Mac.
 3. Mini-Player mit Titel und Transportsteuerung — **nur noch für die Mac-App offen**
    (auf iOS erledigt).
 4. HTTP-Remote oder URL-Schema nur als kleiner, abgesicherter Agenteneinstieg; CLI ist

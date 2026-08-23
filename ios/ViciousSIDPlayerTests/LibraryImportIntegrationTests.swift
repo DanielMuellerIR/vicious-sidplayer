@@ -174,7 +174,7 @@ final class LibraryImportIntegrationTests: XCTestCase {
         }
 
         // Der Ordnerbaum, den die Bibliotheksansicht zeichnet.
-        XCTAssertEqual(model.folderTree.totalTrackCount, 3)
+        XCTAssertEqual(model.folderTree.totalEntryCount, 3)
         XCTAssertEqual(Set(model.folderTree.subfolders.map(\.name)), ["Demos", "Musicians"])
 
         let report = try XCTUnwrap(model.lastImportReport)
@@ -255,7 +255,7 @@ final class LibraryImportIntegrationTests: XCTestCase {
         await resetLibrary()
 
         XCTAssertTrue(model.tracks.isEmpty, "Nach dem Zuruecksetzen darf kein Titel uebrig sein.")
-        XCTAssertEqual(model.folderTree.totalTrackCount, 0)
+        XCTAssertEqual(model.folderTree.totalEntryCount, 0)
 
         // Die Wurzel selbst muss bleiben — auf iOS ist das `Documents/`, und ohne
         // sie schluege der naechste Import fehl.

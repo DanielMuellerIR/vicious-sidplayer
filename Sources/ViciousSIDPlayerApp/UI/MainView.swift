@@ -79,6 +79,24 @@ public struct MainView: View {
     // sichtbar still. Genau ein Abgleich zur Zeit; die Generation entscheidet,
     // wer sein Ergebnis noch eintragen darf — ein Ordnerwechsel in den
     // Einstellungen macht einen laufenden Scan gegenstandslos.
+    // Ordneransicht statt flacher Liste. Bleibt ueber App-Starts erhalten.
+    @AppStorage("sidebarShowsFolders") private var showFolderTree = false
+    /// Der Ordnerbaum der Bibliothek.
+    ///
+    /// Wird NICHT bei jedem Bildaufbau gerechnet und auch nicht im Hauptthread:
+    /// Das Gruppieren von 50.000 Eintraegen dauert eine halbe Sekunde (gemessen
+    /// am 2026-08-23). Er entsteht deshalb im Hintergrund, einmal aus dem
+    /// gespeicherten Index und noch einmal nach dem Abgleich.
+    @State private var folderTree = MusicLibrary.folderTree(for: [])
+    /// Steht der Baum schon? Bis dahin zeigt die Seitenleiste die flache Liste,
+    /// auch wenn die Ordneransicht eingeschaltet ist — besser die Titel als ein
+    /// leeres Feld.
+    @State private var folderTreeReady = false
+    @State private var folderTreeTask: Task<Void, Never>? = nil
+    @State private var folderTreeGeneration = 0
+    /// Pfade der aufgeklappten Ordner.
+    @State private var expandedFolders: Set<String> = []
+
     @State private var libraryScanTask: Task<Void, Never>? = nil
     @State private var libraryScanGeneration = 0
     /// Zeigt in der Seitenleiste an, dass gerade abgeglichen wird.
@@ -267,6 +285,22 @@ public struct MainView: View {
                                 .help("Bibliothek wird abgeglichen …")
                         }
                         Spacer()
+                        // Umschalter zwischen flacher Titelliste und
+                        // Ordneransicht. Bei einer HVSC-Sammlung ist die flache
+                        // Liste mit 50.000 Zeilen kaum zu ueberblicken; die
+                        // Ordner sind dort die eigentliche Gliederung
+                        // (Komponist, Spiel, Sammlung).
+                        if !playlist.isEmpty {
+                            Button(action: { showFolderTree.toggle() }) {
+                                Image(systemName: showFolderTree
+                                      ? "list.bullet.indent"
+                                      : "list.bullet")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(showFolderTree ? accentCol : textSecCol)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .help(showFolderTree ? "Als flache Liste zeigen" : "Nach Ordnern gliedern")
+                        }
                         // Filter "nur Favoriten" (Stern) neben dem Papierkorb.
                         if !playlist.isEmpty {
                             Button(action: { favoritesOnly.toggle() }) {
@@ -323,8 +357,12 @@ public struct MainView: View {
                                   favoritesOnly: favoritesOnly,
                                   favorites: favorites,
                                   isLight: isLight,
+                                  showTree: showFolderTree && folderTreeReady,
+                                  folderTree: folderTree,
+                                  expandedFolders: expandedFolders,
                                   onSelect: selectTrack,
-                                  onToggleFavorite: toggleFavorite)
+                                  onToggleFavorite: toggleFavorite,
+                                  onToggleFolder: toggleFolder)
                         .equatable()
 
                     Divider()
@@ -983,11 +1021,46 @@ public struct MainView: View {
         return false
     }
 
+    /// Baut den Ordnerbaum abseits des Hauptthreads neu.
+    ///
+    /// Wie beim Bibliotheks-Abgleich entscheidet eine Generation, wer sein
+    /// Ergebnis noch eintragen darf: Sonst ueberschriebe der Baum des
+    /// gespeicherten Index den frisch gescannten, wenn er spaeter fertig wird.
+    private func rebuildFolderTree(from entries: [MusicLibraryEntry]) {
+        folderTreeTask?.cancel()
+        folderTreeGeneration &+= 1
+        let generation = folderTreeGeneration
+        folderTreeTask = Task.detached(priority: .utility) {
+            let tree = MusicLibrary.folderTree(for: entries)
+            await MainActor.run {
+                guard folderTreeGeneration == generation else { return }
+                folderTreeTask = nil
+                folderTree = tree
+                folderTreeReady = true
+            }
+        }
+    }
+
+    /// Einen Ordner der Ordneransicht auf- oder zuklappen.
+    private func toggleFolder(_ path: String) {
+        if expandedFolders.contains(path) {
+            expandedFolders.remove(path)
+        } else {
+            expandedFolders.insert(path)
+        }
+    }
+
     private func clearPlaylist() {
         coordinator.stop()
         cancelLengthEstimate()
         cancelLibraryScan()
         playlist.removeAll()
+        folderTreeTask?.cancel()
+        folderTreeTask = nil
+        folderTreeGeneration &+= 1
+        folderTree = MusicLibrary.folderTree(for: [])
+        folderTreeReady = false
+        expandedFolders.removeAll()
         currentTrackIdx = -1
         errorMessage = nil
         // Songlaengen-Zustand des (nicht mehr vorhandenen) Tracks zuruecksetzen.
@@ -1028,7 +1101,9 @@ public struct MainView: View {
         // Liste ist damit ohne Wartezeit da und die Wiedergabe kann beginnen.
         // Beim allerersten Start gibt es ihn noch nicht — dann bleibt die Liste
         // leer, bis der Scan unten fertig ist.
-        playlist.setLibrary(lib.entries, root: lib.root)
+        let stored = lib.entries
+        playlist.setLibrary(stored, root: lib.root)
+        rebuildFolderTree(from: stored)
         let startedFromStoredIndex = !playlist.isEmpty
         if startedFromStoredIndex {
             startInitialPlayback(restoreSession: restoreSession)
@@ -1100,6 +1175,7 @@ public struct MainView: View {
         currentTrackIdx = playlist.setLibrary(entries,
                                               root: root,
                                               keepingTrackAt: currentTrackIdx)
+        rebuildFolderTree(from: entries)
         loadLog.info("Bibliotheks-Abgleich fertig: \(entries.count, privacy: .public) Titel")
         guard startPlayback, !playlist.isEmpty else { return }
         startInitialPlayback(restoreSession: restoreSession)
@@ -1578,12 +1654,22 @@ struct TrackListView: View, Equatable {
     let favoritesOnly: Bool
     let favorites: PlaylistFavorites
     let isLight: Bool
+    /// Ordneransicht statt flacher Liste.
+    let showTree: Bool
+    /// Der Ordnerbaum der Bibliothek. Wird nur in der Ordneransicht gebraucht
+    /// und aendert sich nur mit dem Bibliotheks-Abgleich.
+    let folderTree: MusicLibraryFolder
+    /// Pfade der aufgeklappten Ordner.
+    let expandedFolders: Set<String>
     let onSelect: (Int) -> Void
     let onToggleFavorite: (Int) -> Void
+    let onToggleFolder: (String) -> Void
 
-    // Was die Liste aussehen laesst, haengt nur an diesen Werten. Die beiden
-    // Aktionen sind Funktionen und lassen sich nicht vergleichen — sie greifen
-    // ohnehin immer auf den aktuellen Zustand von `MainView` zu.
+    // Was die Liste aussehen laesst, haengt nur an diesen Werten. Die Aktionen
+    // sind Funktionen und lassen sich nicht vergleichen — sie greifen ohnehin
+    // immer auf den aktuellen Zustand von `MainView` zu. Der Ordnerbaum fehlt
+    // hier bewusst: Er wird zusammen mit der Titelliste neu gesetzt, und deren
+    // Aenderungszaehler steht schon in der ersten Zeile.
     nonisolated static func == (lhs: TrackListView, rhs: TrackListView) -> Bool {
         lhs.playlist.revision == rhs.playlist.revision
             && lhs.currentTrackIdx == rhs.currentTrackIdx
@@ -1591,12 +1677,22 @@ struct TrackListView: View, Equatable {
             && lhs.favoritesOnly == rhs.favoritesOnly
             && lhs.favorites == rhs.favorites
             && lhs.isLight == rhs.isLight
+            && lhs.showTree == rhs.showTree
+            && lhs.expandedFolders == rhs.expandedFolders
     }
 
     private var visibleIndices: [Int] {
         playlist.visibleIndices(searchText: searchText,
                                 favoritesOnly: favoritesOnly,
                                 favorites: favorites)
+    }
+
+    /// Die Ordneransicht gilt nur fuer die ungefilterte Bibliothek. Sobald
+    /// gesucht oder auf Favoriten eingeschraenkt wird, ist die flache Liste die
+    /// richtige Antwort: Der Nutzer will die Treffer sehen, nicht die Ordner,
+    /// in denen sie liegen.
+    private var showsTreeNow: Bool {
+        showTree && searchText.trimmingCharacters(in: .whitespaces).isEmpty && !favoritesOnly
     }
 
     var body: some View {
@@ -1607,14 +1703,74 @@ struct TrackListView: View, Equatable {
 
         ScrollView {
             LazyVStack(spacing: 2) {
-                ForEach(visibleIndices, id: \.self) { idx in
-                    row(idx, textCol: textCol, textSecCol: textSecCol, accentCol: accentCol)
+                if showsTreeNow {
+                    // Position in der Playlist je Titel-ID. Einmal je
+                    // Neuaufbau der Ansicht gebaut: Die Playlist einzeln zu
+                    // durchsuchen waere bei 50.000 Titeln je Zeile ein
+                    // Durchlauf durch die ganze Liste.
+                    let indexByID = Dictionary(playlist.tracks.enumerated().map { ($1.id, $0) },
+                                               uniquingKeysWith: { first, _ in first })
+                    ForEach(LibraryOutline.rows(of: folderTree, expanded: expandedFolders)) { item in
+                        outlineRow(item,
+                                   indexByID: indexByID,
+                                   textCol: textCol,
+                                   textSecCol: textSecCol,
+                                   accentCol: accentCol)
+                    }
+                } else {
+                    ForEach(visibleIndices, id: \.self) { idx in
+                        row(idx, textCol: textCol, textSecCol: textSecCol, accentCol: accentCol)
+                    }
                 }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
         }
         .background(surfaceCol)
+    }
+
+    // Eine Zeile der Ordneransicht: Ordner zum Auf- und Zuklappen, oder ein
+    // Titel — dann dieselbe Zeile wie in der flachen Liste, nur eingerueckt.
+    @ViewBuilder
+    private func outlineRow(_ item: LibraryOutlineItem,
+                            indexByID: [String: Int],
+                            textCol: Color,
+                            textSecCol: Color,
+                            accentCol: Color) -> some View {
+        switch item {
+        case .folder(let folder):
+            Button(action: { onToggleFolder(folder.path) }) {
+                HStack(spacing: 6) {
+                    Image(systemName: folder.isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .frame(width: 10)
+                    Image(systemName: "folder")
+                        .font(.system(size: 11))
+                    Text(folder.name)
+                        .font(.system(size: 13, weight: .medium))
+                        .lineLimit(1)
+                    Spacer()
+                    Text("\(folder.trackCount)")
+                        .font(.system(size: 10))
+                        .foregroundColor(textSecCol)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PlainButtonStyle())
+            .foregroundColor(textCol)
+            .padding(.leading, CGFloat(folder.depth) * 12)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .help(folder.path)
+
+        case .track(let track):
+            // Ein Titel, den die Playlist (noch) nicht kennt, wird nicht
+            // gezeigt: Anklicken koennte man ihn ohnehin nicht.
+            if let idx = indexByID[track.relativePath] {
+                row(idx, textCol: textCol, textSecCol: textSecCol, accentCol: accentCol)
+                    .padding(.leading, CGFloat(track.depth) * 12)
+            }
+        }
     }
 
     // Zeile = Auswahl-Button + separater Stern-Button (Favorit an/aus), beide

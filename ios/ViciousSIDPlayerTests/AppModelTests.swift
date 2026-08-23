@@ -106,18 +106,11 @@ final class AppModelTests: XCTestCase {
         XCTAssertEqual(AppModel.formatTime(-42), "0:00")
     }
 
-    // MARK: - Ordnerbaum
-
-    func testFolderTreeCountsTracksRecursively() {
-        let deep = LibraryFolder(id: "A/B", name: "B", subfolders: [], trackIDs: ["A/B/x.sid"])
-        let middle = LibraryFolder(id: "A", name: "A", subfolders: [deep], trackIDs: ["A/y.sid", "A/z.sid"])
-        let root = LibraryFolder(id: "", name: "", subfolders: [middle], trackIDs: ["top.sid"])
-
-        XCTAssertEqual(deep.totalTrackCount, 1)
-        XCTAssertEqual(middle.totalTrackCount, 3)
-        XCTAssertEqual(root.totalTrackCount, 4)
-        XCTAssertEqual(LibraryFolder.empty.totalTrackCount, 0)
-    }
+    // Der Ordnerbaum selbst steht seit 2026-08-23 im Core und wird dort
+    // geprueft: die rekursive Titelzahl in `LibraryTests`
+    // (testFolderTreeCountsEntriesRecursively), das Flachklopfen der sichtbaren
+    // Zeilen in `LibraryOutlineTests`. Die iOS-Fassung ist nur noch die
+    // Uebersetzung in die Zeilentypen dieser Ansicht.
 
     // MARK: - Fortschritt
 
@@ -229,7 +222,7 @@ final class AppModelTests: XCTestCase {
             LibraryTrack(id: "Hubbard/Sanxion.sid", name: "Sanxion", folderPath: "Hubbard"),
             LibraryTrack(id: "Galway/Rambo.sid", name: "Rambo", folderPath: "Galway")
         ]
-        model.applyLibrary(tracks: tracks, folderTree: .empty)
+        model.applyLibrary(tracks: tracks, folderTree: AppModel.emptyFolderTree)
         XCTAssertEqual(model.visibleTracks.count, 3)
 
         // Suche greift auf Titel UND Ordnernamen.
@@ -259,11 +252,11 @@ final class AppModelTests: XCTestCase {
     func testCurrentTrackIsForgottenWhenItDisappearsFromTheLibrary() {
         let model = makeModel()
         let track = LibraryTrack(id: "A/x.sid", name: "x", folderPath: "A")
-        model.applyLibrary(tracks: [track], folderTree: .empty)
+        model.applyLibrary(tracks: [track], folderTree: AppModel.emptyFolderTree)
         model.setCurrentTrackID("A/x.sid")
         XCTAssertNotNil(model.currentTrack)
 
-        model.applyLibrary(tracks: [], folderTree: .empty)
+        model.applyLibrary(tracks: [], folderTree: AppModel.emptyFolderTree)
         XCTAssertNil(model.currentTrackID, "Ein verschwundener Titel darf nicht aktuell bleiben")
     }
 
@@ -332,7 +325,7 @@ final class AppModelTests: XCTestCase {
     @MainActor
     func testRestoreDoesNothingWithoutTracks() {
         let model = makeModel()
-        model.applyLibrary(tracks: [], folderTree: .empty)
+        model.applyLibrary(tracks: [], folderTree: AppModel.emptyFolderTree)
         model.shuffle = true
         model.restoreSessionIfPossible()
         XCTAssertNil(model.currentTrackID)

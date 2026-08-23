@@ -374,7 +374,7 @@ extension AppModel {
 
         // Die Ansicht sofort leeren, damit nicht sekundenlang Titel dastehen,
         // deren Dateien gerade geloescht werden.
-        applyLibrary(tracks: [], folderTree: .empty)
+        applyLibrary(tracks: [], folderTree: AppModel.emptyFolderTree)
 
         // Das eigentliche Loeschen laeuft im Hintergrund — bei einer grossen
         // Sammlung dauert es spuerbar. Der Task wird festgehalten, damit
@@ -483,23 +483,12 @@ struct ImportTally {
 /// `Sendable`, damit das Ergebnis anschliessend auf den MainActor darf.
 struct LibrarySnapshot: Sendable {
     let tracks: [LibraryTrack]
-    let folderTree: LibraryFolder
+    let folderTree: MusicLibraryFolder
 
     init(entries: [MusicLibraryEntry]) {
         tracks = entries.map {
             LibraryTrack(id: $0.relativePath, name: $0.displayName, folderPath: $0.folderPath)
         }
-        folderTree = LibrarySnapshot.convert(MusicLibrary.folderTree(for: entries))
-    }
-
-    /// Der Core-Ordnerbaum traegt die vollstaendigen Eintraege; die Ansicht
-    /// braucht davon nur die stabilen IDs und schlaegt den Rest in `tracks` nach.
-    private static func convert(_ folder: MusicLibraryFolder) -> LibraryFolder {
-        LibraryFolder(
-            id: folder.path,
-            name: folder.name,
-            subfolders: folder.subfolders.map(convert),
-            trackIDs: folder.entries.map(\.relativePath)
-        )
+        folderTree = MusicLibrary.folderTree(for: entries)
     }
 }

@@ -74,6 +74,12 @@ Releaseartefakte bleiben unversioniert.
   einer nach Komponisten sortierten Sammlung ganze Ordner unerreichbar blieben).
   Gespeicherte absolute Pfade rechnet die App beim Start einmalig um; diesen
   Migrationspfad nicht entfernen, sonst verliert der Nutzer seine Favoriten.
+- Der Ordnerbaum steht seit v1.9.14 vollständig im Core: `MusicLibrary.folderTree`
+  baut ihn, `LibraryOutline` klopft ihn für die Anzeige flach (nur aufgeklappte
+  Ordner werden betreten, sortiert wird natürlich). Beide Apps benutzen dieselbe
+  Fassung; die iPhone-App übersetzt das Ergebnis nur noch in ihre Zeilentypen.
+  Der Aufbau gehört **nicht** in den Hauptthread — bei 50.000 Titeln dauert er
+  eine halbe Sekunde (gemessen 2026-08-23).
 - Playlist-Logik (Aufbau, Deduplikation, Suche über Titel **und** Ordner, Favoriten,
   nächster Titel) steht im Core in `Playlist`, der Ordner-Scan in `MusicLibrary`.
   Die Frontends halten nur Zustand. Neue Korrektheitsregeln gehören dorthin, weil

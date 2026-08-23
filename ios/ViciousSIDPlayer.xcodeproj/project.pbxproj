@@ -251,7 +251,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.9.13;
+				MARKETING_VERSION = 1.9.14;
 				PRODUCT_BUNDLE_IDENTIFIER = com.viben.ViciousSIDPlayer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -274,7 +274,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.9.13;
+				MARKETING_VERSION = 1.9.14;
 				PRODUCT_BUNDLE_IDENTIFIER = com.viben.ViciousSIDPlayer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -289,7 +289,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.9.13;
+				MARKETING_VERSION = 1.9.14;
 				PRODUCT_BUNDLE_IDENTIFIER = com.viben.ViciousSIDPlayer.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -305,7 +305,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.9.13;
+				MARKETING_VERSION = 1.9.14;
 				PRODUCT_BUNDLE_IDENTIFIER = com.viben.ViciousSIDPlayer.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;

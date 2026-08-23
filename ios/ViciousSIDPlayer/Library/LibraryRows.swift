@@ -1,4 +1,5 @@
 import SwiftUI
+import ViciousSIDPlayerCore
 
 // Zeilenmodell und Zeilenansichten des Bibliotheks-Browsers.
 //
@@ -47,49 +48,41 @@ struct LibraryTrackRow: Hashable {
 enum LibraryTree {
     /// Uebersetzt den Ordnerbaum in die sichtbaren Zeilen.
     ///
+    /// Die eigentliche Rechnung steht seit 2026-08-23 im Core
+    /// (`LibraryOutline`) und ist dort getestet; hier bleibt nur die
+    /// Uebersetzung in die Zeilentypen dieser Ansicht. Vorher stand dieselbe
+    /// Rekursion ein zweites Mal in diesem Ziel — und war aus XCTest gar nicht
+    /// erreichbar.
+    ///
     /// - Parameters:
     ///   - folder: Der Knoten, dessen Inhalt aufgelistet wird (die Wurzel selbst
     ///     bekommt keine eigene Zeile).
-    ///   - depth: Einrücktiefe der direkten Kinder.
     ///   - expanded: Pfade der aufgeklappten Ordner.
     ///   - trackIndex: Nachschlagetabelle Pfad -> Titel.
-    static func rows(of folder: LibraryFolder,
-                     depth: Int = 0,
+    static func rows(of folder: MusicLibraryFolder,
                      expanded: Set<String>,
                      trackIndex: [String: LibraryTrack]) -> [LibraryRowItem] {
-        var result: [LibraryRowItem] = []
-        for subfolder in folder.subfolders {
-            let isExpanded = expanded.contains(subfolder.id)
-            result.append(.folder(LibraryFolderRow(id: subfolder.id,
-                                                   name: subfolder.name,
-                                                   depth: depth,
-                                                   trackCount: subfolder.totalTrackCount,
-                                                   isExpanded: isExpanded)))
-            // Zugeklappte Ordner werden gar nicht erst betreten.
-            if isExpanded {
-                result.append(contentsOf: rows(of: subfolder,
-                                               depth: depth + 1,
-                                               expanded: expanded,
-                                               trackIndex: trackIndex))
+        LibraryOutline.rows(of: folder, expanded: expanded).compactMap { item in
+            switch item {
+            case .folder(let row):
+                return .folder(LibraryFolderRow(id: row.path,
+                                                name: row.name,
+                                                depth: row.depth,
+                                                trackCount: row.trackCount,
+                                                isExpanded: row.isExpanded))
+            case .track(let row):
+                // Ein Titel, den die Liste (noch) nicht kennt, faellt weg —
+                // antippen liesse er sich ohnehin nicht.
+                guard let track = trackIndex[row.relativePath] else { return nil }
+                return .track(LibraryTrackRow(track: track, depth: row.depth))
             }
         }
-        for trackID in folder.trackIDs {
-            if let track = trackIndex[trackID] {
-                result.append(.track(LibraryTrackRow(track: track, depth: depth)))
-            }
-        }
-        return result
     }
 
     /// Sammelt die Pfade aller Ordner des Baums — Grundlage fuer „alle
     /// aufklappen".
-    static func allFolderIDs(of folder: LibraryFolder) -> Set<String> {
-        var result: Set<String> = []
-        for subfolder in folder.subfolders {
-            result.insert(subfolder.id)
-            result.formUnion(allFolderIDs(of: subfolder))
-        }
-        return result
+    static func allFolderIDs(of folder: MusicLibraryFolder) -> Set<String> {
+        LibraryOutline.allFolderPaths(of: folder)
     }
 }
 
