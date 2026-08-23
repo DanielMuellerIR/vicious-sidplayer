@@ -100,7 +100,26 @@ tiffutil -cathidpicheck "${BUILD_DIR}/DmgBg_1x.png" "${BUILD_DIR}/DmgBg_2x.png" 
 hdiutil create -size 80m -fs HFS+ -volname "${VOL_NAME}" -ov "$RW_DMG"
 
 echo "=== Mounting DMG ==="
-hdiutil attach -readwrite -noverify -noautoopen -mountpoint "$MOUNT_DIR" "$RW_DMG"
+# BEWUSST ohne -mountpoint: Diese Option mountet implizit "nobrowse", und dann
+# sieht der Finder das Volume nicht. Der AppleScript-Layoutschritt weiter unten
+# scheiterte deshalb reproduzierbar mit "disk ... kann nicht gelesen werden"
+# (Fehler -1728) — das DMG bekam nie sein Hintergrundbild und seine
+# Icon-Positionen (belegt am 2026-08-23; ohne -mountpoint sieht der Finder
+# dasselbe Volume sofort).
+#
+# Den echten Pfad liefert deshalb die Ausgabe von hdiutil und nicht eine
+# Annahme: Ist zufaellig schon ein Volume desselben Namens gemountet, haengt
+# macOS eine Nummer an ("Vicious SID Player 1").
+ATTACH_OUTPUT="$(hdiutil attach -readwrite -noverify -noautoopen "$RW_DMG")"
+printf '%s\n' "$ATTACH_OUTPUT"
+MOUNT_DIR="$(printf '%s\n' "$ATTACH_OUTPUT" | sed -n 's|.*\(/Volumes/.*\)$|\1|p' | head -1)"
+if [[ -z "$MOUNT_DIR" || ! -d "$MOUNT_DIR" ]]; then
+    echo "ABBRUCH: Der Mountpunkt des Images liess sich nicht bestimmen." >&2
+    exit 1
+fi
+# Der Finder spricht das Volume ueber seinen NAMEN an, und der kann vom
+# gewuenschten abweichen (siehe oben).
+MOUNTED_VOL_NAME="$(basename "$MOUNT_DIR")"
 
 echo "=== Copying files to DMG ==="
 cp -R "${BUILD_DIR}/dmg_temp/${APP_NAME}" "$MOUNT_DIR/"
@@ -109,11 +128,33 @@ ln -s /Applications "$MOUNT_DIR/Applications"
 mkdir -p "$MOUNT_DIR/.background"
 cp "${BUILD_DIR}/DmgBackground.tiff" "$MOUNT_DIR/.background/DmgBackground.tiff"
 
+# Der Finder kennt ein frisch gemountetes Volume nicht sofort. Ohne dieses
+# Warten scheiterte der Layoutschritt direkt nach dem Kopieren mit Fehler -1728,
+# obwohl das Volume laengst gemountet war (belegt am 2026-08-23).
+wait_for_finder_volume() {
+    local name="$1" attempt
+    for attempt in $(seq 1 15); do
+        if osascript -e "tell application \"Finder\" to exists disk \"${name}\"" 2>/dev/null | grep -q true; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+if [[ "$FINDER_LAYOUT" == "1" ]] && ! wait_for_finder_volume "$MOUNTED_VOL_NAME"; then
+    echo "ABBRUCH: Der Finder sieht das gemountete Volume '$MOUNTED_VOL_NAME' nicht." >&2
+    echo "Ohne ihn gibt es kein Icon-Layout und kein Hintergrundbild im DMG." >&2
+    echo "Aus einer normalen Terminalsitzung erneut versuchen, oder bewusst ohne" >&2
+    echo "Layout bauen: bash build_dmg.sh --no-finder-layout" >&2
+    exit 1
+fi
+
 if [[ "$FINDER_LAYOUT" == "1" ]]; then
     echo "=== Configuring DMG layout with AppleScript ==="
     osascript <<EOF
 tell application "Finder"
-    tell disk "${VOL_NAME}"
+    tell disk "${MOUNTED_VOL_NAME}"
         open
         set current view of container window to icon view
         set toolbar visible of container window to false
