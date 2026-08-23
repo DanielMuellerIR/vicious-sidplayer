@@ -63,7 +63,8 @@
 
 ## Offen aus der CodeQA-Kampagne vom 2026-08-15
 
-Die Kampagne hat alle Bereiche des Repos abgedeckt (Stand in `.codeqa/coverage.json`).
+Die Kampagne hat alle Bereiche des Repos abgedeckt; ihr Abdeckungsstand wird
+außerhalb des Repos geführt.
 Was sie bewusst **nicht** angefasst hat, steht hier — jeder Punkt ist geprüft und
 belegt, keiner ist eine Vermutung.
 

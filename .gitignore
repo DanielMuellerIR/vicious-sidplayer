@@ -37,3 +37,6 @@ ios/build/
 ios/.env
 ios/Config/Local.xcconfig
 *.xcuserstate
+
+# CodeQA-Kampagnenstand: bleibt lokal, gehoert nicht ins oeffentliche Repo.
+.codeqa/
