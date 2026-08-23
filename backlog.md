@@ -15,8 +15,14 @@
    stand es ungetestet im iOS-App-Ziel. Der aufgeklappte Zustand bleibt über
    App-Starts erhalten, „alles auf-/zuklappen" gibt es im Kopf der Seitenleiste
    (v1.9.15).
-3. Mini-Player mit Titel und Transportsteuerung — **nur noch für die Mac-App offen**
-   (auf iOS erledigt).
+3. ~~Mini-Player~~ **erledigt am 2026-08-23 (v1.9.18).** Die Mac-App schaltet über
+   „Wiedergabe → Mini-Player" (⌘⌥M) oder den Pfeil in der Leiste auf eine
+   kompakte Fensterleiste um: App-Symbol, Titel, Komponist, Spielzeit und
+   Transport. Das Fenster schrumpft dabei und nimmt beim Zurückschalten wieder
+   seine vorherige Größe an. Umgesetzt als **kompakte Fassung desselben
+   Fensters**, nicht als zweites Fenster — die App ist bewusst eine
+   Ein-Fenster-App (siehe `AppMain.swift`), ein zweites Fenster brächte einen
+   zweiten Koordinator und damit doppelte Wiedergabe.
 4. HTTP-Remote oder URL-Schema nur als kleiner, abgesicherter Agenteneinstieg; CLI ist
    bereits der primäre Headless-Weg.
 5. Filter-Cutoff-Tuning für 6581. Ersetzt dauerhaft einen vollständigen reSIDfp-Port
@@ -118,6 +124,9 @@ Systemverhalten"). Was dabei auffiel und **offen** bleibt:
   UserDefaults-Datei (`vsp-tests-<UUID>.plist`). `removePersistentDomain` leert
   sie, löscht die Datei aber nicht; nach einigen Läufen liegen dort hunderte.
   Folgenlos für die App, aber unsauber — beobachtet am 2026-08-23.
+- Bei minimaler Fensterbreite (1140 pt) verliert der Knopf „Öffnen…" oben seine
+  Beschriftung und bleibt als leere Pille stehen; die Kopfzeile ist dort zu eng.
+  Kosmetisch, beobachtet am 2026-08-23.
 - Der Hintergrund-Scan über 50.001 Dateien dauert headless 4,2 s, in der
   laufenden App aber 3,6 bis 24 s — er läuft mit niedriger Priorität neben der
   Wiedergabe. Erträglich, aber ungemessen ist, ob ein Zwischenstand der Liste

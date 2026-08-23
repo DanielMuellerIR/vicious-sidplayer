@@ -101,6 +101,11 @@ struct ViciousSIDPlayerApp: App {
 
                 Divider()
 
+                Button("Mini-Player") {
+                    NotificationCenter.default.post(name: NSNotification.Name("menuToggleMiniPlayer"), object: nil)
+                }
+                .keyboardShortcut("m", modifiers: [.command, .option])
+
                 Button("Design umschalten") {
                     NotificationCenter.default.post(name: NSNotification.Name("menuToggleTheme"), object: nil)
                 }

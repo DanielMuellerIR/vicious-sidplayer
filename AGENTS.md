@@ -168,6 +168,13 @@ Quick-Look-Controls auf macOS nicht zuverlässig sind, und stoppt beim Schließe
   globalem `AppleInterfaceStyle`, nicht aus der bereits überschriebenen
   `NSApp.effectiveAppearance`, lesen. AppKit-Appearance passend setzen, sonst werden
   Systemcontrols unlesbar. Oszilloskopfarben brauchen im Hellmodus genügend Kontrast.
+- Der Mini-Player ist eine kompakte Fassung DESSELBEN Fensters, kein zweites
+  Fenster: Die App ist bewusst eine Ein-Fenster-App, ein zweites Fenster brächte
+  einen zweiten Koordinator und damit doppelte Wiedergabe. Die Fenstergröße zieht
+  `applyMiniPlayerLayout` nach, angestoßen über `onChange(of: miniPlayer)` —
+  damit jeder Weg zum Umschalten (Knopf, Menü, Einstellung von außen) dasselbe
+  tut. Das AppKit-Fenster kommt über `WindowAccessor`, nicht über
+  `NSApp.windows.first`: Einstellungen und Panels sind auch Fenster.
 - Media-Tasten/Now Playing verwenden `MPRemoteCommandCenter` und
   `MPNowPlayingInfoCenter`. Sie funktionieren vollständig nur im echten App-Bundle,
   nicht zwingend in `swift run`.

@@ -79,6 +79,15 @@ public struct MainView: View {
     // sichtbar still. Genau ein Abgleich zur Zeit; die Generation entscheidet,
     // wer sein Ergebnis noch eintragen darf — ein Ordnerwechsel in den
     // Einstellungen macht einen laufenden Scan gegenstandslos.
+    // Mini-Player: kompakte Fensterleiste mit Titel und Transport statt des
+    // vollen Fensters. Bleibt ueber App-Starts erhalten.
+    @AppStorage("miniPlayer") private var miniPlayer = false
+    /// Das AppKit-Fenster, in dem diese Ansicht haengt — gebraucht zum
+    /// Umschalten der Fenstergroesse. Wird von `WindowAccessor` gemeldet.
+    @State private var hostWindow: NSWindow? = nil
+    /// Die Fenstergroesse vor dem Wechsel in den Mini-Player.
+    @State private var fullWindowFrame: NSRect? = nil
+
     // Ordneransicht statt flacher Liste. Bleibt ueber App-Starts erhalten.
     @AppStorage("sidebarShowsFolders") private var showFolderTree = false
     /// Der Ordnerbaum der Bibliothek.
@@ -254,6 +263,12 @@ public struct MainView: View {
         let accentCol = isLight ? Color.macLightAccent : Color.macDarkAccent
 
         ZStack {
+            if miniPlayer {
+                miniPlayerBar(textCol: textCol,
+                              textSecCol: textSecCol,
+                              accentCol: accentCol,
+                              bgSecondary: bgSecondary)
+            } else {
             HStack(spacing: 0) {
                 // Sidebar (Playlist & App Logo & Info)
                 VStack(alignment: .leading, spacing: 0) {
@@ -671,7 +686,18 @@ public struct MainView: View {
                 .background(isLight ? Color.macLightSurface : Color.macDarkSurface)
             }
             .frame(minWidth: 1140, minHeight: 540)
-            
+            }
+
+            // Meldet das Fenster; unsichtbar und ohne Platzbedarf.
+            WindowAccessor { window in
+                guard hostWindow !== window else { return }
+                hostWindow = window
+                // Startet die App im Mini-Player, ist das Fenster noch in
+                // voller Groesse — jetzt, wo es bekannt ist, zusammenziehen.
+                if miniPlayer { DispatchQueue.main.async { applyMiniPlayerLayout() } }
+            }
+            .frame(width: 0, height: 0)
+
             // Drag overlay
             if dragOver {
                 Color.black.opacity(0.8)
@@ -771,6 +797,12 @@ public struct MainView: View {
         // Erscheinungsbild-Modus geaendert (Einstellungen oder Cmd+T) -> AppKit-
         // Appearance nachziehen; die SwiftUI-Farben folgen ueber `theme` von selbst.
         .onChange(of: themeModeRaw) { _ in applyAppearance() }
+        // Mini-Player an/aus -> Fenstergroesse nachziehen. Erst einen Durchlauf
+        // spaeter: Vorher gilt noch die Mindestgroesse der alten Ansicht, und
+        // das Fenster liesse sich gar nicht auf die Leiste zusammenziehen.
+        .onChange(of: miniPlayer) { _ in
+            DispatchQueue.main.async { applyMiniPlayerLayout() }
+        }
         // Autoplay-Ordner in den Einstellungen geaendert -> Playlist sofort aus
         // dem neuen Ordner aufbauen (statt erst beim naechsten App-Start).
         .onChange(of: autoplayFolderPath) { _ in
@@ -819,6 +851,119 @@ public struct MainView: View {
                     coordinator.stop()
                 }
             }
+        }
+    }
+
+    // MARK: - Mini-Player
+
+    /// Die kompakte Fassung des Fensters: Titel, Transport, Spielzeit.
+    ///
+    /// Gedacht fuer den Betrieb nebenher — das grosse Fenster mit Playlist und
+    /// Oszilloskop braucht dafuer niemand. Umgeschaltet wird ueber das Menue
+    /// „Wiedergabe" (Cmd+Alt+M) oder den Pfeil rechts in der Leiste; das Fenster
+    /// schrumpft dabei und nimmt beim Zurueckschalten wieder seine alte Groesse
+    /// an (`applyMiniPlayerLayout`).
+    private func miniPlayerBar(textCol: Color,
+                               textSecCol: Color,
+                               accentCol: Color,
+                               bgSecondary: Color) -> some View {
+        HStack(spacing: 14) {
+            ViciousAppIconOverlay()
+                .frame(width: 34, height: 34)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(coordinator.trackName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(textCol)
+                    .lineLimit(1)
+                Text(coordinator.composer)
+                    .font(.system(size: 11))
+                    .foregroundColor(textSecCol)
+                    .lineLimit(1)
+            }
+            .frame(minWidth: 120, alignment: .leading)
+
+            Spacer(minLength: 8)
+
+            Text("\(formatTime(coordinator.elapsedSeconds)) / \(formatTime(currentDuration))")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundColor(textSecCol)
+                .fixedSize()
+
+            HStack(spacing: 12) {
+                Button(action: { playPreviousTrack() }) {
+                    Image(systemName: "backward.end.fill").font(.system(size: 13))
+                }
+                .buttonStyle(BorderlessButtonStyle())
+                .foregroundColor(playlist.count > 1 ? textCol : textSecCol.opacity(0.35))
+                .disabled(playlist.count <= 1)
+                .help("Vorheriger Titel (⌘←)")
+
+                Button(action: { togglePlayPause() }) {
+                    Image(systemName: coordinator.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 17))
+                }
+                .buttonStyle(BorderlessButtonStyle())
+                .foregroundColor(coordinator.isPlaying ? accentCol : .green)
+                .help(coordinator.isPlaying ? "Pause" : "Wiedergabe")
+
+                Button(action: { playNextTrack() }) {
+                    Image(systemName: "forward.end.fill").font(.system(size: 13))
+                }
+                .buttonStyle(BorderlessButtonStyle())
+                .foregroundColor(playlist.count > 1 ? textCol : textSecCol.opacity(0.35))
+                .disabled(playlist.count <= 1)
+                .help("Nächster Titel (⌘→)")
+            }
+
+            Button(action: { toggleMiniPlayer() }) {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 12))
+            }
+            .buttonStyle(BorderlessButtonStyle())
+            .foregroundColor(textSecCol)
+            .help("Zurück zum vollen Fenster (⌘⌥M)")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(minWidth: 420, maxWidth: .infinity, minHeight: 64, maxHeight: 64)
+        .background(bgSecondary)
+    }
+
+    /// Schaltet zwischen vollem Fenster und Mini-Player um.
+    ///
+    /// Die Fenstergroesse zieht `applyMiniPlayerLayout` nach — angestossen von
+    /// `onChange`, damit jeder Weg zum Umschalten (Knopf, Menue, Einstellung)
+    /// dasselbe tut.
+    private func toggleMiniPlayer() {
+        miniPlayer.toggle()
+    }
+
+    /// Zieht das Fenster auf die Groesse der gewaehlten Ansicht.
+    ///
+    /// Die volle Groesse wird beim Wechsel in den Mini-Player gemerkt und beim
+    /// Zurueckschalten wieder gesetzt — sonst muesste der Nutzer sein Fenster
+    /// jedes Mal neu aufziehen. Verankert wird oben links, damit die Leiste dort
+    /// stehen bleibt, wo vorher der Fensterkopf war, statt nach unten zu
+    /// wandern.
+    private func applyMiniPlayerLayout() {
+        guard let window = hostWindow else { return }
+        if miniPlayer {
+            if fullWindowFrame == nil { fullWindowFrame = window.frame }
+            var frame = window.frame
+            let height: CGFloat = 64 + (window.frame.height - window.contentLayoutRect.height)
+            frame.origin.y = window.frame.maxY - height
+            frame.size = NSSize(width: max(420, min(760, frame.width)), height: height)
+            window.setFrame(frame, display: true, animate: true)
+        } else if var full = fullWindowFrame {
+            // Wurde die App im Mini-Player beendet, ist die gemerkte Groesse
+            // die der Leiste. Die volle Ansicht verlangt aber mindestens
+            // 1140 x 540 — sonst zoege AppKit das Fenster gleich wieder auf und
+            // die gemerkte Position waere fuer die Katz.
+            full.size.width = max(full.width, 1140)
+            full.size.height = max(full.height, 560)
+            window.setFrame(full, display: true, animate: true)
+            fullWindowFrame = nil
         }
     }
 
@@ -1523,6 +1668,9 @@ public struct MainView: View {
         // Cmd+T schaltet FEST auf das jeweils andere Theme um (verlaesst also den
         // Auto-Modus) — Basis ist das gerade sichtbare Theme. Zurueck zu "Auto"
         // geht ueber die Einstellungen (Cmd+,).
+        NotificationCenter.default.addObserver(forName: NSNotification.Name("menuToggleMiniPlayer"), object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { toggleMiniPlayer() }
+        }
         NotificationCenter.default.addObserver(forName: NSNotification.Name("menuToggleTheme"), object: nil, queue: .main) { _ in
             Task { @MainActor in
                 themeModeRaw = (theme == .light ? ThemeMode.dark : ThemeMode.light).rawValue
@@ -1853,6 +2001,32 @@ struct TrackListView: View {
             .background(isActive ? accentCol : Color.clear)
             .foregroundColor(isActive ? .white : textCol)
             .cornerRadius(6)
+        }
+    }
+}
+
+/// Reicht das AppKit-Fenster nach oben, in dem diese Ansicht haengt.
+///
+/// Gebraucht wird das, weil SwiftUI die Fenstergroesse nicht selbst umstellen
+/// kann: Der Wechsel in den Mini-Player zieht das Fenster zusammen. Das Fenster
+/// zu ERRATEN (etwa `NSApp.windows.first`) waere bruechig — Einstellungen und
+/// Panels sind auch Fenster.
+struct WindowAccessor: NSViewRepresentable {
+    let onWindow: (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        // Beim Erzeugen haengt die Ansicht noch in keinem Fenster — deshalb
+        // einen Durchlauf spaeter nachsehen.
+        DispatchQueue.main.async {
+            if let window = view.window { onWindow(window) }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            if let window = nsView.window { onWindow(window) }
         }
     }
 }
