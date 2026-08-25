@@ -412,25 +412,42 @@ extension AppModel {
         }
         services.songlengthLoadTask?.cancel()
         services.songlengthLoadTask = nil
+        // Dasselbe Wettrennen wie beim STIL-Import: ohne Griff und Generation
+        // gewinnt bei zwei schnellen Auswahlen der langsamere Kopiervorgang
+        // (Review-Fund 2026-08-25).
+        services.songlengthImportTask?.cancel()
+        let previous = services.songlengthImportTask
+        services.songlengthImportGeneration &+= 1
+        let generation = services.songlengthImportGeneration
         setSonglengthsStatus("Datenbank wird übernommen …")
 
-        Task.detached(priority: .utility) { [self] in
+        services.songlengthImportTask = Task.detached(priority: .utility) { [self] in
+            await previous?.value
             // Der Sicherheits-Scope gilt prozessweit, nicht pro Thread — er darf
             // deshalb hier geoeffnet und geschlossen werden.
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
             do {
                 let data = try Data(contentsOf: url)
+                try Task.checkCancellation()
                 try data.write(to: destination, options: .atomic)
+            } catch is CancellationError {
+                return
             } catch {
                 let message = error.localizedDescription
                 await MainActor.run {
+                    guard self.services.songlengthImportGeneration == generation else { return }
+                    self.services.songlengthImportTask = nil
                     self.setSonglengthsStatus(AppModel.missingSonglengthsStatus)
                     self.errorMessage = "Songlängen-Datenbank konnte nicht übernommen werden: \(message)"
                 }
                 return
             }
-            await MainActor.run { self.loadSonglengthDB() }
+            await MainActor.run {
+                guard self.services.songlengthImportGeneration == generation else { return }
+                self.services.songlengthImportTask = nil
+                self.loadSonglengthDB()
+            }
         }
     }
 

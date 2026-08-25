@@ -467,4 +467,54 @@ final class LibraryImportIntegrationTests: XCTestCase {
         XCTAssertNil(defaults.object(forKey: "lastPosition"),
                      "Ohne frueheren Stand darf keine Position als Sitzung zurueckbleiben")
     }
+
+    // MARK: - Import von STIL und Songlaengen
+
+    /// Review-Fund 2026-08-25: Der Kopiervorgang lief als losgelassener
+    /// `Task.detached`. Zwei kurz aufeinanderfolgende Auswahlen schrieben beide
+    /// dasselbe Ziel, und zuletzt gewann der LANGSAMERE — die App arbeitete
+    /// danach mit einer anderen Datei als der zuletzt gewaehlten.
+    func testZweiterSTILImportGewinntGegenDenErsten() async throws {
+        let alt = source.appendingPathComponent("alt-stil.txt")
+        let neu = source.appendingPathComponent("neu-stil.txt")
+        // Die erste Auswahl ist absichtlich gross: Ohne Griff und Generation
+        // schrieb sie ihr Ziel NACH der kleinen zweiten und gewann damit.
+        var alteZeilen = [
+            "/MUSICIANS/A/Alt/AltesStueck.sid",
+            "COMMENT: Anmerkung der ersten Auswahl.",
+        ]
+        for index in 0..<80_000 {
+            alteZeilen.append("/MUSICIANS/F/Fueller/Fueller\(index).sid")
+            alteZeilen.append("COMMENT: Fuellzeile \(index).")
+        }
+        try alteZeilen.joined(separator: "\n").write(to: alt, atomically: true, encoding: .utf8)
+        try [
+            "/MUSICIANS/N/Neu/NeuesStueck.sid",
+            "COMMENT: Anmerkung der zweiten Auswahl.",
+        ].joined(separator: "\n").write(to: neu, atomically: true, encoding: .utf8)
+
+        model.importSTIL(from: alt)
+        let ersterImport = model.services.stilImportTask
+        model.importSTIL(from: neu)
+        let zweiterImport = model.services.stilImportTask
+        // BEIDE abwarten: Der entwertete erste Auftrag darf danach nachweislich
+        // nichts mehr geschrieben haben.
+        await ersterImport?.value
+        await zweiterImport?.value
+        let ladeTask = model.services.stilLoadTask
+        await ladeTask?.value
+
+        let ziel = try XCTUnwrap(model.stilFileURL)
+        let inhalt = try String(contentsOf: ziel, encoding: .utf8)
+        XCTAssertTrue(inhalt.contains("NeuesStueck.sid"),
+                      "Auf der Platte muss die zuletzt gewaehlte Datei stehen")
+        XCTAssertFalse(inhalt.contains("AltesStueck.sid"),
+                       "Die erste Auswahl darf die zweite nicht ueberschreiben")
+
+        model.setCurrentTrackID("NeuesStueck.sid")
+        XCTAssertNotNil(model.currentSTILInfo,
+                        "Geladen sein muss der Bestand der zweiten Auswahl")
+        model.setCurrentTrackID("AltesStueck.sid")
+        XCTAssertNil(model.currentSTILInfo)
+    }
 }

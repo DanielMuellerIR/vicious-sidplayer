@@ -58,11 +58,14 @@ Releaseartefakte bleiben unversioniert.
   Filterzustand warm. Keine zustandsverändernde „Optimierung“ beim Muten.
 - STIL (`DOCUMENTS/STIL.txt` der HVSC) liefert die Anmerkungen zu Titel und
   Subtune. Parser und Zuordnung stehen im Core (`STIL.swift`), die Datei wird nie
-  mitgeliefert. Zugeordnet wird ausschließlich über den Pfad des Titels relativ
-  zur HVSC-Wurzel (der Ordner über `DOCUMENTS/`) — nie über den Dateinamen: In
-  einer HVSC gibt es dutzende `Commando.sid`, und eine falsch zugeordnete
-  Anmerkung ist schlechter als gar keine. Liegt ein Titel außerhalb der Wurzel,
-  bleibt die Anzeige leer. Subtunes zählt die Datei ab 1, der Player ab 0;
+  mitgeliefert. Zugeordnet wird zuerst über den Pfad des Titels relativ zur
+  HVSC-Wurzel (der Ordner über `DOCUMENTS/`). Findet das nichts, zählt seit
+  v1.9.13 auf **beiden** Oberflächen ein eindeutiges Pfadende — so werden auch
+  aus der HVSC herauskopierte Sammlungen erkannt. Nie über den bloßen
+  Dateinamen, wenn er mehrdeutig ist: In einer HVSC gibt es dutzende
+  `Commando.sid`, und `STILDatabase.path(matchingSuffix:)` liefert deshalb nur
+  bei GENAU EINEM passenden Eintrag etwas — eine falsch zugeordnete Anmerkung
+  ist schlechter als gar keine. Subtunes zählt die Datei ab 1, der Player ab 0;
   `STILDatabase.info(forHVSCPath:subtune:)` rechnet das um.
 - Songlänge: HVSC `Songlengths.md5` → berechneter Cache → 360-s-Fallback. Der
   Hintergrund-Estimator erkennt Ende erst nach mindestens drei Sekunden Stille und

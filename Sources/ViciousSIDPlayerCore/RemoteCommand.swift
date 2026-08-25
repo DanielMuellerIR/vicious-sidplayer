@@ -35,6 +35,30 @@ public enum RemoteCommand: Equatable, Sendable {
     /// Das Schema, das die App bei LaunchServices anmeldet.
     public static let urlScheme = "vicioussid"
 
+    /// Was mit einem `track`-Befehl geschehen soll.
+    public enum TrackResolution: Equatable, Sendable {
+        /// Titel steht in der Liste — diesen Index waehlen.
+        case select(index: Int)
+        /// Noch nicht auffindbar, aber ein Bibliotheks-Scan laeuft gerade:
+        /// zuruecklegen und nach dem Scan erneut versuchen.
+        case deferUntilScanFinished
+        /// Endgueltig unbekannt — verwerfen statt raten.
+        case unknown
+    }
+
+    /// Entscheidet ohne Oberflaeche, was mit einem `track`-Befehl passiert.
+    ///
+    /// Beim Kaltstart ohne gespeicherten Index ist die Playlist noch leer,
+    /// waehrend der erste Bibliotheks-Scan laeuft. Frueher wurde der Befehl in
+    /// genau diesem Moment verworfen, und `vicioussid://track?path=...` waehlte
+    /// beim Kaltstart nichts aus, obwohl die Datei im Autoplay-Ordner lag
+    /// (Review-Fund 2026-08-25).
+    public static func resolveTrack(index: Int?,
+                                    isScanningLibrary: Bool) -> TrackResolution {
+        if let index { return .select(index: index) }
+        return isScanningLibrary ? .deferUntilScanFinished : .unknown
+    }
+
     /// Groesste erlaubte Sprungweite. Laenger als ein Tag ist kein Musikstueck,
     /// und ohne Obergrenze landete eine absurde Zahl im Positionsregler.
     public static let maximumSeekSeconds: Double = 24 * 60 * 60

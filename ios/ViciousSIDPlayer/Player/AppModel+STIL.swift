@@ -29,6 +29,14 @@ extension AppModel {
     }
 
     /// Uebernimmt eine vom Nutzer gewaehlte `STIL.txt` in die App.
+    ///
+    /// Der Kopiervorgang lief frueher als losgelassener `Task.detached`. Zwei
+    /// kurz aufeinanderfolgende Auswahlen schrieben beide dasselbe Ziel, und
+    /// zuletzt gewann der LANGSAMERE — die App arbeitete danach mit einer
+    /// anderen Datei als der zuletzt gewaehlten (Review-Fund 2026-08-25).
+    /// Jetzt gilt: Der neue Auftrag bricht den alten ab, wartet dessen Ende ab
+    /// (damit die Schreibvorgaenge nicht ueberholen) und nur die juengste
+    /// Generation darf Status setzen und laden.
     func importSTIL(from url: URL) {
         guard let destination = stilFileURL else {
             errorMessage = "Der interne Ordner der App ist nicht erreichbar."
@@ -36,25 +44,41 @@ extension AppModel {
         }
         services.stilLoadTask?.cancel()
         services.stilLoadTask = nil
+        services.stilImportTask?.cancel()
+        let previous = services.stilImportTask
+        services.stilImportGeneration &+= 1
+        let generation = services.stilImportGeneration
         setSTILStatus("Datei wird übernommen …")
 
-        Task.detached(priority: .utility) { [self] in
+        services.stilImportTask = Task.detached(priority: .utility) { [self] in
+            // Erst wenn der abgebrochene Vorgaenger wirklich durch ist, darf
+            // hier geschrieben werden — sonst landete seine Datei zuletzt.
+            await previous?.value
             // Der Sicherheits-Scope gilt prozessweit, nicht pro Thread — er darf
             // deshalb hier geoeffnet und geschlossen werden.
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
             do {
                 let data = try Data(contentsOf: url)
+                try Task.checkCancellation()
                 try data.write(to: destination, options: .atomic)
+            } catch is CancellationError {
+                return
             } catch {
                 let message = error.localizedDescription
                 await MainActor.run {
+                    guard self.services.stilImportGeneration == generation else { return }
+                    self.services.stilImportTask = nil
                     self.setSTILStatus(AppModel.missingSTILStatus)
                     self.errorMessage = "STIL-Datei konnte nicht übernommen werden: \(message)"
                 }
                 return
             }
-            await MainActor.run { self.loadSTIL() }
+            await MainActor.run {
+                guard self.services.stilImportGeneration == generation else { return }
+                self.services.stilImportTask = nil
+                self.loadSTIL()
+            }
         }
     }
 

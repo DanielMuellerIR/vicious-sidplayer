@@ -103,4 +103,29 @@ final class RemoteCommandTests: XCTestCase {
     func testFirstValueOfARepeatedParameterWins() {
         XCTAssertEqual(parse("vicioussid://subtune?index=1&index=9"), .subtune(index: 1))
     }
+
+    // MARK: - Was mit einem track-Befehl geschieht
+
+    // Review-Fund 2026-08-25: Beim Kaltstart ohne gespeicherten Index ist die
+    // Playlist noch leer, waehrend der erste Bibliotheks-Scan laeuft. Der
+    // Befehl wurde damals verworfen, und `vicioussid://track?path=...` waehlte
+    // nichts aus, obwohl die Datei im Autoplay-Ordner lag.
+    func testTrackInDerListeWirdSofortGewaehlt() {
+        XCTAssertEqual(RemoteCommand.resolveTrack(index: 7, isScanningLibrary: false),
+                       .select(index: 7))
+        XCTAssertEqual(RemoteCommand.resolveTrack(index: 7, isScanningLibrary: true),
+                       .select(index: 7),
+                       "Ein gefundener Titel wartet nicht auf den Scan")
+    }
+
+    func testTrackWartetWaehrendDesBibliotheksScans() {
+        XCTAssertEqual(RemoteCommand.resolveTrack(index: nil, isScanningLibrary: true),
+                       .deferUntilScanFinished)
+    }
+
+    func testTrackOhneLaufendenScanBleibtUnbekannt() {
+        XCTAssertEqual(RemoteCommand.resolveTrack(index: nil, isScanningLibrary: false),
+                       .unknown,
+                       "Ohne laufenden Scan gibt es nichts, worauf zu warten waere")
+    }
 }

@@ -118,6 +118,9 @@ public struct MainView: View {
     @State private var libraryScanGeneration = 0
     /// Zeigt in der Seitenleiste an, dass gerade abgeglichen wird.
     @State private var isScanningLibrary = false
+    // Fernsteuerbefehl `track`, der beim Kaltstart noch keine Liste vorfand.
+    // Er wird nach dem Bibliotheks-Scan genau einmal erneut versucht.
+    @State private var pendingTrackCommandID: String? = nil
 
     // Playlist-Filter: Live-Suche nach Titel + Ordner sowie "nur Favoriten".
     // Beide filtern NUR die Anzeige (sichtbare Indizes) — Auswahl, Auto-Next
@@ -195,8 +198,10 @@ public struct MainView: View {
     @State private var stilLoadGeneration = 0
 
     // Was die STIL zum laufenden Titel und Subtune sagt — `nil`, wenn sie ihn
-    // nicht kennt oder er ausserhalb der HVSC-Wurzel liegt. Lieber nichts
-    // anzeigen als die Anmerkung eines fremden Titels.
+    // nicht kennt. Lieber nichts anzeigen als die Anmerkung eines fremden
+    // Titels: Das Pfadende zaehlt nur, wenn GENAU EIN Eintrag darauf passt.
+    // (Der Satz "oder er ausserhalb der HVSC-Wurzel liegt" stand hier noch aus
+    // der Zeit vor v1.9.13 und widersprach dem Code zwei Zeilen weiter.)
     private var currentSTILInfo: STILInfo? {
         guard let stilDB, let track = playlist.track(at: currentTrackIdx) else { return nil }
         // Erst der volle Pfad unterhalb der HVSC-Wurzel, sonst ein eindeutiges
@@ -1370,8 +1375,19 @@ public struct MainView: View {
                                               keepingTrackAt: currentTrackIdx)
         rebuildFolderTree(from: entries)
         loadLog.info("Bibliotheks-Abgleich fertig: \(entries.count, privacy: .public) Titel")
-        guard startPlayback, !playlist.isEmpty else { return }
-        startInitialPlayback(restoreSession: restoreSession)
+        if startPlayback, !playlist.isEmpty {
+            startInitialPlayback(restoreSession: restoreSession)
+        }
+        // Ein waehrend des Scans eingegangener `track`-Befehl gewinnt gegen die
+        // wiederhergestellte Sitzung: Der Nutzer hat ihn gerade erst geschickt.
+        if let id = pendingTrackCommandID {
+            pendingTrackCommandID = nil
+            if let index = playlist.index(forID: id) {
+                selectTrack(at: index)
+            } else {
+                loadLog.error("Fernsteuerung: Titel auch nach dem Scan nicht in der Liste (\(id, privacy: .private(mask: .hash)))")
+            }
+        }
     }
 
     /// Bricht einen laufenden Bibliotheks-Abgleich ab und macht sein Ergebnis
@@ -1383,6 +1399,10 @@ public struct MainView: View {
         libraryScanTask = nil
         libraryScanGeneration &+= 1
         isScanningLibrary = false
+        // Der zurueckgestellte Fernsteuerbefehl wartete auf genau dieses
+        // Scan-Ergebnis. Ohne den Scan gibt es nichts mehr, worauf er warten
+        // koennte — er darf nicht in einer spaeteren, anderen Liste zuschlagen.
+        pendingTrackCommandID = nil
     }
 
     // Womit die App nach dem Aufbau der Start-Playlist beginnt.
@@ -1846,10 +1866,18 @@ public struct MainView: View {
             resolveComputedLengthIfNeeded()
         case .track(let id):
             // Nur was wirklich in der Liste steht. Ein unbekannter Pfad wird
-            // ignoriert statt geraten.
-            if let index = playlist.index(forID: id) {
+            // ignoriert statt geraten — es sei denn, der erste Bibliotheks-Scan
+            // laeuft noch. Die Entscheidung selbst steht im Core und ist dort
+            // getestet.
+            switch RemoteCommand.resolveTrack(index: playlist.index(forID: id),
+                                              isScanningLibrary: isScanningLibrary) {
+            case .select(let index):
+                pendingTrackCommandID = nil
                 selectTrack(at: index)
-            } else {
+            case .deferUntilScanFinished:
+                pendingTrackCommandID = id
+                loadLog.info("Fernsteuerung: Titel wird nach dem Bibliotheks-Scan erneut gesucht")
+            case .unknown:
                 loadLog.error("Fernsteuerung: Titel nicht in der Liste (\(id, privacy: .private(mask: .hash)))")
             }
         }

@@ -52,6 +52,21 @@ final class PlayerServices {
     /// Laufender Ladevorgang der STIL-Datei; genau einer zur Zeit.
     var stilLoadTask: Task<Void, Never>?
 
+    // Griff und Zaehler je Import. Ohne sie lief der Kopiervorgang als
+    // losgelassener `Task.detached`: Zwei kurz aufeinanderfolgende Auswahlen
+    // schrieben beide dasselbe Ziel, und der LANGSAMERE gewann — die App
+    // arbeitete danach mit einer anderen Datei als der zuletzt gewaehlten
+    // (Review-Fund 2026-08-25). Der Zaehler entwertet den aelteren Auftrag,
+    // der Griff erzwingt die Reihenfolge der Schreibvorgaenge.
+    /// Laufende Uebernahme einer gewaehlten Songlaengen-Datenbank.
+    var songlengthImportTask: Task<Void, Never>?
+    /// Nummer des juengsten Songlaengen-Imports; nur er darf noch wirken.
+    var songlengthImportGeneration = 0
+    /// Laufende Uebernahme einer gewaehlten STIL-Datei.
+    var stilImportTask: Task<Void, Never>?
+    /// Nummer des juengsten STIL-Imports; nur er darf noch wirken.
+    var stilImportGeneration = 0
+
     /// Letzter gespeicherter 5-Sekunden-Abschnitt der Sitzung. Ohne diese
     /// Drosselung schriebe die App im Sekundentakt in die Benutzereinstellungen.
     var lastSessionBucket = -1
