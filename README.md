@@ -315,7 +315,7 @@ every app build and DMG automatically.
 Three entry points, deliberately separated:
 
 ```bash
-bash build_app.sh                 # build only, stays in the project directory
+./build.sh                        # build only, stays in the project directory (wrapper for build_app.sh)
 ./install.sh                      # build, notarize, install into /Applications
 ./release.sh                      # build, notarize, package the DMG — never installs
 ```

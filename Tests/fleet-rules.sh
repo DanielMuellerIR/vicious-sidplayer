@@ -47,9 +47,9 @@ fi
 grep -qF 'require_notary_profile' install.sh \
     && ok "install.sh verlangt ein Notary-Profil" \
     || bad "install.sh verlangt kein Notary-Profil mehr"
-# REQUIRE_CODESIGN=1 verbietet build_app.sh den Ad-hoc-Rueckfall; ohne das koennte
+# REQUIRE_CODESIGN=1 verbietet build_app.sh (ueber den Wrapper build.sh) den Ad-hoc-Rueckfall; ohne das koennte
 # ein Bundle ohne Developer-ID in den Installationsweg geraten.
-grep -qF 'REQUIRE_CODESIGN=1 bash build_app.sh' install.sh \
+grep -qF 'REQUIRE_CODESIGN=1 bash build.sh' install.sh \
     && ok "install.sh erzwingt die Developer-ID-Signatur beim Bauen" \
     || bad "install.sh baut ohne erzwungene Developer-ID-Signatur"
 grep -qF 'Signature=adhoc' notarize-lib.sh \

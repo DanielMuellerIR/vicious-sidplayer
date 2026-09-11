@@ -277,3 +277,6 @@ rm -f "$QL_ENTITLEMENTS"
 
 echo "=== App Bundle Created Successfully: $APP_DIR ==="
 echo "You can now double-click '$APP_DIR' in Finder to launch the player!"
+# Maschinenlesbare Schlusszeile: Aufrufer (./build.sh, Agenten, CI) lesen den
+# Ergebnispfad aus der letzten Zeile statt aus dem Log.
+echo "BUILD OK: $PWD/$APP_DIR"

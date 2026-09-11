@@ -19,7 +19,8 @@ Look und als Single-File-HTML5-App. Keine SID-Musikdateien bündeln oder committ
 - `Tests/ViciousSIDPlayerTests/`: SwiftPM-Tests.
 - `src/`, `sidplayer.js`, `sid-player-worklet.js`: HTML5-Player; `build.py`
   erzeugt die gitignored Single-File-Ausgabe.
-- `build_app.sh`, `build_dmg.sh`: App-/DMG-Build; `VERSION`: Version.
+- `build.sh` (Wrapper auf `build_app.sh`, Schlusszeile `BUILD OK: <pfad>`), `install.sh`,
+  `release.sh`: die drei Wurzelskripte; `build_dmg.sh`: DMG-Build; `VERSION`: Version.
 
 Die App scannt einen konfigurierbaren lokalen Autoplay-Ordner; der Default liegt
 außerhalb des Repos. Persönliche Sammlung, `.sid`-Dateien, Audioexports, DMGs und

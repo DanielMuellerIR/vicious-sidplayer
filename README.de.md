@@ -318,7 +318,7 @@ jedem App-Build und DMG enthalten.
 Drei Einstiegspunkte, bewusst getrennt:
 
 ```bash
-bash build_app.sh                 # baut nur, bleibt im Projektverzeichnis
+./build.sh                        # baut nur, bleibt im Projektverzeichnis (Wrapper auf build_app.sh)
 ./install.sh                      # baut, notarisiert, installiert nach /Applications
 ./release.sh                      # baut, notarisiert, packt das DMG — installiert nie
 ```
