@@ -46,6 +46,16 @@ public enum RemoteCommand: Equatable, Sendable {
         case unknown
     }
 
+    /// Ergebnis fuer einen `track`-Befehl, der bis zum Ende des ersten
+    /// Bibliotheks-Scans gewartet hat.
+    public enum DeferredTrackResolution: Equatable, Sendable {
+        /// Den gefundenen Titel laden. `autoplay` ist beim Kaltstart wahr,
+        /// damit der ausdrueckliche Befehl den normalen Starttitel ersetzt.
+        case select(index: Int, autoplay: Bool)
+        /// Der Scan ist fertig, aber der Titel fehlt weiterhin.
+        case unknown
+    }
+
     /// Entscheidet ohne Oberflaeche, was mit einem `track`-Befehl passiert.
     ///
     /// Beim Kaltstart ohne gespeicherten Index ist die Playlist noch leer,
@@ -57,6 +67,19 @@ public enum RemoteCommand: Equatable, Sendable {
                                     isScanningLibrary: Bool) -> TrackResolution {
         if let index { return .select(index: index) }
         return isScanningLibrary ? .deferUntilScanFinished : .unknown
+    }
+
+    /// Entscheidet nach dem Scan, wie der zuvor gemerkte Titel geladen wird.
+    ///
+    /// Ohne gespeicherten Index hat die App noch nichts gestartet. Dann muss
+    /// der gefundene Titel selbst die Wiedergabe beginnen. Mit vorhandenem
+    /// Index behaelt er dagegen den bisherigen Wiedergabezustand bei.
+    public static func resolveDeferredTrack(index: Int?,
+                                            startPlaybackWhenDone: Bool,
+                                            isPlaying: Bool) -> DeferredTrackResolution {
+        guard let index else { return .unknown }
+        return .select(index: index,
+                       autoplay: startPlaybackWhenDone || isPlaying)
     }
 
     /// Groesste erlaubte Sprungweite. Laenger als ein Tag ist kein Musikstueck,

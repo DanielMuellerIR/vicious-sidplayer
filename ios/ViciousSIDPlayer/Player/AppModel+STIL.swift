@@ -48,6 +48,7 @@ extension AppModel {
         let previous = services.stilImportTask
         services.stilImportGeneration &+= 1
         let generation = services.stilImportGeneration
+        let importDataLoader = services.importDataLoader
         setSTILStatus("Datei wird übernommen …")
 
         services.stilImportTask = Task.detached(priority: .utility) { [self] in
@@ -59,7 +60,7 @@ extension AppModel {
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
             do {
-                let data = try Data(contentsOf: url)
+                let data = try await importDataLoader(url)
                 try Task.checkCancellation()
                 try data.write(to: destination, options: .atomic)
             } catch is CancellationError {

@@ -2,6 +2,50 @@ import XCTest
 import ViciousSIDPlayerCore
 @testable import ViciousSIDPlayer
 
+/// Haelt genau den ersten Dateizugriff offen, bis der Test den zweiten Import
+/// gestartet hat. So prueft der Test das Wettrennen ohne Dateigroessen- oder
+/// Scheduler-Glueck.
+private actor ImportReadBarrier {
+    private let blockedURL: URL
+    private var didReachBlockedRead = false
+    private var wasReleased = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    init(blockedURL: URL) {
+        self.blockedURL = blockedURL.standardizedFileURL
+    }
+
+    var isWaiting: Bool {
+        didReachBlockedRead && !wasReleased
+    }
+
+    func load(_ url: URL) async throws -> Data {
+        if url.standardizedFileURL == blockedURL {
+            didReachBlockedRead = true
+            // Der echte Import bricht den ersten Auftrag ab. Die Test-Sperre
+            // muss auf diesen Abbruch reagieren, sonst koennte der zweite
+            // Auftrag nie hinter dem ersten weiterlaufen.
+            await withTaskCancellationHandler {
+                await waitUntilReleased()
+            } onCancel: {
+                Task { await self.release() }
+            }
+        }
+        return try Data(contentsOf: url)
+    }
+
+    private func waitUntilReleased() async {
+        guard !wasReleased else { return }
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func release() {
+        wasReleased = true
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
 // Der Import-Durchlauf im Simulator — die Abnahme, die der Plan verlangt:
 // „Ordner-Import eines synthetischen, verschachtelten Testbaums erhaelt die
 // Struktur, dedupliziert, ist abbrechbar; Bibliothek zuruecksetzen leert
@@ -20,6 +64,11 @@ import ViciousSIDPlayerCore
 // Keine echten `.sid`-Dateien: alle Fixtures entstehen zur Laufzeit.
 @MainActor
 final class LibraryImportIntegrationTests: XCTestCase {
+
+    private enum MetadataImport {
+        case stil
+        case songlengths
+    }
 
     private let fm = FileManager.default
     private var model: AppModel!
@@ -475,46 +524,135 @@ final class LibraryImportIntegrationTests: XCTestCase {
     /// dasselbe Ziel, und zuletzt gewann der LANGSAMERE — die App arbeitete
     /// danach mit einer anderen Datei als der zuletzt gewaehlten.
     func testZweiterSTILImportGewinntGegenDenErsten() async throws {
-        let alt = source.appendingPathComponent("alt-stil.txt")
-        let neu = source.appendingPathComponent("neu-stil.txt")
-        // Die erste Auswahl ist absichtlich gross: Ohne Griff und Generation
-        // schrieb sie ihr Ziel NACH der kleinen zweiten und gewann damit.
-        var alteZeilen = [
-            "/MUSICIANS/A/Alt/AltesStueck.sid",
-            "COMMENT: Anmerkung der ersten Auswahl.",
-        ]
-        for index in 0..<80_000 {
-            alteZeilen.append("/MUSICIANS/F/Fueller/Fueller\(index).sid")
-            alteZeilen.append("COMMENT: Fuellzeile \(index).")
+        try await assertSecondMetadataImportWins(.stil)
+    }
+
+    /// Derselbe Schutz gilt fuer die zweite Importstrecke. Ein reiner STIL-Test
+    /// wuerde eine spaetere Regression in `importSonglengths` nicht bemerken.
+    func testZweiterSonglengthsImportGewinntGegenDenErsten() async throws {
+        try await assertSecondMetadataImportWins(.songlengths)
+    }
+
+    /// Startet den zweiten Auftrag erst, wenn der erste nachweislich im Leser
+    /// wartet. Gegen die alte, unkoordinierte Implementierung schreibt der erste
+    /// Auftrag nach seiner Freigabe zuletzt und dieser Test wird rot.
+    private func assertSecondMetadataImportWins(_ kind: MetadataImport) async throws {
+        let oldURL = source.appendingPathComponent("metadata-old.txt")
+        let newURL = source.appendingPathComponent("metadata-new.txt")
+        let oldText: String
+        let newText: String
+
+        switch kind {
+        case .stil:
+            oldText = "/MUSICIANS/A/Alt/AltesStueck.sid\nCOMMENT: Erste Auswahl.\n"
+            newText = "/MUSICIANS/N/Neu/NeuesStueck.sid\nCOMMENT: Zweite Auswahl.\n"
+        case .songlengths:
+            oldText = "[Database]\naaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=1:00\n"
+            newText = "[Database]\nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb=2:00\n"
         }
-        try alteZeilen.joined(separator: "\n").write(to: alt, atomically: true, encoding: .utf8)
-        try [
-            "/MUSICIANS/N/Neu/NeuesStueck.sid",
-            "COMMENT: Anmerkung der zweiten Auswahl.",
-        ].joined(separator: "\n").write(to: neu, atomically: true, encoding: .utf8)
+        try oldText.write(to: oldURL, atomically: true, encoding: .utf8)
+        try newText.write(to: newURL, atomically: true, encoding: .utf8)
 
-        model.importSTIL(from: alt)
-        let ersterImport = model.services.stilImportTask
-        model.importSTIL(from: neu)
-        let zweiterImport = model.services.stilImportTask
-        // BEIDE abwarten: Der entwertete erste Auftrag darf danach nachweislich
-        // nichts mehr geschrieben haben.
-        await ersterImport?.value
-        await zweiterImport?.value
-        let ladeTask = model.services.stilLoadTask
-        await ladeTask?.value
+        let barrier = ImportReadBarrier(blockedURL: oldURL)
+        model.services.importDataLoader = { url in
+            try await barrier.load(url)
+        }
 
-        let ziel = try XCTUnwrap(model.stilFileURL)
-        let inhalt = try String(contentsOf: ziel, encoding: .utf8)
-        XCTAssertTrue(inhalt.contains("NeuesStueck.sid"),
-                      "Auf der Platte muss die zuletzt gewaehlte Datei stehen")
-        XCTAssertFalse(inhalt.contains("AltesStueck.sid"),
-                       "Die erste Auswahl darf die zweite nicht ueberschreiben")
+        startMetadataImport(kind, from: oldURL)
+        let firstImport = try XCTUnwrap(metadataImportTask(kind))
+        guard await waitUntilImportIsBlocked(barrier) else {
+            await barrier.release()
+            XCTFail("Der erste Metadaten-Import erreichte die kontrollierte Lesesperre nicht.")
+            return
+        }
 
-        model.setCurrentTrackID("NeuesStueck.sid")
-        XCTAssertNotNil(model.currentSTILInfo,
-                        "Geladen sein muss der Bestand der zweiten Auswahl")
-        model.setCurrentTrackID("AltesStueck.sid")
-        XCTAssertNil(model.currentSTILInfo)
+        // Jetzt ist der alte Auftrag sicher offen. Erst in diesem Zustand wird
+        // die zweite Auswahl eingereicht; danach darf nur sie noch schreiben.
+        startMetadataImport(kind, from: newURL)
+        let secondImport = try XCTUnwrap(metadataImportTask(kind))
+
+        // Der neue Auftrag muss den alten abbrechen und selbst ganz fertig
+        // werden, waehrend der Test den ersten Leser noch festhaelt. In der
+        // frueheren, unkoordinierten Fassung war genau das moeglich; erst danach
+        // geben wir den alten Auftrag frei und beweisen, dass er nichts mehr
+        // ueberschreibt.
+        guard await waitUntilMetadataImportFinishes(kind) else {
+            await barrier.release()
+            await firstImport.value
+            await secondImport.value
+            XCTFail("Der zweite Metadaten-Import wurde nicht rechtzeitig fertig.")
+            return
+        }
+        await barrier.release()
+        await firstImport.value
+        await secondImport.value
+        await metadataLoadTask(kind)?.value
+
+        let destination = try XCTUnwrap(metadataDestination(kind))
+        XCTAssertEqual(try Data(contentsOf: destination), Data(newText.utf8),
+                       "Auf der Platte muss exakt die zuletzt gewaehlte Datei stehen")
+
+        switch kind {
+        case .stil:
+            model.setCurrentTrackID("NeuesStueck.sid")
+            XCTAssertNotNil(model.currentSTILInfo,
+                            "Geladen sein muss der STIL-Bestand der zweiten Auswahl")
+            model.setCurrentTrackID("AltesStueck.sid")
+            XCTAssertNil(model.currentSTILInfo)
+        case .songlengths:
+            XCTAssertEqual(model.songlengthDB?.lengths(forMD5: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+                           [120])
+            XCTAssertNil(model.songlengthDB?.lengths(forMD5: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+        }
+    }
+
+    private func startMetadataImport(_ kind: MetadataImport, from url: URL) {
+        switch kind {
+        case .stil: model.importSTIL(from: url)
+        case .songlengths: model.importSonglengths(from: url)
+        }
+    }
+
+    private func metadataImportTask(_ kind: MetadataImport) -> Task<Void, Never>? {
+        switch kind {
+        case .stil: model.services.stilImportTask
+        case .songlengths: model.services.songlengthImportTask
+        }
+    }
+
+    private func metadataLoadTask(_ kind: MetadataImport) -> Task<Void, Never>? {
+        switch kind {
+        case .stil: model.services.stilLoadTask
+        case .songlengths: model.services.songlengthLoadTask
+        }
+    }
+
+    private func metadataDestination(_ kind: MetadataImport) -> URL? {
+        switch kind {
+        case .stil: model.stilFileURL
+        case .songlengths: model.songlengthsFileURL
+        }
+    }
+
+    /// Begrenzt das Warten selbst. Ein XCTest-Zeitlimit koennte eine haengende
+    /// Continuation nicht aufloesen und damit die ganze Suite festhalten.
+    private func waitUntilImportIsBlocked(_ barrier: ImportReadBarrier,
+                                          timeout: TimeInterval = 2) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if await barrier.isWaiting { return true }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        return false
+    }
+
+    private func waitUntilMetadataImportFinishes(_ kind: MetadataImport,
+                                                 timeout: TimeInterval = 2) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if metadataImportTask(kind) == nil { return true }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+        return false
     }
 }

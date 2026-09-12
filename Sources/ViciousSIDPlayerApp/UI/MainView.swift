@@ -1375,18 +1375,29 @@ public struct MainView: View {
                                               keepingTrackAt: currentTrackIdx)
         rebuildFolderTree(from: entries)
         loadLog.info("Bibliotheks-Abgleich fertig: \(entries.count, privacy: .public) Titel")
-        if startPlayback, !playlist.isEmpty {
-            startInitialPlayback(restoreSession: restoreSession)
-        }
         // Ein waehrend des Scans eingegangener `track`-Befehl gewinnt gegen die
-        // wiederhergestellte Sitzung: Der Nutzer hat ihn gerade erst geschickt.
+        // wiederhergestellte Sitzung und den normalen Starttitel: Der Nutzer
+        // hat ihn gerade erst geschickt. Deshalb kommt er VOR dem Standardstart.
+        var loadedPendingTrack = false
         if let id = pendingTrackCommandID {
             pendingTrackCommandID = nil
-            if let index = playlist.index(forID: id) {
-                selectTrack(at: index)
-            } else {
+            switch RemoteCommand.resolveDeferredTrack(index: playlist.index(forID: id),
+                                                      startPlaybackWhenDone: startPlayback,
+                                                      isPlaying: coordinator.isPlaying) {
+            case .select(let index, let autoplay):
+                // Ein noch laufender Wechsel stammt vom Starttitel aus dem
+                // gespeicherten Index. Der spaetere Fernsteuerbefehl darf diese
+                // kurze Bedien-Sperre bewusst ueberstimmen.
+                isTransitioning = false
+                loadedPendingTrack = loadTrack(index: index, autoplay: autoplay)
+            case .unknown:
                 loadLog.error("Fernsteuerung: Titel auch nach dem Scan nicht in der Liste (\(id, privacy: .private(mask: .hash)))")
             }
+        }
+        // Nur wenn kein gepufferter Befehl erfolgreich war, nimmt der
+        // Kaltstart wie bisher Sitzung oder ersten spielbaren Titel.
+        if startPlayback, !playlist.isEmpty, !loadedPendingTrack {
+            startInitialPlayback(restoreSession: restoreSession)
         }
     }
 

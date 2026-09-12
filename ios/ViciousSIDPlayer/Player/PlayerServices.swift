@@ -67,6 +67,15 @@ final class PlayerServices {
     /// Nummer des juengsten STIL-Imports; nur er darf noch wirken.
     var stilImportGeneration = 0
 
+    /// Liest die ausgewaehlte Metadaten-Datei fuer STIL und Songlaengen.
+    ///
+    /// Im Programm ist das ein normaler Dateizugriff. Tests duerfen hier eine
+    /// kontrollierte Sperre einsetzen, damit zwei schnelle Auswahlen garantiert
+    /// in der fehleranfaelligen Reihenfolge zusammentreffen.
+    var importDataLoader: @Sendable (URL) async throws -> Data = { url in
+        try Data(contentsOf: url)
+    }
+
     /// Letzter gespeicherter 5-Sekunden-Abschnitt der Sitzung. Ohne diese
     /// Drosselung schriebe die App im Sekundentakt in die Benutzereinstellungen.
     var lastSessionBucket = -1

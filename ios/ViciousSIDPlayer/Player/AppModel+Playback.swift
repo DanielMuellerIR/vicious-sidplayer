@@ -419,6 +419,7 @@ extension AppModel {
         let previous = services.songlengthImportTask
         services.songlengthImportGeneration &+= 1
         let generation = services.songlengthImportGeneration
+        let importDataLoader = services.importDataLoader
         setSonglengthsStatus("Datenbank wird übernommen …")
 
         services.songlengthImportTask = Task.detached(priority: .utility) { [self] in
@@ -428,7 +429,7 @@ extension AppModel {
             let accessed = url.startAccessingSecurityScopedResource()
             defer { if accessed { url.stopAccessingSecurityScopedResource() } }
             do {
-                let data = try Data(contentsOf: url)
+                let data = try await importDataLoader(url)
                 try Task.checkCancellation()
                 try data.write(to: destination, options: .atomic)
             } catch is CancellationError {

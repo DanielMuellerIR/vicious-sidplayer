@@ -128,4 +128,30 @@ final class RemoteCommandTests: XCTestCase {
                        .unknown,
                        "Ohne laufenden Scan gibt es nichts, worauf zu warten waere")
     }
+
+    // Review-Fund 2026-09-12: Beim Kaltstart lud die App zuerst Titel 0. Dessen
+    // kurze Wechsel-Sperre liess den danach ausgefuehrten, gemerkten Befehl
+    // wirkungslos verpuffen. Die Entscheidung hier sorgt dafuer, dass der
+    // gewuenschte Titel selbst den Kaltstart uebernimmt und abgespielt wird.
+    func testAufgeschobenerTrackGewinntBeimKaltstartUndSpielt() {
+        XCTAssertEqual(RemoteCommand.resolveDeferredTrack(index: 7,
+                                                          startPlaybackWhenDone: true,
+                                                          isPlaying: false),
+                       .select(index: 7, autoplay: true))
+    }
+
+    func testAufgeschobenerTrackBehaeltDenWiedergabezustand() {
+        XCTAssertEqual(RemoteCommand.resolveDeferredTrack(index: 7,
+                                                          startPlaybackWhenDone: false,
+                                                          isPlaying: true),
+                       .select(index: 7, autoplay: true))
+        XCTAssertEqual(RemoteCommand.resolveDeferredTrack(index: 7,
+                                                          startPlaybackWhenDone: false,
+                                                          isPlaying: false),
+                       .select(index: 7, autoplay: false))
+        XCTAssertEqual(RemoteCommand.resolveDeferredTrack(index: nil,
+                                                          startPlaybackWhenDone: true,
+                                                          isPlaying: false),
+                       .unknown)
+    }
 }
