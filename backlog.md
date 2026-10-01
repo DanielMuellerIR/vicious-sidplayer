@@ -4,10 +4,11 @@
    Zuordnung über die HVSC-Wurzel und Auto-Fund stehen im Core (`STIL.swift`,
    18 Tests), die Mac-App zeigt Ordner-, Datei- und Subtune-Anmerkungen in der
    Seitenleiste, die iPhone-App unter dem Titelkopf; beide haben einen eigenen
-   Einstellungs-Eintrag zum Auswählen der Datei. **Offen bleibt allein die
-   Abnahme an einer echten `STIL.txt` der HVSC** — geprüft wurde an einer
-   nachgebauten Datei im dokumentierten Format (mit Windows-Zeilenenden), weil
-   hier keine HVSC vorliegt.
+   Einstellungs-Eintrag zum Auswählen der Datei. **Core-Abnahme an echter STIL v84
+   erledigt am 2026-10-01:** 18.475 Dateieinträge und 246 Ordner, LF/CRLF-Parität,
+   Auto-Fund, HVSC-Pfad, Subtunes und eindeutige Pfadenden geprüft. Der
+   Latin-1-Fallback funktioniert seit v1.9.23 auch unter Linux. **Offen bleibt
+   die Darstellung dieser echten Daten in den beiden App-Oberflächen.**
 2. ~~HVSC-Browser/Bibliotheksansicht~~ **erledigt am 2026-08-23 (v1.9.14).** Die
    Mac-App hat jetzt denselben aufklappbaren Ordnerbaum wie die iPhone-App,
    umschaltbar im Kopf der Seitenleiste. Das Flachklopfen des Baums steht im
@@ -31,7 +32,8 @@
    verworfen (`RemoteCommand` im Core, 12 Tests). Bewusst nicht dabei: Zugriff auf
    beliebige Dateien, Einstellungen, Export, Beenden — ein URL-Schema kann jede
    Webseite auslösen.
-5. Filter-Cutoff-Tuning für 6581. Ersetzt dauerhaft einen vollständigen reSIDfp-Port
+5. Filter-Cutoff-Tuning für 6581. **Offen: Hörvergleich und Referenz für die gewünschte
+   Klangänderung; ohne diesen Beleg bleibt die bestehende Kurve erhalten.** Ersetzt dauerhaft einen vollständigen reSIDfp-Port
    (Entscheidung 2026-07-15): holt den hörbaren Teil des Gewinns ohne Engine-Umbau.
 
 ## iOS-Nacharbeit (Stand 2026-07-26)
@@ -80,20 +82,19 @@ belegt, keiner ist eine Vermutung.
    mit v1.9.11 erledigt (Hintergrund-Scan, Liste sofort aus dem gespeicherten
    Index).
 
-2. **`AVAudioEnginePCMSink.stop()` baut außerhalb des Locks ab.** `sourceNode` und der
-   Zwischenpuffer werden ohne Sperre freigegeben, obwohl das Protokoll ausdrücklich
-   damit rechnet, dass `stop()` aus mehreren Threads kommt (Tastaturschleife,
-   Signal-Handler). Zwei gleichzeitige Aufrufe könnten denselben Puffer doppelt
-   freigeben. In der Praxis ruft heute nur ein Thread `stop()`, und ein
-   deterministischer Test für dieses Rennen ist nicht zu bauen — deshalb bewusst
-   nicht blind geändert.
+2. ~~**Paralleler Abbau in `AVAudioEnginePCMSink.stop()`.**~~ **Behoben am
+   2026-10-01 (v1.9.23).** Vier gleichzeitige Stop-Aufrufe reproduzierten mit
+   stummen Samples ein Datenrennen und einen Absturz. Ein separates Lock
+   serialisiert nun Aufbau, Pause, Fortsetzen und Abbau der Engine samt Knoten
+   und Zwischenpuffer. Dieselbe ThreadSanitizer-Gegenprobe blieb danach in
+   20 Runden ohne Befund; ein Core-Regressionstest deckt den Abbau ab.
 
-3. **`ALSAPCMSink` setzt seinen Zustand später als die Schwester-Senken.** Erst nach dem
-   Öffnen des Geräts steht er auf `running`; ein fehlgeschlagener `start()` lässt den
-   Sink damit startbar zurück und `waitUntilFinished()` meldet `.notStarted` statt
-   `.failed`. Das CLI fängt einen fehlgeschlagenen `start()` sofort ab, die Abweichung
-   ist also derzeit nicht beobachtbar. Nicht geändert, weil die Datei auf einem Mac
-   weder übersetzbar noch ausführbar ist.
+3. ~~**ALSA-Startfehler lassen den Sink startbar zurück.**~~ **Behoben am
+   2026-10-01 (v1.9.23).** Auf Linux vor der Korrektur reproduziert. Ungültiges
+   Format und fehlendes Gerät enden nun mit `.failed`, weitere Starts werden
+   abgelehnt. Aufbau und Zustandswechsel sind gemeinsam gesperrt. Die
+   Linux-Regressionstests benötigen keine Soundkarte; hörbare Wiedergabe und
+   Desktop-/Medientasten-Abnahme bleiben davon getrennt offen.
 
 4. **`LibraryReset` bricht beim ersten nicht löschbaren Eintrag ab** und hinterlässt
    dann eine halb geleerte Bibliothek. Das ist eine bewusste fail-closed-Entscheidung
@@ -127,16 +128,21 @@ Systemverhalten"). Was dabei auffiel und **offen** bleibt:
   (362 MB gegen 157 MB Grundverbrauch). Woher genau, ist nicht untersucht;
   Kandidaten sind die je Zeile neu gebauten `Font`- und `Image`-Werte und der
   Tooltip-Text.
-- Die iOS-Testsuite hinterlässt im Simulator je Test eine eigene
+- ~~Die iOS-Testsuite hinterlässt im Simulator je Test eine eigene
   UserDefaults-Datei (`vsp-tests-<UUID>.plist`). `removePersistentDomain` leert
   sie, löscht die Datei aber nicht; nach einigen Läufen liegen dort hunderte.
-  Folgenlos für die App, aber unsauber — beobachtet am 2026-08-23.
+  Folgenlos für die App, aber unsauber — beobachtet am 2026-08-23.~~ **Behoben am
+  2026-10-01:** feste Suite je Testklasse, vor und nach jedem Test geleert.
+  Die 35 Simulator-Tests bestehen; nur zwei feste Test-Suite-Dateien bleiben.
 - Der Hintergrund-Scan über 50.001 Dateien dauert headless 4,2 s, in der
   laufenden App aber 3,6 bis 24 s — er läuft mit niedriger Priorität neben der
   Wiedergabe. Erträglich, aber ungemessen ist, ob ein Zwischenstand der Liste
   (statt „alles am Ende") sich lohnt.
 
-In Arbeit: Linux-Port (CLI + Audio-Backend) nach `tasks/2026-07-05-linux-port/plan.md`.
+Linux-Port (CLI, ALSA und MPRIS) implementiert nach
+`tasks/2026-07-05-linux-port/plan.md`. Core und Startfehler auf Linux geprüft;
+die hörbare Wiedergabe, Pause/Subtune ohne Knackser und Desktop-Medientasten
+benötigen weiterhin eine echte Linux-Audio-/Desktop-Sitzung.
 
 Permanent zurückgestellt, nur Kandidaten für schlimme Langeweile: Audiofingerprint/
 WhatsSID (bräuchte serverseitige Fingerprint-DB über die HVSC), MUS/CGSC (eigenes Format

@@ -222,7 +222,7 @@ final class STILTests: XCTestCase {
     func testAutodetectFindsTheFileInTheCollectionAndAboveIt() throws {
         let fm = FileManager.default
         let base = fm.temporaryDirectory.appendingPathComponent("vicious-stil-\(UUID().uuidString)")
-        let hvsc = base.appendingPathComponent("HVSC")
+        let hvsc = base.appendingPathComponent("HVSC", isDirectory: true)
         let musicians = hvsc.appendingPathComponent("MUSICIANS/H/Hubbard_Rob")
         try fm.createDirectory(at: musicians, withIntermediateDirectories: true)
         try fm.createDirectory(at: hvsc.appendingPathComponent("DOCUMENTS"),

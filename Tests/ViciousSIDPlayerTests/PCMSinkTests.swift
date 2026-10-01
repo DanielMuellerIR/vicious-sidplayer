@@ -23,6 +23,13 @@ import XCTest
 // alle drei.
 final class PCMSinkTests: XCTestCase {
 
+    func testInvalidSampleRatesHaveReadableErrors() {
+        for rate in [Double.nan, Double.infinity, -Double.infinity, Double.greatestFiniteMagnitude] {
+            let error = PCMSinkError.unsupportedFormat(PCMFormat(sampleRate: rate))
+            XCTAssertTrue(error.localizedDescription.contains("Hz"))
+        }
+    }
+
     private var directory: URL!
 
     override func setUpWithError() throws {

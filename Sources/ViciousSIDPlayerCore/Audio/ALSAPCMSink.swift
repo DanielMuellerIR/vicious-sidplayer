@@ -181,7 +181,10 @@ public final class ALSAPCMSink: PCMSink, @unchecked Sendable {
             // Geraeteproblem — deshalb `.invalidState` und nicht `.ioFailure`.
             throw PCMSinkError.invalidState("ALSAPCMSink wurde bereits gestartet.")
         }
-        cond.unlock()
+        // Aufbau und Zustandswechsel bleiben zusammen gesperrt: stop() und ein
+        // zweiter start() dürfen kein halb geöffnetes Gerät übernehmen.
+        defer { cond.unlock() }
+        state = .running
 
         // Format vorab pruefen: ALSA wuerde 0 Kanaele oder 0 Hz zwar auch
         // ablehnen, aber mit einem kryptischen errno. Lieber sauber melden.
@@ -194,7 +197,7 @@ public final class ALSAPCMSink: PCMSink, @unchecked Sendable {
         guard format.channels >= 1, format.channels <= 256,
               format.sampleRate.isFinite,
               format.sampleRate > 0, format.sampleRate <= 768_000 else {
-            throw PCMSinkError.unsupportedFormat(format)
+            throw failStartLocked(.unsupportedFormat(format))
         }
 
         // --- Geraet oeffnen ---------------------------------------------------
@@ -217,7 +220,7 @@ public final class ALSAPCMSink: PCMSink, @unchecked Sendable {
         var handle: OpaquePointer?
         let openResult = snd_pcm_open(&handle, "default", SND_PCM_STREAM_PLAYBACK, 0)
         guard openResult == 0, let pcm = handle else {
-            throw PCMSinkError.deviceUnavailable(ALSAPCMSink.alsaMessage(openResult))
+            throw failStartLocked(.deviceUnavailable(ALSAPCMSink.alsaMessage(openResult)))
         }
 
         // --- Format einstellen ------------------------------------------------
@@ -247,16 +250,12 @@ public final class ALSAPCMSink: PCMSink, @unchecked Sendable {
         guard setResult == 0 else {
             // Kein Leak: das eben geoeffnete Geraet wieder schliessen, bevor wir werfen.
             _ = snd_pcm_close(pcm)
-            throw PCMSinkError.unsupportedFormat(format)
+            throw failStartLocked(.unsupportedFormat(format))
         }
 
         pcmHandle = pcm
         renderBlock = render
         canPause = ALSAPCMSink.queryCanPause(pcm)
-
-        cond.lock()
-        state = .running
-        cond.unlock()
 
         // `[weak self]`: siehe `playbackThread`. Waehrend `playbackLoop()`
         // laeuft, haelt die Optional-Verkettung `self` ohnehin stark — die
@@ -267,6 +266,13 @@ public final class ALSAPCMSink: PCMSink, @unchecked Sendable {
         thread.name = "ALSAPCMSink"
         playbackThread = thread
         thread.start()
+    }
+
+    private func failStartLocked(_ error: PCMSinkError) -> PCMSinkError {
+        settleReasonLocked(.failed(error.localizedDescription))
+        state = .finished
+        cond.broadcast()
+        return error
     }
 
     /// Haelt an; das Geraet bleibt offen und `resume()` macht weiter.

@@ -76,7 +76,7 @@ private struct RenderPointers: @unchecked Sendable {
 // `@unchecked Sendable` wie bei den Schwester-Sinks und aus demselben Grund ehrlich:
 // Der veraenderliche Zustand (`state`) liegt vollstaendig hinter `lock`, `didFinish`
 // wird nur vom Realtime-Thread geschrieben und erst nach dem Semaphor gelesen (siehe
-// RenderPointers oben), und alles Uebrige ist `let`. Der Compiler kann das nicht
+// RenderPointers oben). Engine, Knoten und Puffer schützt `lifecycleLock`. Der Compiler kann das nicht
 // nachweisen, der Code drumherum haelt es ein.
 public final class AVAudioEnginePCMSink: PCMSink, @unchecked Sendable {
 
@@ -93,6 +93,10 @@ public final class AVAudioEnginePCMSink: PCMSink, @unchecked Sendable {
     public let format: PCMFormat
 
     private let engine = AVAudioEngine()
+    // Serialisiert den gesamten Aufbau und Abbau einschließlich Knoten und
+    // Puffer. Das Zustands-Lock allein schützt keine freigegebenen Ressourcen.
+    // Der Renderblock greift auf keines der beiden Locks zu.
+    private let lifecycleLock = NSLock()
     private var sourceNode: AVAudioSourceNode?
 
     /// Vorab allozierter Zwischenpuffer fuer die interleavten Float-Samples aus
@@ -178,6 +182,8 @@ public final class AVAudioEnginePCMSink: PCMSink, @unchecked Sendable {
     // MARK: - Lebenszyklus
 
     public func start(render: @escaping PCMRenderBlock) throws {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
         lock.lock()
         guard state == .idle else {
             lock.unlock()
@@ -320,6 +326,8 @@ public final class AVAudioEnginePCMSink: PCMSink, @unchecked Sendable {
     }
 
     public func pause() throws {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
         lock.lock()
         defer { lock.unlock() }
         // Auf einem nicht laufenden Sink wirkungslos — kein Fehler (Vertrag).
@@ -332,6 +340,8 @@ public final class AVAudioEnginePCMSink: PCMSink, @unchecked Sendable {
     }
 
     public func resume() throws {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
         lock.lock()
         // Auf einem nicht pausierten Sink wirkungslos — kein Fehler (Vertrag).
         guard state == .paused else {
@@ -355,6 +365,8 @@ public final class AVAudioEnginePCMSink: PCMSink, @unchecked Sendable {
     }
 
     public func stop() {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
         lock.lock()
         // Nie gestartet: Es gab nichts zu spielen — der Grund steht damit fest.
         let wasIdle = (state == .idle)

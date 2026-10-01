@@ -55,7 +55,9 @@ public enum PCMSinkError: Error, LocalizedError {
         case .deviceUnavailable(let detail):
             return "Audio-Ausgabe nicht verfügbar: \(detail)"
         case .unsupportedFormat(let format):
-            return "Audio-Format nicht unterstützt: \(Int(format.sampleRate)) Hz, \(format.channels) Kanäle"
+            // Gerade ungültige Raten (NaN, unendlich, außerhalb von Int) müssen
+            // als Fehler beschreibbar sein, ohne beim Umwandeln abzustürzen.
+            return "Audio-Format nicht unterstützt: \(format.sampleRate) Hz, \(format.channels) Kanäle"
         case .ioFailure(let detail):
             return "Audio-Ausgabefehler: \(detail)"
         case .invalidState(let detail):

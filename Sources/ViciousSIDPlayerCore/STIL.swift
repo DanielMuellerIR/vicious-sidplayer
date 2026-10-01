@@ -150,8 +150,10 @@ public struct STILDatabase: Sendable {
 
     static func decode(_ data: Data) -> String {
         if let utf8 = String(data: data, encoding: .utf8) { return utf8 }
-        // ISO-8859-1 kann jedes Byte deuten und schlaegt deshalb nie fehl.
-        return String(data: data, encoding: .isoLatin1) ?? ""
+        // Foundation unter Linux kann .isoLatin1 ablehnen. ISO-8859-1 bildet
+        // jedes Byte direkt auf denselben Unicode-Codepunkt ab; diese Abbildung
+        // funktioniert unabhängig von den verfügbaren Foundation-Decodern.
+        return String(String.UnicodeScalarView(data.map { UnicodeScalar(UInt32($0))! }))
     }
 
     // MARK: - Parser

@@ -13,17 +13,19 @@ import ViciousSIDPlayerCore
 // temporaeren Verzeichnis.
 final class AppModelTests: XCTestCase {
 
-    /// Eigene UserDefaults-Suite je Test. Vorher schrieben die Tests in
+    /// Eigene, vor und nach jedem Test geleerte UserDefaults-Suite.
+    /// Vorher schrieben die Tests in
     /// `UserDefaults.standard` der Test-App und raeumten nicht auf: Favoriten,
     /// `shuffle` und die Sitzungsschluessel blieben liegen, die Tests hingen
     /// damit von ihrer Reihenfolge ab und veraenderten den Simulatorzustand
     /// ueber den einzelnen Test hinaus (Review-Fund 2026-08-17).
-    private var suiteName: String!
+    // Ein stabiler Name verhindert eine neue zurückbleibende plist je Test.
+    private let suiteName = "vsp-tests-app-model"
     private var defaults: UserDefaults!
 
     override func setUpWithError() throws {
-        suiteName = "vsp-tests-\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
+        defaults.removePersistentDomain(forName: suiteName)
     }
 
     override func tearDownWithError() throws {

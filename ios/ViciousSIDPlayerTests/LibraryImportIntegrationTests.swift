@@ -76,13 +76,14 @@ final class LibraryImportIntegrationTests: XCTestCase {
     private var source: URL!
     /// Eigene UserDefaults-Suite, damit der Test nichts im produktiven
     /// Speicher der Test-App hinterlaesst (Review-Fund 2026-08-17).
-    private var suiteName: String!
+    // Ein stabiler Name verhindert eine neue zurückbleibende plist je Test.
+    private let suiteName = "vsp-tests-library-import"
     private var defaults: UserDefaults!
 
     override func setUp() async throws {
         try await super.setUp()
-        suiteName = "vsp-import-tests-\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
+        defaults.removePersistentDomain(forName: suiteName)
         model = AppModel(defaults: defaults)
         source = fm.temporaryDirectory.appendingPathComponent("vicious-import-\(UUID().uuidString)")
         try fm.createDirectory(at: source, withIntermediateDirectories: true)
