@@ -64,6 +64,8 @@ public struct MainView: View {
     @AppStorage("lastPosition") private var lastPosition = 0.0
     // Drosselung der Positions-Sicherung (alle 5 s statt bei jedem UI-Tick).
     @State private var lastSavedBucket = -1
+    @State private var suppressInitialPlayback = false
+    @State private var lastNowPlayingSecond = -1
     
     // Die Titelliste. Aufbau, Duplikatpruefung, Suche, Favoriten und die
     // Rechnung fuer den naechsten Titel stehen im Core (`Playlist`) und sind
@@ -633,7 +635,7 @@ public struct MainView: View {
                             .disabled(playlist.count <= 1)
                             .help("Nächster Titel (⌘→)")
 
-                            Button(action: { coordinator.stop() }) {
+                            Button(action: { stopPlayback() }) {
                                 Image(systemName: "stop.fill")
                                     .font(.system(size: 14))
                                     .offset(y: 2)   // wirkte optisch zu hoch — 2 px tiefer
@@ -659,7 +661,7 @@ public struct MainView: View {
                         
                         Slider(value: Binding(
                             get: { min(coordinator.elapsedSeconds, currentDuration) },
-                            set: { val in coordinator.seek(seconds: val) }
+                            set: { val in seek(to: val) }
                         ), in: 0...currentDuration)
                         .accentColor(accentCol)
                         .help("Position — auch im pausierten oder gestoppten Zustand nutzbar; Play startet dann von hier")
@@ -834,10 +836,12 @@ public struct MainView: View {
         .onChange(of: coordinator.isPlaying) { _ in updateNowPlayingInfo() }
         .onChange(of: coordinator.isPaused) { _ in updateNowPlayingInfo() }
         .onChange(of: coordinator.trackName) { _ in updateNowPlayingInfo() }
+        .onChange(of: currentDuration) { _ in updateNowPlayingInfo() }
         // Subtune gewechselt -> Laenge des neuen Subtunes aufloesen (DB-Array wird
         // per Index gelesen; nur die berechnete Laenge muss neu ermittelt werden).
         .onChange(of: coordinator.currentSubtune) { _ in
             resolveComputedLengthIfNeeded()
+            updateNowPlayingInfo()
         }
         // Songlengths-Datei in den Einstellungen geaendert -> DB neu laden.
         .onChange(of: songlengthsPath) { _ in
@@ -851,7 +855,14 @@ public struct MainView: View {
                 lastSavedBucket = bucket
                 saveSessionState()
             }
-            if autoNext && elapsed >= currentDuration {
+            let second = Int(elapsed)
+            if second != lastNowPlayingSecond {
+                lastNowPlayingSecond = second
+                updateNowPlayingInfo()
+            }
+            if PlaybackPolicy.shouldAdvance(isPlaying: coordinator.isPlaying,
+                                            autoNext: autoNext, elapsed: elapsed,
+                                            duration: currentDuration) {
                 // Erst alle weiteren Subtunes DIESER SID-Datei durchspielen, dann
                 // zum naechsten Playlist-Eintrag. setSubtune setzt die Position auf 0
                 // zurueck und laeuft (da isPlaying) direkt weiter.
@@ -1004,18 +1015,36 @@ public struct MainView: View {
     // Play/Pause umschalten: pause() haelt an und behaelt die Position, play() setzt
     // dort fort (bzw. baut beim ersten Mal die Wiedergabe auf).
     private func togglePlayPause() {
-        if coordinator.isPlaying {
-            coordinator.pause()
-        } else {
-            coordinator.play()
-        }
+        if coordinator.isPlaying { pausePlayback() } else { startPlayback() }
+    }
+
+    private func startPlayback() {
+        suppressInitialPlayback = false
+        coordinator.play()
+    }
+
+    private func pausePlayback() {
+        suppressInitialPlayback = true
+        pendingTrackCommandID = nil
+        coordinator.pause()
+    }
+
+    private func stopPlayback() {
+        suppressInitialPlayback = true
+        pendingTrackCommandID = nil
+        coordinator.stop()
     }
 
     // Relatives Vor-/Zurueckspringen, auf [0, Songdauer] begrenzt. Funktioniert auch
     // im pausierten/gestoppten Zustand (coordinator.seek puffert die Position dann).
     private func skip(by delta: Double) {
         let target = min(currentDuration, max(0.0, coordinator.elapsedSeconds + delta))
-        coordinator.seek(seconds: target)
+        seek(to: target)
+    }
+
+    private func seek(to seconds: Double) {
+        coordinator.seek(seconds: seconds)
+        updateNowPlayingInfo()
     }
 
     // Vorherigen / Nächsten Titel in der Playlist abspielen.
@@ -1133,6 +1162,7 @@ public struct MainView: View {
         // Auch bei einer bereits geladenen Datei springt die Auswahl dorthin:
         // wer sie erneut hereinzieht, will sie hoeren.
         if let index = additions.firstIndex {
+            isTransitioning = false
             loadTrack(index: index, autoplay: true)
         }
 
@@ -1283,6 +1313,7 @@ public struct MainView: View {
     ///   der Nutzer hat gerade eine ANDERE Sammlung gewaehlt und erwartet, dass
     ///   sie vorn beginnt.
     private func loadLocalAudioFolder(restoreSession: Bool = false) {
+        suppressInitialPlayback = false
         let fm = FileManager.default
         guard let dir = AutoplayFolder.resolve(configuredPath: autoplayFolderPath, fm: fm) else { return }
 
@@ -1386,7 +1417,7 @@ public struct MainView: View {
         if let id = pendingTrackCommandID {
             pendingTrackCommandID = nil
             switch RemoteCommand.resolveDeferredTrack(index: playlist.index(forID: id),
-                                                      startPlaybackWhenDone: startPlayback,
+                                                      startPlaybackWhenDone: startPlayback && !suppressInitialPlayback,
                                                       isPlaying: coordinator.isPlaying) {
             case .select(let index, let autoplay):
                 // Ein noch laufender Wechsel stammt vom Starttitel aus dem
@@ -1400,7 +1431,11 @@ public struct MainView: View {
         }
         // Nur wenn kein gepufferter Befehl erfolgreich war, nimmt der
         // Kaltstart wie bisher Sitzung oder ersten spielbaren Titel.
-        if startPlayback, !playlist.isEmpty, !loadedPendingTrack {
+        if !playlist.isEmpty,
+           PlaybackPolicy.shouldStartAfterScan(requested: startPlayback,
+                                               suppressed: suppressInitialPlayback,
+                                               currentTrackIndex: currentTrackIdx,
+                                               pendingTrackLoaded: loadedPendingTrack) {
             startInitialPlayback(restoreSession: restoreSession)
         }
     }
@@ -1692,13 +1727,15 @@ public struct MainView: View {
         // Media-Tasten: expliziter Play/Pause/Stop (zusaetzlich zum Toggle) — Play
         // und Pause posten getrennt, weil das System sie getrennt schickt.
         NotificationCenter.default.addObserver(forName: NSNotification.Name("mediaPlay"), object: nil, queue: .main) { _ in
-            Task { @MainActor in coordinator.play() }
+            Task { @MainActor in startPlayback() }
         }
         NotificationCenter.default.addObserver(forName: NSNotification.Name("mediaPause"), object: nil, queue: .main) { _ in
-            Task { @MainActor in coordinator.pause() }
+            Task { @MainActor in pausePlayback() }
         }
         NotificationCenter.default.addObserver(forName: NSNotification.Name("menuStop"), object: nil, queue: .main) { _ in
-            Task { @MainActor in coordinator.stop() }
+            Task { @MainActor in
+                stopPlayback()
+            }
         }
         NotificationCenter.default.addObserver(forName: NSNotification.Name("menuPrevTrack"), object: nil, queue: .main) { _ in
             Task { @MainActor in
@@ -1860,13 +1897,13 @@ public struct MainView: View {
     private func perform(_ command: RemoteCommand) {
         switch command {
         case .play:
-            if !coordinator.isPlaying { togglePlayPause() }
+            startPlayback()
         case .pause:
-            if coordinator.isPlaying { togglePlayPause() }
+            pausePlayback()
         case .playPause:
             togglePlayPause()
         case .stop:
-            coordinator.stop()
+            stopPlayback()
         case .next:
             playNextTrack()
         case .previous:
@@ -1874,7 +1911,7 @@ public struct MainView: View {
         case .seek(let seconds):
             // Nicht ueber das Ende hinaus: Der Positionsregler kennt dieselbe
             // Grenze, und ein Sprung dahinter liesse den Titel sofort enden.
-            coordinator.seek(seconds: min(seconds, currentDuration))
+            seek(to: min(seconds, currentDuration))
         case .subtune(let index):
             // setSubtune prueft den Bereich gegen die Datei selbst.
             coordinator.setSubtune(sub: index)
@@ -1888,6 +1925,7 @@ public struct MainView: View {
                                               isScanningLibrary: isScanningLibrary) {
             case .select(let index):
                 pendingTrackCommandID = nil
+                isTransitioning = false
                 selectTrack(at: index)
             case .deferUntilScanFinished:
                 pendingTrackCommandID = id
@@ -1922,8 +1960,8 @@ public struct MainView: View {
 //  1. Der Koordinator schickt 50-mal je Sekunde neue Anzeigewerte (Huellkurven,
 //     Frequenzen, Spielzeit). Stuende die Liste weiter im Rumpf von `MainView`,
 //     baute SwiftUI sie in diesem Takt mit auf. Bei 50.000 Titeln lief dabei ein
-//     Prozessorkern voll. `Equatable` plus der Aenderungszaehler der Playlist
-//     entscheiden jetzt in wenigen Vergleichen, dass sich nichts geaendert hat.
+//     Prozessorkern voll. Eine Equatable-Abkuerzung
+//     waere hier jedoch keine sichere Abkuerzung (siehe unten).
 //  2. `LazyVStack` statt `VStack`: Ein VStack baut jede Zeile sofort auf, auch
 //     die 49.000, die niemand sieht. Bei 50.001 Titeln sprengte das den
 //     Ansichtsaufbau von SwiftUI, und die App brach beim Start mit "abort()"
@@ -1995,6 +2033,16 @@ struct TrackListView: View {
                                    textCol: textCol,
                                    textSecCol: textSecCol,
                                    accentCol: accentCol)
+                    }
+                    if !playlist.externalIndices.isEmpty {
+                        Text("GEÖFFNETE DATEIEN")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundColor(textSecCol)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 8)
+                        ForEach(playlist.externalIndices, id: \.self) { idx in
+                            row(idx, textCol: textCol, textSecCol: textSecCol, accentCol: accentCol)
+                        }
                     }
                 } else {
                     ForEach(visibleIndices, id: \.self) { idx in

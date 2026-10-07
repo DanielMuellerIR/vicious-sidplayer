@@ -35,7 +35,7 @@ echo "1. Regel 1: Ticket vor dem ersten Schreiben nach /Applications"
 
 notarize_line="$(first_line install.sh 'notarize_app "$APP"')"
 # Erster Schreibzugriff in /Applications ist das Anlegen des Staging-Pfads.
-stage_line="$(first_line install.sh 'STAGED="/Applications/')"
+stage_line="$(first_line install.sh 'STAGE_DIR="$(mktemp -d "/Applications/')"
 if [ -z "$notarize_line" ] || [ -z "$stage_line" ]; then
     bad "install.sh hat sich strukturell geaendert — Test veraltet, bitte anpassen"
 else

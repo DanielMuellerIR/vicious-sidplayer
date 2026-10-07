@@ -73,7 +73,11 @@ if dumpMode {
         exit(2)
     }
     dumpPath = args[3]
-    if args.count >= 5 { dumpDuration = Double(args[4]) ?? 15.0 }
+    if args.count >= 5 { dumpDuration = Double(args[4]) ?? .nan }
+    guard (try? WavRenderer.frameCount(seconds: dumpDuration, sampleRate: 44100)) != nil else {
+        FileHandle.standardError.write(Data("Ungueltige Dump-Dauer (0 < Sekunden <= 3600).\n".utf8))
+        exit(2)
+    }
 }
 
 // Argumente des WAV-Modus vorab pruefen (wie beim Dump-Modus).
@@ -93,6 +97,11 @@ if wavMode {
 // Argumente des Crash-Sweeps (werden im Dump-/WAV-Modus ignoriert).
 let samples = (!dumpMode && !wavMode && args.count >= 3) ? (Int(args[2]) ?? 22050) : 22050   // ~0.5 s @ 44100
 let maxSubtunes = (!dumpMode && !wavMode && args.count >= 4) ? (Int(args[3]) ?? 32) : 32
+
+guard samples >= 0, maxSubtunes >= 0 else {
+    FileHandle.standardError.write(Data("Sample- und Subtune-Anzahl muessen >= 0 sein.\n".utf8))
+    exit(2)
+}
 
 do {
     let data = try Data(contentsOf: URL(fileURLWithPath: path))

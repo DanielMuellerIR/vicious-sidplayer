@@ -56,6 +56,7 @@ class SidPlayerProcessor {
     let initialized = 0;
     let finished = 0;
     let playtime = 0;
+    let seekRemaining = 0;
 
     let clk_ratio = C64_PAL_CPUCLK / samplerate;
     let frame_sampleperiod = samplerate / PAL_FRAMERATE;
@@ -182,7 +183,10 @@ class SidPlayerProcessor {
         ADSRstate[i] = HOLDZERO_BITMASK;
         ratecnt[i] = envcnt[i] = expcnt[i] = prevSR[i] = 0;
         phaseaccu[i] = prevaccu[i] = prevwfout[i] = prevwavdata[i] = 0;
+        noise_LFSR[i] = 0x7FFFF8;
       }
+      sourceMSB = [0, 0, 0];
+      sourceMSBrise = [0, 0, 0];
       prevlowpass = [0, 0, 0];
       prevbandpass = [0, 0, 0];
     }
@@ -237,14 +241,14 @@ class SidPlayerProcessor {
 
       if (IR & 1) {
         switch (IR & 0x1F) {
-          case 1: case 3: addr = memory[memory[++PC] + X] + memory[memory[PC] + X + 1] * 256; cycles = 6; break;
-          case 0x11: case 0x13: addr = memory[memory[++PC]] + memory[memory[PC] + 1] * 256 + Y; cycles = 6; break;
+          case 1: case 3: addr = memory[(memory[++PC] + X) & 0xFF] + memory[(memory[PC] + X + 1) & 0xFF] * 256; cycles = 6; break;
+          case 0x11: case 0x13: addr = memory[memory[++PC]] + memory[(memory[PC] + 1) & 0xFF] * 256 + Y; cycles = 6; break;
           case 0x19: case 0x1F: addr = memory[++PC] + memory[++PC] * 256 + Y; cycles = 5; break;
           case 0x1D: addr = memory[++PC] + memory[++PC] * 256 + X; cycles = 5; break;
           case 0xD: case 0xF: addr = memory[++PC] + memory[++PC] * 256; cycles = 4; break;
-          case 0x15: addr = memory[++PC] + X; cycles = 4; break;
+          case 0x15: addr = (memory[++PC] + X) & 0xFF; cycles = 4; break;
           case 5: case 7: addr = memory[++PC]; cycles = 3; break;
-          case 0x17: addr = memory[++PC] + Y; cycles = 4; break;
+          case 0x17: addr = (memory[++PC] + Y) & 0xFF; cycles = 4; break;
           case 9: case 0xB: addr = ++PC; cycles = 2;
         }
 
@@ -263,7 +267,7 @@ class SidPlayerProcessor {
         switch (IR & 0x1F) {
           case 0x1E: addr = memory[++PC] + memory[++PC] * 256 + (((IR & 0xC0) != 0x80) ? X : Y); cycles = 5; break;
           case 0xE: addr = memory[++PC] + memory[++PC] * 256; cycles = 4; break;
-          case 0x16: addr = memory[++PC] + (((IR & 0xC0) != 0x80) ? X : Y); cycles = 4; break;
+          case 0x16: addr = (memory[++PC] + (((IR & 0xC0) != 0x80) ? X : Y)) & 0xFF; cycles = 4; break;
           case 6: addr = memory[++PC]; cycles = 3; break;
           case 2: addr = ++PC; cycles = 2;
         }
@@ -317,7 +321,7 @@ class SidPlayerProcessor {
             case 0: addr = ++PC; cycles = 2; break;
             case 0x1C: addr = memory[++PC] + memory[++PC] * 256 + X; cycles = 5; break;
             case 0xC: addr = memory[++PC] + memory[++PC] * 256; cycles = 4; break;
-            case 0x14: addr = memory[++PC] + X; cycles = 4; break;
+            case 0x14: addr = (memory[++PC] + X) & 0xFF; cycles = 4; break;
             case 4: addr = memory[++PC]; cycles = 3;
           }
           addr &= 0xFFFF;
@@ -632,15 +636,17 @@ class SidPlayerProcessor {
       // PSID-songs-Feld ist 16-bit Big-Endian bei 0x0E; vorher wurde nur das untere
       // Byte (0x0F) gelesen -> bei 256 Subtunes 0 statt 256. Beide Bytes kombinieren,
       // damit die Anzahl mit Swift-Seite und PSID-Spec uebereinstimmt.
-      subtune_amount = (filedata[0x0E] << 8) | filedata[0x0F];
+      subtune_amount = Math.min(256, Math.max(1, (filedata[0x0E] << 8) | filedata[0x0F]));
       
-      preferred_SID_model[0] = (filedata[0x77] & 0x30) >= 0x20 ? 8580 : 6581;
-      preferred_SID_model[1] = (filedata[0x77] & 0xC0) >= 0x80 ? 8580 : 6581;
-      preferred_SID_model[2] = (filedata[0x76] & 3) >= 3 ? 8580 : 6581;
-      
-      SID_address[1] = filedata[0x7A] >= 0x42 && (filedata[0x7A] < 0x80 || filedata[0x7A] >= 0xE0) ? 0xD000 + filedata[0x7A] * 16 : 0;
-      SID_address[2] = filedata[0x7B] >= 0x42 && (filedata[0x7B] < 0x80 || filedata[0x7B] >= 0xE0) ? 0xD000 + filedata[0x7B] * 16 : 0;
-      
+      const version = filedata[4] * 256 + filedata[5];
+      preferred_SID_model[0] = version >= 2 && (filedata[0x77] & 0x30) >= 0x20 ? 8580 : 6581;
+      const model = bits => bits >= 2 ? 8580 : bits === 1 ? 6581 : preferred_SID_model[0];
+      preferred_SID_model[1] = version >= 3 ? model((filedata[0x77] >> 6) & 3) : preferred_SID_model[0];
+      preferred_SID_model[2] = version >= 4 ? model(filedata[0x76] & 3) : preferred_SID_model[0];
+      const sidAddress = val => val >= 0x42 && (val < 0x80 || val >= 0xE0) ? 0xD000 + val * 16 : 0;
+      SID_address[1] = version >= 3 ? sidAddress(filedata[0x7A]) : 0;
+      SID_address[2] = version >= 4 ? sidAddress(filedata[0x7B]) : 0;
+
       SIDamount = 1 + (SID_address[1] > 0) + (SID_address[2] > 0);
       loaded = 1;
       
@@ -661,56 +667,28 @@ class SidPlayerProcessor {
       volume = vol;
     };
 
-    // Run the player routine for exactly one frame WITHOUT rendering audio.
-    // This is the cheap core of seeking: it advances the CPU + SID registers
-    // (i.e. the song position) but skips the per-sample waveform/filter math,
-    // which is the bulk of playSample()'s cost. Mirrors play()'s inner CPU loop.
-    function runFrameCPU() {
-      finished = 0;
-      PC = playaddr;
-      SP = 0xFF;
-      const budget = clk_ratio * frame_sampleperiod; // C64 cycles in one frame
-      let t = 0;
-      while (t <= budget) {
-        pPC = PC;
-        const r = CPU();
-        if (r >= 0xFE) { finished = 1; break; }
-        t += cycles;
-        if ((memory[1] & 3) > 1 && pPC < 0xE000 && (PC == 0xEA31 || PC == 0xEA81)) { finished = 1; break; }
-        if ((addr == 0xDC05 || addr == 0xDC04) && (memory[1] & 3) && timerModeForSubtune()) {
-          frame_sampleperiod = (memory[0xDC04] + memory[0xDC05] * 256) / clk_ratio;
-        }
-        if (storadd >= 0xD420 && storadd < 0xD800 && (memory[1] & 3)) {
-          if (!(SID_address[1] <= storadd && storadd < SID_address[1] + 0x1F) &&
-              !(SID_address[2] <= storadd && storadd < SID_address[2] + 0x1F)) {
-            memory[storadd & 0xD41F] = memory[storadd];
-          }
-        }
-        if (addr == 0xD404 && !(memory[0xD404] & 1)) ADSRstate[0] &= 0x3E;
-        if (addr == 0xD40B && !(memory[0xD40B] & 1)) ADSRstate[1] &= 0x3E;
-        if (addr == 0xD412 && !(memory[0xD412] & 1)) ADSRstate[2] &= 0x3E;
-      }
-    }
-
-    // Seek to a position in seconds. A SID tune has NO random access — the only
-    // way to reach a position is to restart the current subtune and fast-forward.
-    // We advance whole FRAMES via runFrameCPU() (CPU + registers only, no audio
-    // rendering), which is far faster than running play() for every sample. The
-    // envelope phase isn't reproduced exactly, but the player re-gates within a
-    // frame or two, so it's inaudible in practice.
-    this.seek = function(seconds) {
+    // ENV3/OSC3 wirken auf die CPU zurueck; Seek rekonstruiert echte Samples.
+    // Das Worklet arbeitet in begrenzten Portionen, damit neue Befehle auch
+    // waehrend eines langen Sprungs bearbeitet werden koennen.
+    this.beginSeek = function(seconds) {
       if (!loaded) return;
-      let target = seconds > 0 ? seconds : 0;
-      const MAX_SEEK = 1200; // 20 min hard cap on fast-forward work
-      if (target > MAX_SEEK) target = MAX_SEEK;
-      init(subtune); // restart tune (resets playtime to 0, re-runs init routine)
-      const frames = Math.floor(target * samplerate / frame_sampleperiod);
-      for (let f = 0; f < frames; f++) runFrameCPU();
-      // Resume cleanly: the next play() sample starts a fresh frame and renders.
-      framecnt = 1;
-      CPUtime = 0;
-      finished = 0;
-      playtime = target;
+      const target = Number.isFinite(seconds) ? Math.min(1200, Math.max(0, seconds)) : 0;
+      init(subtune);
+      seekRemaining = Math.floor(target * samplerate);
+    };
+    this.advanceSeek = function(maxSamples, budgetMS = Infinity) {
+      const count = Math.min(seekRemaining, maxSamples);
+      const deadline = Number.isFinite(budgetMS) ? Date.now() + budgetMS : Infinity;
+      for (let i = 0; i < count; i++) {
+        this.playSample();
+        seekRemaining--;
+        if (deadline !== Infinity && (i & 255) === 255 && Date.now() >= deadline) break;
+      }
+      return seekRemaining > 0;
+    };
+    this.seek = function(seconds) {
+      this.beginSeek(seconds);
+      this.advanceSeek(Number.MAX_SAFE_INTEGER);
     };
 
     this.getChannelsData = function() {
@@ -753,26 +731,30 @@ class SidPlayerWorklet extends AudioWorkletProcessor {
     this.engine = new SidPlayerProcessor();
     this.playing = false;
     this.loaded = false;
+    this.seeking = false;
     
     this.visualizerTicker = 0;
     
     this.port.onmessage = (e) => {
       const data = e.data;
       if (data.type === 'load') {
+        this.seeking = false;
         const metadata = this.engine.loadSID(data.data);
         this.engine.initSubtune(data.subtune || 0);
         this.loaded = true;
-        this.port.postMessage({ type: 'loaded', metadata });
+        this.port.postMessage({ type: 'loaded', metadata, generation: data.generation });
       } else if (data.type === 'play') {
         this.playing = true;
       } else if (data.type === 'stop') {
         this.playing = false;
       } else if (data.type === 'setSubtune') {
+        this.seeking = false;
         this.engine.initSubtune(data.subtune);
       } else if (data.type === 'setVolume') {
         this.engine.setVolume(data.volume);
       } else if (data.type === 'seek') {
-        this.engine.seek(data.seconds);
+        this.engine.beginSeek(data.seconds);
+        this.seeking = true;
       }
     };
   }
@@ -782,6 +764,13 @@ class SidPlayerWorklet extends AudioWorkletProcessor {
     const channelLeft = output[0];
     const channelRight = output[1];
     
+    if (this.seeking) {
+      this.seeking = this.engine.advanceSeek(32768, 1);
+      if (!this.seeking) this.port.postMessage({ type: 'visualizer', data: this.engine.getChannelsData() });
+      channelLeft.fill(0);
+      if (channelRight) channelRight.fill(0);
+      return true;
+    }
     if (!this.loaded || !this.playing) {
       for (let i = 0; i < channelLeft.length; i++) {
         channelLeft[i] = 0;

@@ -1,4 +1,5 @@
 import XCTest
+import Combine
 import ViciousSIDPlayerCore
 @testable import ViciousSIDPlayer
 
@@ -88,6 +89,24 @@ final class AppModelTests: XCTestCase {
         let model = modelWithSTIL()
         model.setCurrentTrackID(nil)
         XCTAssertNil(model.currentSTILInfo)
+    }
+
+    @MainActor
+    func testLengthAndSubtuneChangesNotifyViewsObservingOnlyTheModel() {
+        let model = makeModel()
+        var changes = 0
+        let subscription = model.objectWillChange.sink { changes += 1 }
+        model.currentTrackLengths = [60, 180]
+        XCTAssertGreaterThan(changes, 0)
+        changes = 0
+        model.computedLength = 120
+        XCTAssertGreaterThan(changes, 0)
+        changes = 0
+        model.coordinator.subtunesCount = 2
+        model.setSubtune(1)
+        XCTAssertGreaterThan(changes, 0)
+        XCTAssertEqual(model.currentDuration, 180)
+        withExtendedLifetime(subscription) {}
     }
 
     // MARK: - Zeitformatierung

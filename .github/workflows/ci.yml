@@ -61,6 +61,15 @@ jobs:
       - name: Werkzeuge fuer die Skript-Tests
         run: apt-get install -y -qq python3 nodejs
 
+      - name: JavaScript-Zustand und Emulationsregressionen
+        run: node --test Tests/WebPlayerTests.mjs
+
+      - name: CLI-Abbruch und ungueltige Dump-Dauer
+        run: python3 Tests/cli-regressions.py .build/debug/vicious-sid .build/debug/sidcheck
+
+      - name: Release-Gates mit isolierten Testzielen
+        run: python3 Tests/release-guards.py
+
       - name: CLI-Vertrag (Exit-Codes, Kanaltrennung, Datenmenge)
         run: bash Tests/cli-smoke.sh
 

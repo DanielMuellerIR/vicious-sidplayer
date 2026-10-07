@@ -1,4 +1,9 @@
 import Foundation
+#if canImport(Glibc)
+import Glibc
+#else
+import Darwin
+#endif
 
 // ============================================================================
 // StdoutPCMSink — Audio-Ausgabe als rohes PCM auf stdout.
@@ -148,6 +153,8 @@ public final class StdoutPCMSink: PCMSink, @unchecked Sendable {
             // Also gleich hier markieren, sonst wartet waitUntilFinished() ewig.
             finished = true
             finishReason = .notStarted
+        } else if !finished {
+            finishReason = .stopped
         }
         state = .stopped
         // Weckt sowohl einen pausierten Pump-Thread (der dann abbricht) als auch
@@ -247,38 +254,30 @@ public final class StdoutPCMSink: PCMSink, @unchecked Sendable {
     private func writePCM(_ pcm: [Int16], sampleCount: Int) -> PCMSinkFinishReason? {
         return pcm.withUnsafeBytes { raw -> PCMSinkFinishReason? in
             guard let base = raw.baseAddress else { return nil }
-            let data = Data(bytes: base, count: sampleCount * MemoryLayout<Int16>.size)
-            do {
-                try output.write(contentsOf: data)
-                return nil
-            } catch {
-                // Zwei sehr verschiedene Faelle sauber trennen:
-                // EPIPE = der Empfaenger hat die Pipe zugemacht (`… | head -c 100`,
-                // aplay beendet). Das ist bei einem Programm, das nach stdout
-                // schreibt, voellig normal und darf kein Fehler-Exit-Code werden.
-                // Alles andere (z. B. Platte voll beim Umleiten in eine Datei) ist
-                // ein echter Fehler und muss als solcher sichtbar bleiben.
-                if Self.isBrokenPipe(error) {
-                    return .outputClosed
+            let descriptor = output.fileDescriptor
+            var offset = 0
+            let byteCount = sampleCount * MemoryLayout<Int16>.size
+            while offset < byteCount {
+                condition.lock()
+                let stopped = state == .stopped
+                condition.unlock()
+                if stopped { return .stopped }
+                var pollFD = pollfd(fd: descriptor, events: Int16(POLLOUT), revents: 0)
+                let ready = poll(&pollFD, 1, 50)
+                if ready == 0 || (ready < 0 && errno == EINTR) { continue }
+                if ready < 0 { return .failed(String(cString: strerror(errno))) }
+                // <= POSIX-Mindestwert von PIPE_BUF: Nach POLLOUT passt der
+                // ganze atomare Block. Eine volle Pipe blockiert so nie Stop.
+                let count = write(descriptor, base.advanced(by: offset), min(512, byteCount - offset))
+                if count < 0 {
+                    if errno == EINTR || errno == EAGAIN { continue }
+                    return errno == EPIPE ? .outputClosed : .failed(String(cString: strerror(errno)))
                 }
-                return .failed(error.localizedDescription)
+                if count == 0 { return .failed("Die Ausgabe nimmt keine Daten an.") }
+                offset += count
             }
+            return nil
         }
-    }
-
-    /// Erkennt „Gegenstelle hat die Pipe geschlossen" (EPIPE). Foundation verpackt
-    /// den urspruenglichen errno-Wert je nach Plattform unterschiedlich tief,
-    /// deshalb wird zusaetzlich der verschachtelte Fehler geprueft.
-    private static func isBrokenPipe(_ error: Error) -> Bool {
-        let nsError = error as NSError
-        if nsError.domain == NSPOSIXErrorDomain && nsError.code == Int(EPIPE) {
-            return true
-        }
-        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError,
-           underlying.domain == NSPOSIXErrorDomain, underlying.code == Int(EPIPE) {
-            return true
-        }
-        return false
     }
 
     /// Markiert das Ende und weckt alle, die in `waitUntilFinished()` warten.
@@ -288,7 +287,7 @@ public final class StdoutPCMSink: PCMSink, @unchecked Sendable {
         condition.lock()
         if !finished {
             finished = true
-            finishReason = reason
+            if finishReason != .stopped { finishReason = reason }
         }
         state = .stopped
         worker = nil

@@ -187,67 +187,26 @@ if [[ "$DO_RELEASE" == "1" ]]; then
     fi
 fi
 
-# Den Remote-Namen NICHT erzwingen, sondern einen suchen, der bereits auf genau
-# diese URL zeigt. Dieses Repo nennt sein GitHub-Remote "github"; wuerde hier
-# stur "origin" gesetzt, entstuende ein zweites Remote auf dieselbe Adresse.
-# Gepusht wird so oder so nur nach $REMOTE_URL — der Name ist beliebig, die
-# Adresse ist die Zusicherung.
-#
-# Geprueft werden BEIDE Adressen eines Remotes. `git remote get-url` liefert nur
-# die Fetch-Adresse; ein Remote kann zusaetzlich eine eigene `pushurl` haben, und
-# genau die benutzt `git push`. Mit nur der Fetch-Pruefung waere die Zusage
-# „gepusht wird nur nach $REMOTE_URL" schlicht falsch gewesen
-# (Review-Fund 2026-08-20).
-REMOTE_NAME="$(git remote | while read -r name; do
-    if [[ "$(git remote get-url "$name" 2>/dev/null)" == "$REMOTE_URL" ]] \
-       && [[ "$(git remote get-url --push "$name" 2>/dev/null)" == "$REMOTE_URL" ]]; then
-        echo "$name"
-        break
-    fi
-done)"
-
-if [[ -z "$REMOTE_NAME" ]]; then
-    # Keins passt: frischer Klon oder erste Veroeffentlichung.
-    REMOTE_NAME="origin"
-    if git remote get-url "$REMOTE_NAME" >/dev/null 2>&1; then
-        run git remote set-url "$REMOTE_NAME" "$REMOTE_URL"
-    else
-        run git remote add "$REMOTE_NAME" "$REMOTE_URL"
-    fi
-    # Eine bereits gesetzte abweichende Push-Adresse ueberschreibt `set-url`
-    # nicht — sie muss ausdruecklich mit umgebogen werden.
-    run git remote set-url --push "$REMOTE_NAME" "$REMOTE_URL"
-fi
-
-# Letzte Zusicherung unmittelbar vor dem Push. Im Trockenlauf kann das Remote
-# noch gar nicht existieren, weil `run` das Anlegen nur angezeigt hat.
-if git remote get-url --push "$REMOTE_NAME" >/dev/null 2>&1; then
-    ACTUAL_PUSH_URL="$(git remote get-url --push "$REMOTE_NAME")"
-    if [[ "$ACTUAL_PUSH_URL" != "$REMOTE_URL" ]]; then
-        echo "ABBRUCH: Push-Adresse von '$REMOTE_NAME' ist $ACTUAL_PUSH_URL," >&2
-        echo "erwartet war $REMOTE_URL." >&2
-        exit 1
-    fi
-elif [[ "$DRY_RUN" != "1" ]]; then
-    echo "ABBRUCH: Remote '$REMOTE_NAME' existiert nicht." >&2
-    exit 1
-fi
-
-# Zielrepo als <owner/repo> aus der bereits geprueften Adresse ableiten und `gh`
-# ausdruecklich darauf festnageln — sonst raet es aus dem Arbeitsverzeichnis.
+# Ein Remote kann mehrere pushurl-Eintraege haben. Direkt zur geprueften
+# Adresse pushen verhindert, dass Git nebenbei weitere Ziele bedient.
 REPO_SLUG="$(printf '%s\n' "$REMOTE_URL" | sed -E 's#^https://github\.com/##; s#^git@github\.com:##; s#\.git$##')"
 if [[ ! "$REPO_SLUG" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
-    echo "ABBRUCH: Aus $REMOTE_URL laesst sich kein <owner/repo> ableiten." >&2
+    echo "ABBRUCH: REMOTE_URL muss eine GitHub-Adresse ohne Zugangsdaten sein." >&2
+    exit 1
+fi
+BRANCH_COMMIT="$(git rev-parse "refs/heads/${BRANCH}^{commit}")"
+if [[ "$BRANCH_COMMIT" != "$(git rev-parse HEAD)" ]]; then
+    echo "ABBRUCH: Zielbranch und gebauter HEAD unterscheiden sich." >&2
     exit 1
 fi
 
-echo "Remote: $REMOTE_NAME -> $REMOTE_URL"
+echo "Remote: $REMOTE_URL"
 echo "Branch: $BRANCH"
 # --no-follow-tags ausdruecklich, nicht bloss weggelassen: Steht irgendwo
 # `push.followTags=true`, haengt Git an JEDEN Push die erreichbaren annotierten
 # Tags an. In diesem Repo liegen interne Sicherungs-Tags (etwa
 # `pre-github-flatten`), die auf GitHub nichts zu suchen haben.
-run git push --no-follow-tags -u "$REMOTE_NAME" "$BRANCH"
+run git push --no-follow-tags "$REMOTE_URL" "refs/heads/${BRANCH}:refs/heads/${BRANCH}"
 
 if [[ "$DO_RELEASE" == "1" ]]; then
     # Ein schon vorhandener Tag wurde bisher blind weitergereicht. Zeigt er auf
@@ -267,18 +226,18 @@ if [[ "$DO_RELEASE" == "1" ]]; then
             exit 1
         fi
     else
-        run git tag -a "$TAG" -m "Vicious SID Player ${VERSION}"
+        run git tag -a "$TAG" "$BRANCH_COMMIT" -m "Vicious SID Player ${VERSION}"
     fi
     # Refspec vollstaendig ausgeschrieben: So kann kein gleichnamiger Branch
     # dazwischenrutschen und kein weiterer Tag mitwandern.
-    run git push --no-follow-tags "$REMOTE_NAME" "refs/tags/${TAG}:refs/tags/${TAG}"
+    run git push --no-follow-tags "$REMOTE_URL" "refs/tags/${TAG}:refs/tags/${TAG}"
 
     # Ankunft nachweisen, bevor das Release entsteht. Verglichen werden die
     # Hashes desselben Ref-Typs (annotiertes Tag hier wie dort), nicht der
     # lokale Commit gegen den ungepeelten Remote-Ref.
     if [[ "$DRY_RUN" != "1" ]]; then
         LOCAL_TAG_HASH="$(git rev-parse --verify "refs/tags/${TAG}")"
-        REMOTE_TAG_HASH="$(git ls-remote --exit-code --tags "$REMOTE_NAME" "refs/tags/${TAG}" | awk 'NR==1 {print $1}')"
+        REMOTE_TAG_HASH="$(git ls-remote --exit-code --tags "$REMOTE_URL" "refs/tags/${TAG}" | awk 'NR==1 {print $1}')"
         if [[ "$LOCAL_TAG_HASH" != "$REMOTE_TAG_HASH" ]]; then
             echo "ABBRUCH: Tag $TAG ist nicht wie erwartet angekommen." >&2
             echo "lokal: $LOCAL_TAG_HASH  remote: ${REMOTE_TAG_HASH:-<fehlt>}" >&2

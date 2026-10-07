@@ -207,7 +207,10 @@ public final class ViciousProcessor: Sendable {
             prevaccu[i] = 0.0
             prevwfout[i] = 0.0
             prevwavdata[i] = 0.0
+            noise_LFSR[i] = 0x7FFFF8
         }
+        sourceMSB = [0.0, 0.0, 0.0]
+        sourceMSBrise = [0, 0, 0]
         prevlowpass = [0.0, 0.0, 0.0]
         prevbandpass = [0.0, 0.0, 0.0]
     }
@@ -278,12 +281,12 @@ public final class ViciousProcessor: Sendable {
             switch IR & 0x1F {
             case 1, 3:
                 let base = Int(memory[Int(PC &+ 1) & 0xFFFF] &+ X)
-                addr = UInt32(memory[base & 0xFFFF]) | UInt32(memory[(base &+ 1) & 0xFFFF]) << 8
+                addr = UInt32(memory[base & 0xFFFF]) | UInt32(memory[(base &+ 1) & 0xFF]) << 8
                 PC = PC &+ 1
                 cycles = 6
             case 0x11, 0x13:
                 let base = Int(memory[Int(PC &+ 1) & 0xFFFF])
-                addr = (UInt32(memory[base & 0xFFFF]) | UInt32(memory[(base &+ 1) & 0xFFFF]) << 8) &+ UInt32(Y)
+                addr = (UInt32(memory[base & 0xFFFF]) | UInt32(memory[(base &+ 1) & 0xFF]) << 8) &+ UInt32(Y)
                 PC = PC &+ 1
                 cycles = 6
             case 0x19, 0x1F:
@@ -1168,7 +1171,7 @@ public final class ViciousProcessor: Sendable {
         filterEnabled = enabled
     }
 
-    // Seiteneffekte EINES CPU-Schritts, die sich play() und runFrameCPU() teilen:
+    // Seiteneffekte eines CPU-Schritts bei Wiedergabe und samplegetreuem Seek:
     // Kernal-Abbruch-Erkennung, CIA-Timer-Nachfuehrung (frame_sampleperiod),
     // SID-Register-Spiegelung und der Whittaker-Workaround.
     // Rueckgabe: shouldBreak = Aufrufer soll die CPU-Schleife verlassen;
@@ -1200,39 +1203,30 @@ public final class ViciousProcessor: Sendable {
         return (false, timerWritten)
     }
 
-    private func runFrameCPU() {
-        finished = false
-        PC = playaddr
-        SP = 0xFF
-        let budget = clk_ratio * frame_sampleperiod
-        var t = 0.0
-        while t <= budget {
-            pPC = PC
-            let res = CPU()
-            if res >= 0xFE { finished = true; break }
-            t += Double(cycles)
-            if applyCPUStepSideEffects().shouldBreak { break }
-        }
+    /// Dieselbe Grenze fuer Emulation, gepufferte Position und Anzeige.
+    public static func normalizedSeekSeconds(_ seconds: Double) -> Double {
+        seconds.isFinite ? min(1200.0, max(0.0, seconds)) : 0.0
     }
 
+    public var sampleRate: Double { samplerate }
+
     public func seek(seconds: Double) {
+        try? seekCancellable(seconds: seconds, cancellationCheck: {})
+    }
+
+    func seekCancellable(seconds: Double, cancellationCheck: () throws -> Void) throws {
         lock.lock()
         defer { lock.unlock() }
-        
         guard loaded else { return }
-        var target = seconds > 0.0 ? seconds : 0.0
-        let maxSeek = 1200.0 // 20 min hard cap
-        if target > maxSeek { target = maxSeek }
-        
+        let target = Self.normalizedSeekSeconds(seconds)
         initEmulation(subt: subtune)
-        let frames = Int(floor(target * samplerate / frame_sampleperiod))
-        for _ in 0..<frames {
-            runFrameCPU()
+        // SID-Readbacks beeinflussen auch den CPU-Kontrollfluss. Nur CPU-Frames
+        // vorzuspulen laesst ENV3/OSC3 stehen und rekonstruiert einen anderen Song.
+        let samples = Int((target * samplerate).rounded(.down))
+        for index in 0..<samples {
+            if index.isMultiple(of: 4096) { try cancellationCheck() }
+            synthesizeSample()
         }
-        framecnt = 1.0
-        CPUtime = 0.0
-        finished = false
-        playtime = target
     }
 
     public func getChannelsData() -> SidVisuals {

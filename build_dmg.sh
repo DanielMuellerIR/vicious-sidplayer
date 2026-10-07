@@ -5,9 +5,11 @@ DMG_NAME="Vicious SID Player"
 APP_NAME="Vicious SID Player.app"
 VOL_NAME="Vicious SID Player"
 BUILD_DIR="build"
-RW_DMG="${BUILD_DIR}/dmg_rw.dmg"
+RW_DMG=""
+WORK_DIR=""
+OWN_DEVICE=""
 FINAL_DMG="${BUILD_DIR}/${DMG_NAME}.dmg"
-MOUNT_DIR="/Volumes/${VOL_NAME}"
+MOUNT_DIR=""
 NOTARIZE=0
 FINDER_LAYOUT=1
 # Kein fester Default: der Profilname ist umgebungsspezifisch (Keychain des
@@ -65,19 +67,24 @@ if [[ "$NOTARIZE" == "1" && -z "$NOTARY_PROFILE" ]]; then
 fi
 
 cleanup() {
-    if hdiutil info | grep -Fq "$MOUNT_DIR"; then
-        hdiutil detach "$MOUNT_DIR" >/dev/null 2>&1 || hdiutil detach -force "$MOUNT_DIR" >/dev/null 2>&1 || true
+    if [[ -n "$OWN_DEVICE" ]]; then
+        hdiutil detach "$OWN_DEVICE" >/dev/null 2>&1 || hdiutil detach -force "$OWN_DEVICE" >/dev/null 2>&1 || true
     fi
-    rm -f "$RW_DMG" "${BUILD_DIR}/DmgBg_1x.png" "${BUILD_DIR}/DmgBg_2x.png" "${BUILD_DIR}/DmgBackground.tiff"
-    rm -rf "${BUILD_DIR}/dmg_temp"
+    if [[ -n "$WORK_DIR" ]]; then
+        /usr/bin/python3 - "$WORK_DIR" <<'PYTHON'
+import shutil, sys
+shutil.rmtree(sys.argv[1])
+PYTHON
+    fi
 }
 trap cleanup EXIT
 
 echo "=== Preparing DMG Build ==="
 mkdir -p "$BUILD_DIR"
-rm -f "$FINAL_DMG" "$RW_DMG"
-rm -rf "${BUILD_DIR}/dmg_temp"
-mkdir -p "${BUILD_DIR}/dmg_temp"
+WORK_DIR="$(mktemp -d "${BUILD_DIR}/.dmg-build.XXXXXX")"
+RW_DMG="$WORK_DIR/dmg_rw.dmg"
+OUTPUT_DMG="$WORK_DIR/release.dmg"
+mkdir "$WORK_DIR/dmg_temp"
 
 if [[ ! -d "$APP_NAME" ]]; then
     echo "ABBRUCH: ${APP_NAME} fehlt. Erst bash build_app.sh ausfuehren." >&2
@@ -90,12 +97,12 @@ else
     echo "WARNUNG: App ist nicht gueltig signiert. Notarisierung wird fehlschlagen."
 fi
 
-cp -R "${APP_NAME}" "${BUILD_DIR}/dmg_temp/"
-ln -s /Applications "${BUILD_DIR}/dmg_temp/Applications"
+cp -R "${APP_NAME}" "${WORK_DIR}/dmg_temp/"
+ln -s /Applications "${WORK_DIR}/dmg_temp/Applications"
 
-sips -s format png -s dpiWidth 72 -s dpiHeight 72 -z 600 600 src/DmgBackground.png --out "${BUILD_DIR}/DmgBg_1x.png"
-sips -s format png -s dpiWidth 144 -s dpiHeight 144 -z 1200 1200 src/DmgBackground.png --out "${BUILD_DIR}/DmgBg_2x.png"
-tiffutil -cathidpicheck "${BUILD_DIR}/DmgBg_1x.png" "${BUILD_DIR}/DmgBg_2x.png" -out "${BUILD_DIR}/DmgBackground.tiff"
+sips -s format png -s dpiWidth 72 -s dpiHeight 72 -z 600 600 src/DmgBackground.png --out "${WORK_DIR}/DmgBg_1x.png"
+sips -s format png -s dpiWidth 144 -s dpiHeight 144 -z 1200 1200 src/DmgBackground.png --out "${WORK_DIR}/DmgBg_2x.png"
+tiffutil -cathidpicheck "${WORK_DIR}/DmgBg_1x.png" "${WORK_DIR}/DmgBg_2x.png" -out "${WORK_DIR}/DmgBackground.tiff"
 
 hdiutil create -size 80m -fs HFS+ -volname "${VOL_NAME}" -ov "$RW_DMG"
 
@@ -110,10 +117,20 @@ echo "=== Mounting DMG ==="
 # Den echten Pfad liefert deshalb die Ausgabe von hdiutil und nicht eine
 # Annahme: Ist zufaellig schon ein Volume desselben Namens gemountet, haengt
 # macOS eine Nummer an ("Vicious SID Player 1").
-ATTACH_OUTPUT="$(hdiutil attach -readwrite -noverify -noautoopen "$RW_DMG")"
-printf '%s\n' "$ATTACH_OUTPUT"
-MOUNT_DIR="$(printf '%s\n' "$ATTACH_OUTPUT" | sed -n 's|.*\(/Volumes/.*\)$|\1|p' | head -1)"
-if [[ -z "$MOUNT_DIR" || ! -d "$MOUNT_DIR" ]]; then
+hdiutil attach -readwrite -noverify -noautoopen -plist "$RW_DMG" > "$WORK_DIR/attach.plist"
+# Nur das gerade angehaengte Geraet gehoert diesem Lauf. Ein gleichnamiges,
+# schon vorher gemountetes Volume darf der EXIT-Trap niemals auswerfen.
+/usr/bin/python3 - "$WORK_DIR/attach.plist" "$WORK_DIR/mount.txt" <<'PYTHON'
+import plistlib, sys
+from pathlib import Path
+with open(sys.argv[1], 'rb') as stream:
+    entities = plistlib.load(stream)['system-entities']
+mounted = next(entity for entity in entities if 'mount-point' in entity)
+Path(sys.argv[2]).write_text(mounted['dev-entry'] + '\n' + mounted['mount-point'] + '\n')
+PYTHON
+OWN_DEVICE="$(sed -n '1p' "$WORK_DIR/mount.txt")"
+MOUNT_DIR="$(sed -n '2p' "$WORK_DIR/mount.txt")"
+if [[ -z "$OWN_DEVICE" || ! -d "$MOUNT_DIR" ]]; then
     echo "ABBRUCH: Der Mountpunkt des Images liess sich nicht bestimmen." >&2
     exit 1
 fi
@@ -122,11 +139,11 @@ fi
 MOUNTED_VOL_NAME="$(basename "$MOUNT_DIR")"
 
 echo "=== Copying files to DMG ==="
-cp -R "${BUILD_DIR}/dmg_temp/${APP_NAME}" "$MOUNT_DIR/"
+cp -R "${WORK_DIR}/dmg_temp/${APP_NAME}" "$MOUNT_DIR/"
 ln -s /Applications "$MOUNT_DIR/Applications"
 
 mkdir -p "$MOUNT_DIR/.background"
-cp "${BUILD_DIR}/DmgBackground.tiff" "$MOUNT_DIR/.background/DmgBackground.tiff"
+cp "${WORK_DIR}/DmgBackground.tiff" "$MOUNT_DIR/.background/DmgBackground.tiff"
 
 # Der Finder kennt ein frisch gemountetes Volume nicht sofort. Ohne dieses
 # Warten scheiterte der Layoutschritt direkt nach dem Kopieren mit Fehler -1728,
@@ -179,17 +196,18 @@ fi
 
 echo "=== Unmounting DMG ==="
 sleep 2
-hdiutil detach "$MOUNT_DIR" || hdiutil detach -force "$MOUNT_DIR"
+hdiutil detach "$OWN_DEVICE" || hdiutil detach -force "$OWN_DEVICE"
+OWN_DEVICE=""
 
 echo "=== Converting DMG to read-only ==="
-hdiutil convert "$RW_DMG" -format UDZO -imagekey zlib-level=9 -o "$FINAL_DMG"
-hdiutil verify "$FINAL_DMG"
+hdiutil convert "$RW_DMG" -format UDZO -imagekey zlib-level=9 -o "$OUTPUT_DMG"
+hdiutil verify "$OUTPUT_DMG"
 
 if [[ "$SIGN_DMG" != "0" ]]; then
     echo "=== Signing DMG ==="
     if security find-identity -v -p codesigning | grep -Fq "$CODESIGN_IDENTITY"; then
-        codesign --force --timestamp --sign "$CODESIGN_IDENTITY" "$FINAL_DMG"
-        codesign --verify --verbose=2 "$FINAL_DMG"
+        codesign --force --timestamp --sign "$CODESIGN_IDENTITY" "$OUTPUT_DMG"
+        codesign --verify --verbose=2 "$OUTPUT_DMG"
     elif [[ "$SIGN_DMG" == "1" ]]; then
         echo "ABBRUCH: Codesign-Identity nicht gefunden: $CODESIGN_IDENTITY" >&2
         exit 1
@@ -219,9 +237,10 @@ if [[ "$NOTARIZE" == "1" ]]; then
         echo "  xcrun notarytool store-credentials $NOTARY_PROFILE" >&2
         exit 1
     fi
-    xcrun notarytool submit "$FINAL_DMG" --keychain-profile "$NOTARY_PROFILE" --wait
-    xcrun stapler staple "$FINAL_DMG"
-    xcrun stapler validate "$FINAL_DMG"
+    xcrun notarytool submit "$OUTPUT_DMG" --keychain-profile "$NOTARY_PROFILE" --wait
+    xcrun stapler staple "$OUTPUT_DMG"
+    xcrun stapler validate "$OUTPUT_DMG"
 fi
 
+mv "$OUTPUT_DMG" "$FINAL_DMG"
 echo "=== DMG build successful: $FINAL_DMG ==="

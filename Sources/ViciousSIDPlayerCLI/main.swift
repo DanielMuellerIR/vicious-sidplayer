@@ -237,6 +237,8 @@ final class FinishBox: @unchecked Sendable {
 /// passieren soll, und weiss nicht, WIE. Genau deshalb kann auf Linux MPRIS2
 /// parallel dasselbe tun, ohne dass sich die beiden ins Gehege kommen.
 func runInteractive(controller: PlayerController) -> PCMSinkFinishReason {
+    let signals = PlaybackSignals { controller.stop() }
+    defer { signals.restore() }
     let box = FinishBox()
     let waiter = Thread { box.set(controller.waitUntilFinished()) }
     waiter.name = "vicious-sid.waiter"

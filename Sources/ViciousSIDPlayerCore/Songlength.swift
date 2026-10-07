@@ -77,10 +77,10 @@ public struct SonglengthDB: Sendable {
             let md5 = trimmed[..<eq].lowercased()
             guard md5.count == 32 else { continue }
             // Rechte Seite: Laengen-Tokens, whitespace-getrennt.
-            let lengths = trimmed[trimmed.index(after: eq)...]
-                .split(separator: " ", omittingEmptySubsequences: true)
-                .compactMap { parseLength(String($0)) }
-            if !lengths.isEmpty {
+            let tokens = trimmed[trimmed.index(after: eq)...].split(whereSeparator: \.isWhitespace)
+            let lengths = tokens.compactMap { parseLength(String($0)) }
+            // Ein unlesbarer Subtune darf die folgenden Positionen nicht verschieben.
+            if !lengths.isEmpty, lengths.count == tokens.count {
                 entries[md5] = lengths
             }
         }
@@ -104,7 +104,8 @@ public struct SonglengthDB: Sendable {
               let seconds = Double(parts[1]),
               minutes.isFinite, seconds.isFinite,
               minutes >= 0, seconds >= 0 else { return nil }
-        return minutes * 60.0 + seconds
+        let total = minutes * 60.0 + seconds
+        return total.isFinite ? total : nil
     }
 
     // Laengen je Subtune fuer eine Datei (Lookup ueber den Datei-MD5), nil = unbekannt.

@@ -403,6 +403,9 @@ public struct LibraryImporter: Sendable {
 
         // 2. Zielpfad bestimmen und dabei entscheiden: schon da, oder Kollision?
         let destination = library.url(forRelativePath: job.relativePath)
+        guard LibraryPath.isContained(destination, in: library.root) else {
+            return .failed(.copyFailed, "Der Zielpfad liegt ausserhalb der Bibliothek.")
+        }
         switch resolveDestination(destination, sourceData: data) {
         case .duplicate:
             return .skipped(.duplicate)
@@ -413,13 +416,19 @@ public struct LibraryImporter: Sendable {
             do {
                 try fm.createDirectory(at: target.deletingLastPathComponent(),
                                        withIntermediateDirectories: true)
+                guard LibraryPath.isContained(target, in: library.root) else {
+                    return .failed(.copyFailed, "Der Zielpfad liegt ausserhalb der Bibliothek.")
+                }
                 try data.write(to: target, options: .atomic)
             } catch {
                 return .failed(.copyFailed, error.localizedDescription)
             }
             let rootComponents = LibraryPath.normalizedComponents(library.root)
             let relative = LibraryPath.relativePath(of: target, underRootComponents: rootComponents)
-            return .imported(relative ?? job.relativePath)
+            guard let relative else {
+                return .failed(.copyFailed, "Der Zielpfad liegt ausserhalb der Bibliothek.")
+            }
+            return .imported(relative)
         }
     }
 
@@ -444,8 +453,6 @@ public struct LibraryImporter: Sendable {
     /// gleich sein, und dann muss man sie auch nicht einlesen.
     private func resolveDestination(_ preferred: URL, sourceData: Data) -> Destination {
         let fm = library.fileManager
-        guard fm.fileExists(atPath: preferred.path) else { return .use(preferred) }
-
         let sourceHash = MD5.hexString(of: sourceData)
         if isSameContent(preferred, size: sourceData.count, hash: sourceHash) { return .duplicate }
 
@@ -453,21 +460,24 @@ public struct LibraryImporter: Sendable {
         let base = preferred.deletingPathExtension().lastPathComponent
         let ext = preferred.pathExtension
 
-        var suffix = 2
-        while suffix < 10_000 {
-            let candidate = directory
-                .appendingPathComponent("\(base)-\(suffix)")
-                .appendingPathExtension(ext)
-            if !fm.fileExists(atPath: candidate.path) { return .use(candidate) }
+        // Auch hinter einer inzwischen geloeschten Variante koennen Duplikate liegen.
+        let existing = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.fileSizeKey])) ?? []
+        var occupied = Set<Int>()
+        for candidate in existing where candidate.pathExtension.caseInsensitiveCompare(ext) == .orderedSame {
+            let name = candidate.deletingPathExtension().lastPathComponent
+            guard let prefix = name.range(of: base + "-", options: [.anchored, .caseInsensitive]),
+                  let suffix = Int(name[prefix.upperBound...]), suffix >= 2,
+                  String(suffix) == name[prefix.upperBound...] else { continue }
+            occupied.insert(suffix)
             if isSameContent(candidate, size: sourceData.count, hash: sourceHash) { return .duplicate }
+        }
+        if !fm.fileExists(atPath: preferred.path) { return .use(preferred) }
+        var suffix = 2
+        while occupied.contains(suffix) || fm.fileExists(atPath: directory
+            .appendingPathComponent("\(base)-\(suffix)").appendingPathExtension(ext).path) {
             suffix += 1
         }
-
-        // Praktisch unerreichbar; lieber ein garantiert freier Name als eine
-        // Endlosschleife oder ein Ueberschreiben.
-        return .use(directory
-            .appendingPathComponent("\(base)-\(UUID().uuidString)")
-            .appendingPathExtension(ext))
+        return .use(directory.appendingPathComponent("\(base)-\(suffix)").appendingPathExtension(ext))
     }
 
     private func isSameContent(_ url: URL, size: Int, hash: String) -> Bool {

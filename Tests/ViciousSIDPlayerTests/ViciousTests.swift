@@ -546,6 +546,7 @@ final class ViciousTests: XCTestCase {
     // Auto-Next loeste nie aus, weil die verstrichene Zeit die Dauer nie erreicht,
     // und der Positionsregler bekaeme einen unendlichen Wertebereich.
     func testSonglengthDBRejectsNonFiniteLengths() {
+        XCTAssertNil(SonglengthDB.parseLength("1e308:00"))
         XCTAssertNil(SonglengthDB.parseLength("inf:00"))
         XCTAssertNil(SonglengthDB.parseLength("1e400:00"))
         XCTAssertNil(SonglengthDB.parseLength("0:inf"))
@@ -557,6 +558,13 @@ final class ViciousTests: XCTestCase {
         // Eintrag ergeben — sonst stuende dort eine leere Laengenliste.
         let db = SonglengthDB.parse(text: "c2a01b2e5a55278e6b37b1d63a11e19c=inf:00\n")
         XCTAssertEqual(db.count, 0)
+    }
+
+    func testMalformedSonglengthDoesNotShiftSubtunePositions() {
+        for separator in [" ", "\t"] {
+            let text = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=" + ["1:00", "broken", "3:00"].joined(separator: separator)
+            XCTAssertNil(SonglengthDB.parse(text: text).lengths(forMD5: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+        }
     }
 
     func testSonglengthDBParse() {

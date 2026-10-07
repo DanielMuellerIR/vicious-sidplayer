@@ -35,11 +35,50 @@ notarize_app "$APP"
 echo "=== 3/3 Installieren ==="
 # Erst neben das Ziel legen, dann atomar austauschen: ein Abbruch mittendrin
 # darf keine halb ersetzte App in /Applications hinterlassen.
-STAGED="/Applications/.$APP.install-$$"
-rm -rf "$STAGED"
-trap 'rm -rf "$STAGED"' EXIT
+TEAM="${APPLE_TEAM_ID:-9QSWKSR4NQ}"
+REQUIREMENT="identifier \"com.viben.ViciousSIDPlayer\" and anchor apple generic and certificate leaf[subject.OU] = \"$TEAM\""
+codesign --verify --strict -R="$REQUIREMENT" "$APP"
+if [[ -L "$DESTINATION" ]]; then
+    echo "ABBRUCH: Das Installationsziel ist ein symbolischer Link." >&2
+    exit 1
+fi
+if [[ -e "$DESTINATION" ]]; then
+    # Eine fremde oder ungueltige App gleichen Namens bleibt unangetastet.
+    codesign --verify --strict -R="$REQUIREMENT" "$DESTINATION"
+    xcrun stapler validate "$DESTINATION"
+    spctl -a -t exec "$DESTINATION"
+fi
+STAGE_DIR="$(mktemp -d "/Applications/.vicious-sid-install.XXXXXX")"
+STAGED="$STAGE_DIR/$APP"
+cleanup_stage() {
+    /usr/bin/python3 - "$STAGE_DIR" <<'PYTHON'
+import shutil, sys
+shutil.rmtree(sys.argv[1])
+PYTHON
+}
+trap cleanup_stage EXIT
 ditto "$APP" "$STAGED"
-pkill -x ViciousSIDPlayerApp 2>/dev/null || true
+codesign --verify --strict -R="$REQUIREMENT" "$STAGED"
+xcrun stapler validate "$STAGED"
+spctl -a -t exec "$STAGED"
+# Nur Prozesse der installierten Binaerdatei beenden, keine anderen Testbuilds.
+/usr/bin/python3 - "$DESTINATION/Contents/MacOS/ViciousSIDPlayerApp" <<'PYTHON'
+import os, signal, subprocess, sys
+from pathlib import Path
+binary = Path(sys.argv[1])
+if binary.exists():
+    identity = binary.stat()
+    for line in subprocess.check_output(['/bin/ps', '-axo', 'pid=,comm='], text=True).splitlines():
+        fields = line.strip().split(maxsplit=1)
+        if len(fields) != 2:
+            continue
+        try:
+            running = Path(fields[1]).stat()
+            if (running.st_dev, running.st_ino) == (identity.st_dev, identity.st_ino):
+                os.kill(int(fields[0]), signal.SIGTERM)
+        except (OSError, ValueError):
+            pass
+PYTHON
 /usr/bin/swift - "$STAGED" "$DESTINATION" <<'SWIFT'
 import Foundation
 
@@ -57,6 +96,7 @@ if fileManager.fileExists(atPath: destination.path) {
     try fileManager.moveItem(at: source, to: destination)
 }
 SWIFT
+cleanup_stage
 trap - EXIT
 
 # Nach dem Kopieren erneut prüfen: erst dann ist die Installation belegt.

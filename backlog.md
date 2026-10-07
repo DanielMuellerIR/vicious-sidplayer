@@ -128,10 +128,13 @@ Systemverhalten"). Was dabei auffiel und **offen** bleibt:
   der Oberfläche neu auf. Jetzt 31 %. Der Rest ist die eigentliche
   SID-Emulation plus das Zeichnen; ob und wie weit sich das noch senken lässt,
   ist ungemessen.
-- Die Titelliste kostet auch als `LazyVStack` noch rund **4 KB je Titel**
-  (362 MB gegen 157 MB Grundverbrauch). Woher genau, ist nicht untersucht;
-  Kandidaten sind die je Zeile neu gebauten `Font`- und `Image`-Werte und der
-  Tooltip-Text.
+- Die Titelliste wurde am **2026-10-07 mit v1.9.24 erneut gemessen**:
+  1 / 5.001 / 25.001 / 50.001 synthetische Titel, jeweils derselbe pausierte
+  Titel und flache Liste, ergaben 114,47 / 133,70 / 198,47 / 280,91 MiB RSS.
+  Die Differenz entspricht rund **3,41 KiB je zusätzlichem Titel**. Kein
+  Absturz; die früheren 362/157-MB-Werte sind wegen anderer Laufbedingungen
+  kein direkter Vergleich. Die Ursache des verbleibenden Verbrauchs ist
+  weiterhin unbestimmt; daraus folgt noch kein konkreter Optimierungsauftrag.
 - ~~Die iOS-Testsuite hinterlässt im Simulator je Test eine eigene
   UserDefaults-Datei (`vsp-tests-<UUID>.plist`). `removePersistentDomain` leert
   sie, löscht die Datei aber nicht; nach einigen Läufen liegen dort hunderte.

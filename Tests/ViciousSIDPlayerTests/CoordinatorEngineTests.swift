@@ -35,6 +35,31 @@ final class CoordinatorEngineTests: XCTestCase {
     }
 
     @MainActor
+    func testLongSeekKeepsMainActorFreeAndStopInvalidatesPreparation() async throws {
+        let coordinator = ViciousCoordinator()
+        coordinator.setSid(try SidParser.parse(data: silentSID()))
+        coordinator.play()
+        try XCTSkipUnless(coordinator.isPlaying, "Kein nutzbares Audiogeraet")
+        let start = Date()
+        coordinator.seek(seconds: 300)
+        XCTAssertLessThan(Date().timeIntervalSince(start), 0.1)
+        XCTAssertTrue(coordinator.isPreparingSeek)
+        coordinator.seek(seconds: 1)
+        let deadline = Date().addingTimeInterval(5)
+        while coordinator.isPreparingSeek && Date() < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertFalse(coordinator.isPreparingSeek)
+        XCTAssertEqual(coordinator.elapsedSeconds, 1, accuracy: 0.2)
+        coordinator.seek(seconds: 300)
+        coordinator.stop()
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertFalse(coordinator.isPreparingSeek)
+        XCTAssertFalse(coordinator.isPlaying)
+        XCTAssertEqual(coordinator.elapsedSeconds, 0)
+    }
+
+    @MainActor
     func testPlaybackWorksAgainAfterTheAudioEngineWasRebuilt() throws {
         let coordinator = ViciousCoordinator()
         let file = try SidParser.parse(data: silentSID())

@@ -685,7 +685,17 @@ enum LibraryPath {
     /// Pfadbestandteile in normalisierter Form: ".." aufgeloest, Symlinks
     /// aufgeloest. Beide Seiten eines Vergleichs muessen hier durch.
     static func normalizedComponents(_ url: URL) -> [String] {
-        var components = url.standardizedFileURL.resolvingSymlinksInPath().pathComponents
+        var ancestor = url.standardizedFileURL
+        var missing: [String] = []
+        // Foundation loest Symlinks bei einem noch nicht vorhandenen Blatt
+        // nicht durchgaengig auf. Daher den vorhandenen Vorfahren kanonisieren.
+        while !FileManager.default.fileExists(atPath: ancestor.path) {
+            let parent = ancestor.deletingLastPathComponent()
+            guard parent.path != ancestor.path else { break }
+            missing.insert(ancestor.lastPathComponent, at: 0)
+            ancestor = parent
+        }
+        var components = ancestor.resolvingSymlinksInPath().pathComponents + missing
         // Sonderfall macOS: `/var`, `/tmp` und `/etc` sind Symlinks nach
         // `/private/…`. Foundation entfernt das "/private" beim Aufloesen nur
         // dann, wenn der Pfad tatsaechlich existiert — ein noch nicht angelegtes

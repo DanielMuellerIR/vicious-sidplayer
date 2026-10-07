@@ -172,9 +172,9 @@ final class AppModel: ObservableObject {
     /// HVSC-STIL, sofern der Nutzer eine importiert hat. Siehe `AppModel+STIL`.
     var stilDB: STILDatabase?
     /// Laengen des aktuellen Titels je Subtune (aus der HVSC-Datenbank).
-    var currentTrackLengths: [Double]?
+    @Published var currentTrackLengths: [Double]?
     /// Im Hintergrund berechnete Laenge des aktuellen Subtunes.
-    var computedLength: Double?
+    @Published var computedLength: Double?
     /// MD5 der aktuellen Datei — Schluessel fuer beide Laengenquellen.
     var currentMD5: String?
     let lengthCache = SongLengthCache.defaultCache()

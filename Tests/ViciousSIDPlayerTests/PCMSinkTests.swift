@@ -231,6 +231,25 @@ final class PCMSinkTests: XCTestCase {
 
     /// Mehrfaches `waitUntilFinished()` liefert denselben Grund erneut, statt
     /// beim zweiten Mal zu blockieren. Das CLI fragt aus zwei Threads.
+    func testStopReleasesFullPipeWithoutClosingReader() throws {
+        let pipe = Pipe()
+        let sink = StdoutPCMSink(output: pipe.fileHandleForWriting)
+        try sink.start { buffer, frames in
+            for index in buffer.indices { buffer[index] = 0.5 }
+            return frames
+        }
+        Thread.sleep(forTimeInterval: 0.2)
+        sink.stop()
+        let done = expectation(description: "Stop ohne Leser")
+        DispatchQueue.global().async {
+            XCTAssertEqual(sink.waitUntilFinished(), .stopped)
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 2)
+        try pipe.fileHandleForReading.close()
+        try pipe.fileHandleForWriting.close()
+    }
+
     func testWaitIsRepeatable() throws {
         let (_, handle) = try makeOutputFile("repeat.pcm")
         let sink = StdoutPCMSink(blockFrames: 8, output: handle)

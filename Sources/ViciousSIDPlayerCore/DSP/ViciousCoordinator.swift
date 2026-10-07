@@ -96,6 +96,22 @@ public struct VoiceVisuals: Sendable, Equatable {
 // an Combine/ObservableObject (@Published fuer die SwiftUI-Bindung). Beides gibt es unter
 // Linux nicht, deshalb faellt die ganze Klasse dort aus der Uebersetzung heraus.
 #if canImport(AVFoundation)
+private final class ProcessorSlot: @unchecked Sendable {
+    private let lock = NSLock()
+    private var processor: ViciousProcessor
+    init(_ processor: ViciousProcessor) { self.processor = processor }
+    func current() -> ViciousProcessor {
+        lock.lock()
+        defer { lock.unlock() }
+        return processor
+    }
+    func replace(with processor: ViciousProcessor) {
+        lock.lock()
+        self.processor = processor
+        lock.unlock()
+    }
+}
+
 @MainActor
 public final class ViciousCoordinator: ObservableObject {
     @Published public var isPlaying = false
@@ -140,6 +156,10 @@ public final class ViciousCoordinator: ObservableObject {
     // codereview-ok: activeSid ist die Quelle, aus der play() den Processor neu erzeugt (2026-07-01)
     private var activeSid: SidFileData?
     private var engineProcessor: ViciousProcessor?
+    private var processorSlot: ProcessorSlot?
+    private var seekTask: Task<Void, Never>?
+    private var seekGeneration = 0
+    var isPreparingSeek: Bool { seekTask != nil }
     private let visualsBuffer = RealtimeVisualsBuffer()
     private var uiUpdateTimer: Timer?
     // Taktrate, mit der Oszilloskop-Daten und Laufzeit aus dem Realtime-Puffer
@@ -168,6 +188,12 @@ public final class ViciousCoordinator: ObservableObject {
     public func play() {
         guard let sid = activeSid else { return }
         if isPlaying { return }
+        if seekTask != nil {
+            isPlaying = true
+            isPaused = false
+            startUIUpdates()
+            return
+        }
 
         // Fortsetzen nach Pause: Processor und Source-Node leben noch mitsamt
         // ihrem Emulations-Stand (CPU-Register, Speicher, Position). Es reicht,
@@ -204,22 +230,21 @@ public final class ViciousCoordinator: ObservableObject {
         for voice in 0..<3 { processor.setVoiceMuted(voice: voice, muted: voiceMuted[voice]) }
         processor.setFilterEnabled(filterEnabled)
         processor.initSubtune(sub: currentSubtune)
-        // Wurde im gestoppten Zustand vorgespult, hier an die Zielposition springen.
-        if let target = pendingSeekSeconds {
-            processor.seek(seconds: target)
-            visualsBuffer.updatePlaytime(target)
-            pendingSeekSeconds = nil
-        }
+        let requestedSeek = pendingSeekSeconds
+        pendingSeekSeconds = nil
         // Die Master-Lautstaerke regelt ausschliesslich der Mixer (siehe unten,
         // quadratische psychoakustische Kurve). Der Processor rendert deshalb mit
         // seiner vollen Standard-Lautstaerke (1.0) — wuerde er hier zusaetzlich mit
         // currentVolume skaliert, laege der Regler effektiv bei currentVolume^3.
         self.engineProcessor = processor
+        let slot = ProcessorSlot(processor)
+        self.processorSlot = slot
 
         let buffer = visualsBuffer
 
         // Safe process block called on Real-Time CoreAudio Thread
-        let renderBlock: @Sendable (UnsafeMutablePointer<ObjCBool>, UnsafePointer<AudioTimeStamp>, UInt32, UnsafeMutablePointer<AudioBufferList>) -> OSStatus = { [processor] (isSilence, timestamp, frameCount, outputData) -> OSStatus in
+        let renderBlock: @Sendable (UnsafeMutablePointer<ObjCBool>, UnsafePointer<AudioTimeStamp>, UInt32, UnsafeMutablePointer<AudioBufferList>) -> OSStatus = { [slot] (isSilence, timestamp, frameCount, outputData) -> OSStatus in
+            let processor = slot.current()
             let buffers = UnsafeMutableAudioBufferListPointer(outputData)
             guard buffers.count >= 2,
                   let leftPtr = buffers[0].mData,
@@ -272,12 +297,13 @@ public final class ViciousCoordinator: ObservableObject {
 
         // codereview-ok: isPlaying wird erst nach erfolgreichem start() gesetzt; catch raeumt sauber auf (2026-07-01)
         do {
-            if !audioEngine.isRunning {
+            if requestedSeek == nil && !audioEngine.isRunning {
                 try audioEngine.start()
             }
             isPlaying = true
             isPaused = false
             startUIUpdates()
+            if let requestedSeek { seek(seconds: requestedSeek) }
         } catch {
             print("Fehler beim Starten der AVAudioEngine: \(error)")
             // Engine-Start fehlgeschlagen: den bereits attachten/verbundenen
@@ -302,6 +328,7 @@ public final class ViciousCoordinator: ObservableObject {
     }
 
     public func stop() {
+        cancelSeekPreparation()
         audioEngine.stop()
         if let node = sourceNode {
             audioEngine.disconnectNodeOutput(node)
@@ -309,6 +336,7 @@ public final class ViciousCoordinator: ObservableObject {
         }
         sourceNode = nil
         engineProcessor = nil
+        processorSlot = nil
         isPlaying = false
         isPaused = false
         stopUIUpdates()
@@ -372,21 +400,66 @@ public final class ViciousCoordinator: ObservableObject {
         engineProcessor?.setFilterEnabled(filterEnabled)
     }
 
+    private func cancelSeekPreparation() {
+        seekGeneration &+= 1
+        seekTask?.cancel()
+        seekTask = nil
+    }
+
     public func seek(seconds: Double) {
-        let target = (seconds.isFinite && !seconds.isNaN) ? max(0.0, seconds) : 0.0
-        if let processor = engineProcessor {
-            // Laeuft oder pausiert: direkt im Emulator springen.
-            processor.seek(seconds: target)
+        let target = ViciousProcessor.normalizedSeekSeconds(seconds)
+        cancelSeekPreparation()
+        if let processor = engineProcessor, let slot = processorSlot, let sid = activeSid {
+            // Ein eigener Processor berechnet den Zielstand. Weder MainActor
+            // noch der Lock des gerade ausgegebenen Processors warten darauf.
+            audioEngine.pause()
+            let generation = seekGeneration
+            let sub = currentSubtune
+            let rate = processor.sampleRate
+            let model = modelOverride
+            let worker = Task.detached(priority: .userInitiated) {
+                let prepared = ViciousProcessor(sampleRate: rate)
+                _ = prepared.loadSID(sidFile: sid)
+                prepared.setModelOverride(model.map { Double($0) })
+                prepared.initSubtune(sub: sub)
+                try prepared.seekCancellable(seconds: target) { try Task.checkCancellation() }
+                return prepared
+            }
+            seekTask = Task { [weak self] in
+                do {
+                    let prepared = try await withTaskCancellationHandler {
+                        try await worker.value
+                    } onCancel: {
+                        worker.cancel()
+                    }
+                    guard let self, self.seekGeneration == generation else { return }
+                    prepared.setModelOverride(self.modelOverride.map { Double($0) })
+                    for voice in 0..<3 { prepared.setVoiceMuted(voice: voice, muted: self.voiceMuted[voice]) }
+                    prepared.setFilterEnabled(self.filterEnabled)
+                    slot.replace(with: prepared)
+                    self.engineProcessor = prepared
+                    self.seekTask = nil
+                    self.visualsBuffer.updatePlaytime(target)
+                    if self.isPlaying { try self.audioEngine.start() }
+                } catch {
+                    guard let self, self.seekGeneration == generation else { return }
+                    self.seekTask = nil
+                    self.stopUIUpdates()
+                    self.isPlaying = false
+                    self.isPaused = true
+                }
+            }
         } else {
-            // Gestoppt/frisch geladen: Zielposition merken, play() wendet sie an.
             pendingSeekSeconds = target
         }
         visualsBuffer.updatePlaytime(target)
-        self.elapsedSeconds = target
+        elapsedSeconds = target
     }
 
     public func setSubtune(sub: Int) {
         guard sub >= 0 && sub < subtunesCount else { return }
+        let wasSeeking = isPreparingSeek
+        cancelSeekPreparation()
         self.currentSubtune = sub
         self.elapsedSeconds = 0.0
         self.pendingSeekSeconds = nil
@@ -395,6 +468,7 @@ public final class ViciousCoordinator: ObservableObject {
         if let processor = engineProcessor {
             processor.initSubtune(sub: sub)
         }
+        if wasSeeking && isPlaying { try? audioEngine.start() }
     }
 
     // Taktrate der UI-Aktualisierung setzen.
@@ -457,6 +531,7 @@ public final class ViciousCoordinator: ObservableObject {
     }
 
     private func updateUI() {
+        guard seekTask == nil else { return }
         // Nur noch die Spielzeit geht durch SwiftUI — und auch die nur, wenn
         // sie sich um mindestens ein Zehntel geaendert hat. Der Zeitanzeige und
         // dem Positionsregler genuegt das; jede Zuweisung wirft sonst den

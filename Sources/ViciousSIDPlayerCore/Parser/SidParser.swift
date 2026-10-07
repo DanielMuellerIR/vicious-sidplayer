@@ -36,7 +36,7 @@ public enum SidParser {
         // dann gar nicht kopiert wird.
         let data = data.startIndex == 0 ? data : Data(data)
 
-        guard data.count >= 0x7C else {
+        guard data.count >= 0x76 else {
             throw ParserError.invalidSize
         }
 
@@ -51,7 +51,16 @@ public enum SidParser {
             return UInt16(data[offset]) << 8 | UInt16(data[offset + 1])
         }
 
+        let version = Int(readUInt16(4))
+        guard (1...4).contains(version), magic != "RSID" || version >= 2 else {
+            throw ParserError.invalidVersion
+        }
+        let headerSize = version == 1 ? 0x76 : 0x7C
+        guard data.count >= headerSize else { throw ParserError.invalidSize }
         let dataOffset = Int(readUInt16(6))
+        guard dataOffset >= headerSize, dataOffset <= data.count else {
+            throw ParserError.invalidDataOffset
+        }
         
         var loadAddr = readUInt16(8)
         let initAddr = readUInt16(10)
@@ -94,11 +103,9 @@ public enum SidParser {
         // Header-Version (offset 4, big-endian): 1-4. Steuert, welche der
         // Multi-SID-Felder unten ueberhaupt gueltig sind (bei aelteren Versionen
         // sind die Bytes "reserved" und koennten Muell enthalten).
-        let version = Int(readUInt16(4))
-
         // Preferred SID Model from flags at 0x76-0x77
         // Bits 4-5 of offset 0x77 (flags LSB): 01 = 6581, 10 = 8580
-        let prefModel = (data[0x77] & 0x30) >= 0x20 ? 8580 : 6581
+        let prefModel = version >= 2 && (data[0x77] & 0x30) >= 0x20 ? 8580 : 6581
         // PSID v3/v4: eigene Modell-Flags fuer den 2. Chip (Bits 6-7 von 0x77)
         // und den 3. Chip (Bits 0-1 von 0x76); 00 = wie der erste Chip.
         let modelFromBits = { (bits: UInt8) -> Int in
@@ -166,6 +173,7 @@ public enum SidParser {
     public enum ParserError: Error {
         case invalidSize
         case invalidMagic
+        case invalidVersion
         case invalidDataOffset
         case emptyDataBlock
     }

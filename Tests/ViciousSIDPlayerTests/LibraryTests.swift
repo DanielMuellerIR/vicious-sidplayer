@@ -313,6 +313,38 @@ final class LibraryTests: XCTestCase {
         XCTAssertEqual(library.count, 2)
     }
 
+    func testImportRefusesDestinationSymlinkOutsideLibrary() async throws {
+        let outside = base.appendingPathComponent("Outside")
+        try fm.createDirectory(at: outside, withIntermediateDirectories: true)
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: root.appendingPathComponent("Composer"), withDestinationURL: outside)
+        try writeFixture("Composer/tune.sid", in: source)
+        let report = try await LibraryImporter(library: library).importFolder(at: source)
+        XCTAssertTrue(report.imported.isEmpty)
+        XCTAssertEqual(report.failed.count, 1)
+        XCTAssertFalse(fm.fileExists(atPath: outside.appendingPathComponent("tune.sid").path))
+    }
+
+    func testImportFindsDuplicateAfterDeletedCollisionVariant() async throws {
+        try writeFixture("tune.sid", in: root, title: "Original")
+        try writeFixture("tune-3.sid", in: root, title: "Variant")
+        try writeFixture("tune.sid", in: source, title: "Variant")
+        let report = try await LibraryImporter(library: library).importFolder(at: source)
+        XCTAssertTrue(report.imported.isEmpty)
+        XCTAssertEqual(report.skipped.map(\.reason), [.duplicate])
+        XCTAssertFalse(fm.fileExists(atPath: root.appendingPathComponent("tune-2.sid").path))
+    }
+
+    func testImportDoesNotOverwriteDifferentlyCasedCollisionVariant() async throws {
+        try writeFixture("tune.sid", in: root, title: "Original")
+        try writeFixture("Tune-2.SID", in: root, title: "Keep")
+        let existing = try Data(contentsOf: root.appendingPathComponent("Tune-2.SID"))
+        try writeFixture("tune.sid", in: source, title: "New")
+        let report = try await LibraryImporter(library: library).importFolder(at: source)
+        XCTAssertEqual(report.imported, ["tune-3.sid"])
+        XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("Tune-2.SID")), existing)
+    }
+
     func testImportCollectsPerFileFailuresWithoutStopping() async throws {
         try skipIfRootIgnoresFilePermissions()
         try writeFixture("a.sid", in: source)

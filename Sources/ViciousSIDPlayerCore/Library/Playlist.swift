@@ -351,6 +351,11 @@ public struct Playlist: Equatable, Sendable {
         return PlaylistAdditions(addedIDs: addedIDs, firstIndex: firstIndex)
     }
 
+    /// Fremddateien bleiben auch neben dem Bibliotheks-Ordnerbaum erreichbar.
+    public var externalIndices: [Int] {
+        tracks.indices.filter { tracks[$0].isExternal }
+    }
+
     // MARK: - Anzeige
 
     /// Die sichtbaren Positionen nach Suche und Favoritenfilter.

@@ -91,6 +91,31 @@ import Glibc
 import Darwin
 #endif
 
+/// Externe Abbruchsignale gehen durch denselben Aufraeumweg wie die Taste q.
+/// Dispatch fuehrt den Swift-Code ausserhalb des POSIX-Signalhandlers aus.
+final class PlaybackSignals {
+    private var sources: [DispatchSourceSignal] = []
+    private var originals: [(Int32, (@convention(c) (Int32) -> Void)?)] = []
+
+    init(stop: @escaping @Sendable () -> Void) {
+        for number in [SIGINT, SIGTERM, SIGHUP] {
+            let original = signal(number, SIG_IGN)
+            originals.append((number, original))
+            let source = DispatchSource.makeSignalSource(signal: number, queue: .global())
+            source.setEventHandler(handler: stop)
+            source.resume()
+            sources.append(source)
+        }
+    }
+
+    func restore() {
+        for source in sources { source.cancel() }
+        sources.removeAll()
+        for (number, original) in originals { signal(number, original) }
+        originals.removeAll()
+    }
+}
+
 /// Schaltet stdin in den Terminal-Rohmodus und liest einzelne Tasten.
 ///
 /// Benutzung ist immer dasselbe Paar — `restore()` gehoert in ein `defer`,

@@ -236,6 +236,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ─── Drag and Drop ──────────────────────────────────────────────────────────
+const droppedPaths = new WeakMap();
 let dragDepth = 0;
 window.addEventListener('dragenter', (e) => {
   e.preventDefault();
@@ -296,6 +297,7 @@ async function collectDroppedFiles(dt) {
 async function walkEntry(entry, out) {
   if (entry.isFile) {
     const file = await new Promise((res, rej) => entry.file(res, rej));
+    droppedPaths.set(file, entry.fullPath.startsWith('/') ? entry.fullPath.slice(1) : entry.fullPath);
     out.push(file);
     return;
   }
@@ -310,7 +312,14 @@ async function walkEntry(entry, out) {
 }
 
 // ─── Playlist & Loading Controller ──────────────────────────────────────────
-async function addUserFiles(files, playFirst) {
+let fileImportQueue = Promise.resolve();
+function addUserFiles(files, playFirst) {
+  const pending = fileImportQueue.then(() => importUserFiles(files, playFirst));
+  fileImportQueue = pending.catch(() => {});
+  return pending;
+}
+
+async function importUserFiles(files, playFirst) {
   const sids = files.filter(f => f.name.toLowerCase().endsWith('.sid'));
   if (!sids.length) return;
 
@@ -319,22 +328,20 @@ async function addUserFiles(files, playFirst) {
   
   for (const file of sids) {
     try {
-      const trackName = file.name.replace(/\.sid$/i, '');
-      const trackId = `user:${file.name}:${file.size}`;
-      
-      // Duplicate detection
-      const existingIdx = trackList.findIndex(t => t.name === trackName || t.id === trackId);
+      const sourcePath = file.webkitRelativePath || droppedPaths.get(file) || file.name;
+      const trackName = sourcePath.replace(/\.sid$/i, '');
+      const uint8 = new Uint8Array(await file.arrayBuffer());
+      const existingIdx = [...trackList, ...addedTracks].findIndex(t =>
+        t.sourcePath === sourcePath && t.buffer.length === uint8.length &&
+        t.buffer.every((value, index) => value === uint8[index]));
       if (existingIdx !== -1) {
-        if (firstAddedIdx === -1) {
-          firstAddedIdx = existingIdx;
-        }
-        continue; // Skip duplicates
+        if (firstAddedIdx === -1) firstAddedIdx = existingIdx;
+        continue;
       }
-
-      const buf = await file.arrayBuffer();
-      const uint8 = new Uint8Array(buf);
+      const trackId = `user:${sourcePath}:${trackList.length + addedTracks.length}`;
       const newTrack = {
         id: trackId,
+        sourcePath,
         name: trackName,
         composer: 'Unknown Composer',
         year: 'N/A',
@@ -378,7 +385,10 @@ function refreshPlaylistUI() {
 
     const row = document.createElement('div');
     row.className = `track-row ${i === currentIdx ? 'active' : ''}`;
-    row.innerHTML = `<span class="track-name">${track.name}</span>`;
+    const name = document.createElement('span');
+    name.className = 'track-name';
+    name.textContent = track.name;
+    row.appendChild(name);
     row.addEventListener('click', () => loadTrack(i, true));
     trackListContainer.appendChild(row);
   });
