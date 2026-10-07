@@ -168,9 +168,7 @@ final class LibraryImportIntegrationTests: XCTestCase {
         }
     }
 
-    /// Wartet, bis das Zuruecksetzen wirklich durch ist. Die Ansicht ist sofort
-    /// leer, die Dateien verschwinden aber im Hintergrund — ohne dieses Warten
-    /// pruefte der Test gegen einen halb geleerten Ordner.
+    /// Wartet den Dateisystem-Commit und den anschliessenden UI-Zustandswechsel ab.
     private func waitForReset(timeout: TimeInterval = 30) async {
         let deadline = Date().addingTimeInterval(timeout)
         while model.services.resetTask != nil {
@@ -390,6 +388,41 @@ final class LibraryImportIntegrationTests: XCTestCase {
 
         await resetLibrary(keepFavorites: false)
         XCTAssertFalse(model.isFavorite("A/one.sid"))
+    }
+
+    func testFailedResetPreservesTrackPositionSessionFavoritesAndLibrary() async throws {
+        try write("A/one.sid")
+        await importSource()
+        XCTAssertTrue(model.loadTrack(id: "A/one.sid", autoplay: false))
+        model.cancelLengthEstimate()
+        model.coordinator.seek(seconds: 12)
+        model.toggleFavorite("A/one.sid")
+        model.saveSessionState()
+        let md5 = try XCTUnwrap(model.currentMD5)
+        model.lengthCache.store(md5: md5, subtune: 0, seconds: 99)
+        model.computedLength = 99
+        let tracks = model.tracks
+        let session = defaults.dictionaryRepresentation()
+        let root = try XCTUnwrap(model.libraryRoot)
+        let link = root.appendingPathComponent("outside-link")
+        try fm.createSymbolicLink(at: link, withDestinationURL: source)
+        defer { try? fm.removeItem(at: link) }
+
+        model.resetLibrary(keepFavorites: false)
+        await waitForReset()
+
+        XCTAssertNotNil(model.errorMessage)
+        XCTAssertEqual(model.currentTrackID, "A/one.sid")
+        XCTAssertEqual(model.coordinator.elapsedSeconds, 12)
+        XCTAssertFalse(model.coordinator.isPlaying)
+        XCTAssertEqual(model.tracks, tracks)
+        XCTAssertTrue(model.isFavorite("A/one.sid"))
+        XCTAssertEqual(model.computedLength, 99)
+        XCTAssertEqual(model.lengthCache.length(md5: md5, subtune: 0), 99)
+        for key in [AppModel.Keys.lastTrackID, AppModel.Keys.lastSubtune, AppModel.Keys.lastPosition] {
+            XCTAssertEqual(defaults.object(forKey: key) as? NSObject, session[key] as? NSObject)
+        }
+        XCTAssertTrue(fm.fileExists(atPath: root.appendingPathComponent("A/one.sid").path))
     }
 
     // MARK: - Fremdablage (Finder-Dateifreigabe)

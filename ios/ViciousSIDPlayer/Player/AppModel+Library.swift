@@ -358,23 +358,8 @@ extension AppModel {
         cancelLengthEstimate()
         services.libraryReloadTask?.cancel()
         stopPlaybackLoop()
-        coordinator.stop()
-        services.nowPlaying.clear()
-
-        // Zustand des laufenden Titels aufloesen.
-        setCurrentTrackID(nil)
-        currentMD5 = nil
-        currentTrackLengths = nil
-        computedLength = nil
-        clearSessionState()
-        // Die Favoriten werden bewusst NICHT hier geleert, sondern erst nach
-        // einem erfolgreichen Core-Reset (siehe unten): scheitert der, bleiben
-        // Musikdateien und Index stehen — geloeschte Favoriten waeren dann
-        // dauerhafter Datenverlust ohne Gegenwert (Review-Fund 2026-08-07).
-
-        // Die Ansicht sofort leeren, damit nicht sekundenlang Titel dastehen,
-        // deren Dateien gerade geloescht werden.
-        applyLibrary(tracks: [], folderTree: AppModel.emptyFolderTree)
+        // Der Processor spielt aus dem Speicher. Titel, Position, Cache und
+        // Ansicht bleiben bis zum erfolgreichen Dateisystem-Commit erhalten.
 
         // Das eigentliche Loeschen laeuft im Hintergrund — bei einer grossen
         // Sammlung dauert es spuerbar. Der Task wird festgehalten, damit
@@ -394,27 +379,40 @@ extension AppModel {
             // `clearFavorites: nil` — die Favoriten liegen in den
             // Benutzereinstellungen und werden unten auf dem MainActor
             // behandelt. Der Core soll sie nicht ein zweites Mal anfassen.
-            let message: String?
+            let outcome: Result<LibraryReset.Report, Error>
             do {
-                _ = try LibraryReset.run(library: library, clearFavorites: nil)
-                message = nil
+                outcome = .success(try LibraryReset.run(library: library, clearFavorites: nil))
             } catch {
-                message = error.localizedDescription
+                outcome = .failure(error)
             }
             // Auch die langlebige Cache-INSTANZ leeren: `LibraryReset` loescht
             // nur die Datei; das Dictionary im Speicher wuerde die alten
             // Laengen beim naechsten `store` komplett wieder hinschreiben.
-            cache.clear()
+            if case .success = outcome { cache.clear() }
 
             await MainActor.run {
                 self.services.resetTask = nil
-                if let message {
-                    self.errorMessage = "Zurücksetzen fehlgeschlagen: \(message)"
-                } else if !keepFavorites {
-                    // Erst jetzt: der Core-Reset ist durch, die Titel sind weg.
-                    self.setFavorites([])
+                switch outcome {
+                case .failure(let error):
+                    self.errorMessage = "Zurücksetzen fehlgeschlagen: \(error.localizedDescription)"
+                    self.resolveComputedLengthIfNeeded()
+                    self.syncPlaybackLoop()
+                case .success(let report):
+                    self.stopPlaybackLoop()
+                    self.coordinator.stop()
+                    self.services.nowPlaying.clear()
+                    self.setCurrentTrackID(nil)
+                    self.currentMD5 = nil
+                    self.currentTrackLengths = nil
+                    self.computedLength = nil
+                    self.clearSessionState()
+                    self.applyLibrary(tracks: [], folderTree: AppModel.emptyFolderTree)
+                    if !keepFavorites { self.setFavorites([]) }
+                    if !report.retainedCleanupDirectories.isEmpty {
+                        self.errorMessage = "Bibliothek zurückgesetzt. Speicher konnte nicht vollständig freigegeben werden."
+                    }
+                    self.reloadLibrary(restoreSession: false)
                 }
-                self.reloadLibrary(restoreSession: false)
             }
         }
     }

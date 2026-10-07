@@ -10,9 +10,8 @@ import Foundation
 //     nicht mehr, und der naechste Import haette kein Ziel.
 //  2. LOESCHEN IST UNUMKEHRBAR. Ein falsch berechneter Pfad — ein "..", ein
 //     Symlink, eine leere Wurzel-URL — und der Reset raeumt Ordner ab, die ihm
-//     nicht gehoeren. Deshalb geht JEDE Loeschung durch `remove(_:under:)`, das
-//     vorher komponentenweise prueft, ob das Ziel wirklich unterhalb der
-//     uebergebenen Wurzel liegt.
+//     nicht gehoeren. Deshalb wird der gesamte Auftrag zuerst komponentenweise
+//     geprueft und vor dem Commit ausschliesslich ruecknehmbar verschoben.
 //  3. IDEMPOTENZ. Zweimal zuruecksetzen, oder auf einem schon leeren Zustand
 //     zuruecksetzen, ist kein Fehler. Der Nutzer tippt in einem
 //     Bestaetigungsdialog gerne zweimal.
@@ -27,10 +26,21 @@ public enum LibraryReset {
     /// HVSC-Datenbank und der Fallback bleiben davon unberuehrt.
     public static let cacheFileNames = [SongLengthCache.defaultCacheFileName]
 
-    public enum ResetError: Error, Sendable, Equatable {
+    public enum ResetError: LocalizedError, Sendable, Equatable {
         /// Es wurde versucht, etwas ausserhalb der Wurzel zu loeschen.
         /// Das ist immer ein Programmierfehler, nie eine Nutzeraktion.
         case outsideRoot(String)
+        case overlappingRoots
+        case rollbackFailed([String])
+
+        public var errorDescription: String? {
+            switch self {
+            case .outsideRoot(let name): return "Eintrag liegt außerhalb der Bibliothek: \(name)"
+            case .overlappingRoots: return "Musik- und Support-Ordner dürfen sich nicht überschneiden."
+            case .rollbackFailed(let paths):
+                return "Dateien konnten nicht an ihren ursprünglichen Ort zurückgelegt werden. Erhalten unter: " + paths.joined(separator: ", ")
+            }
+        }
     }
 
     /// Was der Reset weggeraeumt hat.
@@ -43,6 +53,8 @@ public enum LibraryReset {
         public let removedSupportFiles: [String]
         /// Wurden auch die Favoriten geleert?
         public let favoritesCleared: Bool
+        /// Nach dem erfolgreichen Zustandswechsel noch nicht freigegebener Speicher.
+        public let retainedCleanupDirectories: [URL]
 
         public var isEmpty: Bool {
             removedFiles == 0 && removedTopLevelItems == 0 && removedSupportFiles.isEmpty
@@ -51,15 +63,17 @@ public enum LibraryReset {
         public init(removedFiles: Int,
                     removedTopLevelItems: Int,
                     removedSupportFiles: [String],
-                    favoritesCleared: Bool) {
+                    favoritesCleared: Bool,
+                    retainedCleanupDirectories: [URL] = []) {
             self.removedFiles = removedFiles
             self.removedTopLevelItems = removedTopLevelItems
             self.removedSupportFiles = removedSupportFiles
             self.favoritesCleared = favoritesCleared
+            self.retainedCleanupDirectories = retainedCleanupDirectories
         }
     }
 
-    /// Loescht Bibliotheksinhalt, Index und berechnete Songlaengen.
+    /// Entfernt Bibliotheksinhalt, Index und berechnete Songlaengen transaktional.
     ///
     /// - Parameters:
     ///   - library: die betroffene Bibliothek. Ihre Wurzel bleibt als leerer
@@ -71,28 +85,24 @@ public enum LibraryReset {
     ///         try LibraryReset.run(library: library,
     ///                              clearFavorites: wipeFavorites ? { store.removeAllFavorites() } : nil)
     ///
-    /// - Throws: `ResetError.outsideRoot`, wenn die Pfadpruefung anschlaegt, oder
-    ///   den Dateisystemfehler, wenn etwas Vorhandenes sich nicht loeschen, der
-    ///   Wurzelinhalt sich nicht auflisten oder die Wurzel sich nicht wieder
-    ///   anlegen laesst. Eine FEHLENDE Wurzel ist dagegen kein Fehler — sie
-    ///   zaehlt als leer und wird neu angelegt (Idempotenz).
+    /// - Throws: Pfad-, Auflistungs- oder Verschiebefehler vor dem Commit. Bereits
+    ///   verschobene Dateien werden zurueckgelegt. Verhindert ein weiterer
+    ///   Dateisystemfehler die Ruecknahme, nennt `rollbackFailed` die erhaltenen
+    ///   Wiederherstellungsorte. Eine fehlende Wurzel wird leer neu angelegt.
+    /// - Returns: Der erfolgreich entfernte Zustand. Fehler beim anschliessenden
+    ///   Freigeben des Speichers stehen in `retainedCleanupDirectories`; sie
+    ///   duerfen dem Nutzer nicht als fehlgeschlagener Reset gemeldet werden.
     @discardableResult
     public static func run(library: MusicLibrary,
                            clearFavorites: (() -> Void)? = nil) throws -> Report {
         let fm = library.fileManager
         let root = library.root
 
-        // 1. Inhalt der Wurzel loeschen — die Wurzel selbst NICHT (siehe oben).
-        //    Ohne `.skipsHiddenFiles`, damit auch `.DS_Store` und Konsorten gehen.
-        //
-        //    Als "leer" gilt AUSSCHLIESSLICH eine nachweislich fehlende Wurzel
-        //    (die legt Schritt 2 gleich wieder an — Idempotenz). Jeder andere
-        //    Fehler (Rechte, Dateisystem) fliegt weiter: wuerde er verschluckt,
-        //    meldete der Reset Erfolg, loeschte Index und Cache — und die
-        //    liegengebliebenen Musikdateien tauchten beim naechsten Abgleich
-        //    kommentarlos wieder auf.
-        var removedFiles = 0
-        var removedTopLevelItems = 0
+        let support = library.supportDirectory
+        guard root.standardizedFileURL != support.standardizedFileURL,
+              !isContained(support, in: root), !isContained(root, in: support) else {
+            throw ResetError.overlappingRoots
+        }
         let contents: [URL]
         do {
             contents = try fm.contentsOfDirectory(at: root,
@@ -102,47 +112,69 @@ public enum LibraryReset {
             where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError {
             contents = []
         }
-        for item in contents {
-            removedFiles += countFiles(under: item, fm: fm)
-            try remove(item, under: root, fm: fm)
-            removedTopLevelItems += 1
-        }
+        let supportFiles = ([library.indexFileName] + cacheFileNames).map {
+            support.appendingPathComponent($0)
+        }.filter { fm.fileExists(atPath: $0.path) }
 
-        // 2. Wurzel sicherstellen: sie kann vorher schon gefehlt haben, und ohne
-        //    sie schlaegt der naechste Import fehl.
-        //
-        //    Fail-closed wie in Schritt 1: Gelingt das nicht, wird hier
-        //    abgebrochen — VOR dem Loeschen von Index und Cache. Sonst meldete
-        //    der Reset Erfolg, obwohl die Bibliothek danach gar kein
-        //    beschreibbares Ziel mehr haette (Review-Fund 2026-08-07).
+        // Erst den GESAMTEN Auftrag pruefen. Insbesondere darf ein spaeterer
+        // Symlinkfehler nicht bereits geloeschte, fruehere Eintraege hinterlassen.
+        for (items, parent) in [(contents, root), (supportFiles, support)] {
+            for item in items where !isContained(item, in: parent) {
+                throw ResetError.outsideRoot(item.lastPathComponent)
+            }
+        }
+        let removedFiles = contents.reduce(0) { $0 + countFiles(under: $1, fm: fm) }
         try LibraryDirectory.ensure(root, fm: fm)
 
-        // 3. Index und Caches im Support-Ordner. Hier wird namentlich geloescht,
-        //    nicht der ganze Ordner geleert: auf iOS ist "Application Support"
-        //    der gesamte interne Bereich der App.
-        var removedSupportFiles: [String] = []
-        // Der Index dieser Bibliothek, nicht der Vorgabename: auf dem Mac ist die
-        // Wurzel frei waehlbar und der Index heisst deshalb je Wurzel anders.
-        let supportNames = [library.indexFileName] + cacheFileNames
-        for name in supportNames {
-            let url = library.supportDirectory.appendingPathComponent(name)
-            guard fm.fileExists(atPath: url.path) else { continue }
-            try remove(url, under: library.supportDirectory, fm: fm)
-            removedSupportFiles.append(name)
+        // Ein Verzeichnis je Dateisystem: Verschieben bleibt dadurch ein Rename
+        // statt eines moeglicherweise nur teilweise gelungenen Kopiervorgangs.
+        let token = ".vicious-reset-" + UUID().uuidString
+        let musicStage = root.appendingPathComponent(token, isDirectory: true)
+        let supportStage = support.appendingPathComponent(token, isDirectory: true)
+        var stages: [URL] = []
+        var moved: [(original: URL, staged: URL)] = []
+        do {
+            for (items, stage) in [(contents, musicStage), (supportFiles, supportStage)] where !items.isEmpty {
+                try fm.createDirectory(at: stage, withIntermediateDirectories: false)
+                stages.append(stage)
+                for (index, item) in items.enumerated() {
+                    let destination = stage.appendingPathComponent(String(index))
+                    try fm.moveItem(at: item, to: destination)
+                    moved.append((item, destination))
+                }
+            }
+        } catch {
+            let originalError = error
+            var unrestored: [String] = []
+            for item in moved.reversed() {
+                do { try fm.moveItem(at: item.staged, to: item.original) }
+                catch { unrestored.append(item.staged.path) }
+            }
+            // Fehlgeschlagene Ruecknahmen niemals wegraeumen: Dort liegt die
+            // erhaltene Datei; der Fehler nennt ihren Wiederherstellungsort.
+            if !unrestored.isEmpty { throw ResetError.rollbackFailed(unrestored) }
+            for stage in stages { try? fm.removeItem(at: stage) }
+            throw originalError
         }
 
-        // 4. Index auch im Speicher leeren — sonst zeigt die UI weiter Eintraege
-        //    an, deren Dateien es nicht mehr gibt.
+        // Commit-Grenze: Erst jetzt ist der ganze Bibliothekszustand erfolgreich
+        // entfernt. Vorher bleiben Index, Favoriten und die UI unveraendert.
         library.clearIndex()
-
-        // 5. Favoriten nur, wenn der Aufrufer das ausdruecklich will.
-        let favoritesCleared = clearFavorites != nil
         clearFavorites?()
 
+        // Das Freigeben des Speichers ist nach dem Commit kein fehlgeschlagener
+        // Reset mehr. Bleibt eine Sicherheitskopie uebrig, meldet der Bericht
+        // das ausdruecklich; sie wird niemals als Musik neu indiziert.
+        var retained: [URL] = []
+        for stage in stages {
+            do { try fm.removeItem(at: stage) }
+            catch { retained.append(stage) }
+        }
         return Report(removedFiles: removedFiles,
-                      removedTopLevelItems: removedTopLevelItems,
-                      removedSupportFiles: removedSupportFiles,
-                      favoritesCleared: favoritesCleared)
+                      removedTopLevelItems: contents.count,
+                      removedSupportFiles: supportFiles.map(\.lastPathComponent),
+                      favoritesCleared: clearFavorites != nil,
+                      retainedCleanupDirectories: retained)
     }
 
     // MARK: - Sicherheitsnetz

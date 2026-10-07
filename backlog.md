@@ -100,12 +100,15 @@ belegt, keiner ist eine Vermutung.
    Linux-Regressionstests benötigen keine Soundkarte; hörbare Wiedergabe und
    Desktop-/Medientasten-Abnahme bleiben davon getrennt offen.
 
-4. **`LibraryReset` bricht beim ersten nicht löschbaren Eintrag ab** und hinterlässt
-   dann eine halb geleerte Bibliothek. Das ist eine bewusste fail-closed-Entscheidung
-   (lieber abbrechen als fälschlich Erfolg melden); ob stattdessen weitergeräumt und
-   am Ende berichtet werden soll, ist eine Produktentscheidung. Ein Symlink innerhalb
-   der Bibliothek, der nach draußen zeigt, löst genau diesen Fall aus — die
-   Pfadprüfung verweigert ihn korrekt, siehe `testContainmentResolvesSymlinks`.
+4. **Library Reset mit Rücknahme bei Fehlern (2026-10-07, v1.9.24).**
+   Der gesamte Auftrag wird vorab auf sichere Pfade geprüft. Musik, Index und
+   Cache werden zunächst auf demselben Dateisystem verschoben; ein Fehler nimmt
+   die bereits ausgeführten Schritte zurück. Erst der erfolgreiche Commit leert
+   Titel, Position, Session, Favoriten und den Cache im Speicher. Ein zusätzlicher
+   Fehler beim Zurücklegen nennt die erhaltenen Wiederherstellungsorte. Bleibt
+   nach dem erfolgreichen Reset Speicher in einem ausgeblendeten Zwischenordner
+   belegt, meldet die App das ausdrücklich. Deterministische Fehler bei jedem
+   Verschiebeschritt und ein iOS-Fehlerfall mit erhaltenem App-Zustand sind geprüft.
 
 5. **iPhone-Oberfläche am 2026-10-07 im Simulator visuell geprüft.** Die
    Mini-Player-Leiste muss per `safeAreaInset` am Tab-INHALT hängen (an der `TabView`
