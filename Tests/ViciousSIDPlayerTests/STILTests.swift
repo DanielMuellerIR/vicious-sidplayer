@@ -202,6 +202,19 @@ final class STILTests: XCTestCase {
                        "/MUSICIANS/H/Hubbard_Rob/Commando.sid")
     }
 
+    func testResolvedPathIncludesFolderOnlyCommentsUnderTheRoot() throws {
+        let root = URL(fileURLWithPath: "/Volumes/HVSC")
+        let file = root.appendingPathComponent("MUSICIANS/H/Hubbard_Rob/Warhawk.sid")
+        let path = try XCTUnwrap(db().resolvedPath(forFileURL: file,
+                                                  hvscRoot: root,
+                                                  relativePath: "MUSICIANS/H/Hubbard_Rob/Warhawk.sid"))
+        XCTAssertEqual(path, "/MUSICIANS/H/Hubbard_Rob/Warhawk.sid")
+        let info = db().info(forHVSCPath: path, subtune: 0)
+        XCTAssertEqual(info.folder.first?.value,
+                       "Rob Hubbard ist einer der bekanntesten C64-Komponisten.")
+        XCTAssertTrue(info.file.isEmpty)
+    }
+
     func testResolvedPathFallsBackToTheSuffixWhenTheFileIsElsewhere() {
         let root = URL(fileURLWithPath: "/Volumes/HVSC")
         let elsewhere = URL(fileURLWithPath: "/Users/test/Musik/Hubbard_Rob/Commando.sid")

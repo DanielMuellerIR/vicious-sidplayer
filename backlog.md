@@ -7,8 +7,12 @@
    Einstellungs-Eintrag zum Auswählen der Datei. **Core-Abnahme an echter STIL v84
    erledigt am 2026-10-01:** 18.475 Dateieinträge und 246 Ordner, LF/CRLF-Parität,
    Auto-Fund, HVSC-Pfad, Subtunes und eindeutige Pfadenden geprüft. Der
-   Latin-1-Fallback funktioniert seit v1.9.23 auch unter Linux. **Offen bleibt
-   die Darstellung dieser echten Daten in den beiden App-Oberflächen.**
+   Latin-1-Fallback funktioniert seit v1.9.23 auch unter Linux. **Mac-Anzeige
+   am 2026-10-07 mit synthetischen Fixtures in der nativen App geprüft:**
+   Datei-/Ordnerkommentare, Subtunes, eindeutige Pfadenden sowie unbekannte und
+   mehrdeutige Titel. Reine Ordnerkommentare werden seit v1.9.24 ebenfalls
+   aufgelöst; breite Seitenleisten schneiden keine Beschriftungen mehr ab.
+   **Die visuelle STIL-Abnahme auf iOS bleibt offen.**
 2. ~~HVSC-Browser/Bibliotheksansicht~~ **erledigt am 2026-08-23 (v1.9.14).** Die
    Mac-App hat jetzt denselben aufklappbaren Ordnerbaum wie die iPhone-App,
    umschaltbar im Kopf der Seitenleiste. Das Flachklopfen des Baums steht im

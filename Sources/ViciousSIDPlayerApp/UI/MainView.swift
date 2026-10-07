@@ -40,6 +40,10 @@ public struct MainView: View {
     @AppStorage("shuffleEnabled") private var shuffle = false
     // Breite der linken Playlist-Seitenleiste (anpassbar per Splitter).
     @AppStorage("sidebarWidth") private var sidebarWidth = 240.0
+    private var sidebarLayoutWidth: CGFloat { CGFloat(max(180, min(600, sidebarWidth))) }
+    // Die Transportleiste braucht neben der Seitenleiste ihren eigenen Platz.
+    // Sonst schiebt SwiftUI bei breiter Seitenleiste den Inhalt aus dem Fenster.
+    private var fullPlayerMinimumWidth: CGFloat { max(1140, sidebarLayoutWidth + 900) }
     // Autoplay-Ordner aus den Einstellungen (Cmd+,). "" = Standard-Ordner.
     // Gleicher UserDefaults-Key wie in SettingsView — Aenderungen dort landen
     // hier sofort (onChange laedt die Playlist neu).
@@ -466,7 +470,7 @@ public struct MainView: View {
                     .padding(12)
                     .background(bgSecondary)
                 }
-                .frame(width: CGFloat(max(180.0, min(600.0, sidebarWidth))))
+                .frame(width: sidebarLayoutWidth)
                 .background(bgSecondary)
                 
                 SidebarSplitter(width: $sidebarWidth,
@@ -694,7 +698,7 @@ public struct MainView: View {
                 }
                 .background(isLight ? Color.macLightSurface : Color.macDarkSurface)
             }
-            .frame(minWidth: 1140, minHeight: 540)
+            .frame(minWidth: fullPlayerMinimumWidth, minHeight: 540)
             }
 
             // Meldet das Fenster; unsichtbar und ohne Platzbedarf.
@@ -967,10 +971,10 @@ public struct MainView: View {
             window.setFrame(frame, display: true, animate: true)
         } else if var full = fullWindowFrame {
             // Wurde die App im Mini-Player beendet, ist die gemerkte Groesse
-            // die der Leiste. Die volle Ansicht verlangt aber mindestens
-            // 1140 x 540 — sonst zoege AppKit das Fenster gleich wieder auf und
+            // die der Leiste. Die volle Ansicht verlangt aber ihre Mindestbreite
+            // samt Seitenleiste — sonst zoege AppKit das Fenster gleich wieder auf und
             // die gemerkte Position waere fuer die Katz.
-            full.size.width = max(full.width, 1140)
+            full.size.width = max(full.width, fullPlayerMinimumWidth)
             full.size.height = max(full.height, 560)
             window.setFrame(full, display: true, animate: true)
             fullWindowFrame = nil

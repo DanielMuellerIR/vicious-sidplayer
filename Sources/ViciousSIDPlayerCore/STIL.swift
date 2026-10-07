@@ -358,7 +358,7 @@ public struct STILDatabase: Sendable {
                              relativePath: String?) -> String? {
         if let fileURL, let hvscRoot,
            let exact = STILDatabase.hvscPath(for: fileURL, root: hvscRoot),
-           files[Self.normalizedKey(exact)] != nil {
+           files[Self.normalizedKey(exact)] != nil || folderEntry(forHVSCPath: exact) != nil {
             return exact
         }
         if let relativePath, let matched = path(matchingSuffix: relativePath) {
