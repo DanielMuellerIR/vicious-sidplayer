@@ -107,12 +107,18 @@ belegt, keiner ist eine Vermutung.
    der Bibliothek, der nach draußen zeigt, löst genau diesen Fall aus — die
    Pfadprüfung verweigert ihn korrekt, siehe `testContainmentResolvesSymlinks`.
 
-5. **Zwei Strukturregeln der iPhone-Oberfläche hält nur ein Kommentar.** Die
+5. **iPhone-Oberfläche am 2026-10-07 im Simulator visuell geprüft.** Die
    Mini-Player-Leiste muss per `safeAreaInset` am Tab-INHALT hängen (an der `TabView`
    verdeckt sie die Tab-Leiste und macht die App ab dem ersten Titel unbedienbar), und
    der Zeichentakt des Oszilloskops muss über `TimelineView(paused:)` an
    `isSceneActive` hängen. Beides ist korrekt umgesetzt, aber an SwiftUI-Strukturen
    ist kein sinnvoller Test aufzuhängen.
+
+   Mini-Player in Bibliothek und Einstellungen, erreichbare Tabs, Pause,
+   Hintergrund/Rückkehr sowie STIL für Datei/Subtune/Ordner und unbekannte
+   beziehungsweise mehrdeutige Titel sind im realen Simulatorlauf belegt.
+   Eine Messung der tatsächlichen Zeichenrate im Hintergrund ist damit nicht
+   verbunden.
 
 ## Gemessen am 2026-08-23 an 50.001 Titeln (v1.9.11)
 

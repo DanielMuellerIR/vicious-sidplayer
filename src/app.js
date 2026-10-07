@@ -149,7 +149,7 @@ playBtn.addEventListener('click', async () => {
     try {
       player.resumeContext();
       setPlayingUI(true);
-      await player.play(WORKLET_BLOB_URL);
+      await player.play(WORKLET_URL);
     } catch (err) {
       showError(err.message || String(err));
       setPlayingUI(false);
@@ -443,7 +443,7 @@ async function loadTrack(index, autoplay) {
   if (autoplay) {
     try {
       player.resumeContext();
-      await player.play(WORKLET_BLOB_URL);
+      await player.play(WORKLET_URL);
       setPlayingUI(true);
     } catch (e) {
       console.error('Autoplay failed:', e);

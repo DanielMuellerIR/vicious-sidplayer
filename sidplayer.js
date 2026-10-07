@@ -121,7 +121,7 @@ export class SidPlayer {
     }
 
     if (!ctx.__sidWorkletAdded) {
-      // In standalone, workletUrl is a Blob URL containing the minified worklet source
+      // Die Single-File-Ausgabe uebergibt den eingebetteten Worklet-Quelltext als Data-URL.
       await ctx.audioWorklet.addModule(workletUrl);
       ctx.__sidWorkletAdded = true;
     }

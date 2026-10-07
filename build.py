@@ -205,7 +205,7 @@ def build(minify: bool = True) -> Path:
         f'{body_src}'
         '<script>'
         f'const WORKLET_SOURCE={worklet_src!r};'
-        "const WORKLET_BLOB_URL=URL.createObjectURL(new Blob([WORKLET_SOURCE],{type:'application/javascript'}));"
+        "const WORKLET_URL='data:application/javascript;charset=utf-8,'+encodeURIComponent(WORKLET_SOURCE);"
         f'{sidplayer_src}\n'
         f'{app_src}'
         '</script>'
