@@ -148,6 +148,7 @@ App Store offen bleibt.
 - **Hintergrundwiedergabe**: Die Musik läuft bei gesperrtem Display weiter, mit
   Play/Pause, Vor/Zurück und Positionssteuerung über Sperrbildschirm,
   Kontrollzentrum und AirPods.
+- **Titelauswahl**: Antippen eines Bibliothekstitels bereitet ihn vor; Play startet die Wiedergabe. Die Auswahl eines anderen Titels stoppt den bisherigen und bereitet den neuen vor.
 - **Ordner-Import**: Einen Ordner auswählen (iCloud Drive, Nextcloud, „Auf
   meinem iPhone“) — die App läuft rekursiv hindurch, erhält die
   Unterordnerstruktur, überspringt Duplikate, zeigt Fortschritt und lässt sich

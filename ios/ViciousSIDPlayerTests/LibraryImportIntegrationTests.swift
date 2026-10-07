@@ -425,6 +425,40 @@ final class LibraryImportIntegrationTests: XCTestCase {
         XCTAssertTrue(fm.fileExists(atPath: root.appendingPathComponent("A/one.sid").path))
     }
 
+    func testSelectionPreparesAndOnlyPlayStartsIncludingPausedAndPlayingChanges() async throws {
+        try write("A/one.sid", payload: [0x60, 0xEA, 0xEA, 0x60])
+        try write("B/two.sid", payload: [0x60, 0xEA, 0xEA, 0x60])
+        await importSource()
+        model.select(trackID: "A/one.sid")
+        XCTAssertEqual(model.currentTrackID, "A/one.sid")
+        XCTAssertFalse(model.coordinator.isPlaying)
+        model.togglePlayPause()
+        XCTAssertTrue(model.coordinator.isPlaying)
+        model.togglePlayPause()
+        XCTAssertTrue(model.coordinator.isPaused)
+        model.select(trackID: "B/two.sid")
+        XCTAssertEqual(model.currentTrackID, "B/two.sid")
+        XCTAssertFalse(model.coordinator.isPlaying)
+        XCTAssertFalse(model.coordinator.isPaused)
+        model.togglePlayPause()
+        XCTAssertTrue(model.coordinator.isPlaying)
+        model.select(trackID: "A/one.sid")
+        XCTAssertFalse(model.coordinator.isPlaying)
+        XCTAssertEqual(model.coordinator.elapsedSeconds, 0)
+
+        let bad = try XCTUnwrap(model.libraryRoot).appendingPathComponent("Bad.sid")
+        try Data([1, 2, 3]).write(to: bad)
+        model.togglePlayPause()
+        model.select(trackID: "Bad.sid")
+        XCTAssertNotNil(model.errorMessage)
+        XCTAssertEqual(model.currentTrackID, "A/one.sid")
+        XCTAssertTrue(model.coordinator.isPlaying)
+        model.select(trackID: "Missing.sid")
+        XCTAssertEqual(model.currentTrackID, "A/one.sid")
+        XCTAssertTrue(model.coordinator.isPlaying)
+        model.coordinator.stop()
+    }
+
     // MARK: - Fremdablage (Finder-Dateifreigabe)
 
     // Weg B des Plans: der Nutzer legt ueber den Finder Dateien direkt in

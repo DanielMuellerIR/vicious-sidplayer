@@ -149,7 +149,7 @@ struct LibraryView: View {
                             isCurrent: model.currentTrackID == trackID,
                             isFavorite: isFavorite,
                             showsFolderPath: showsFolderPath) {
-            model.play(trackID: trackID)
+            model.select(trackID: trackID)
         }
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             Button {

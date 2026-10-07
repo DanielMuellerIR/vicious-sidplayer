@@ -147,6 +147,7 @@ privacy manifest, so the App Store route stays open.
 - **Background playback**: music keeps running when the screen is locked, with
   play/pause, previous/next and position control from the lock screen, the
   Control Center and AirPods.
+- **Track selection**: tapping a library track prepares it; press Play to start. Selecting another track stops the previous one and prepares the new selection.
 - **Folder import**: pick a folder (iCloud Drive, Nextcloud, “On My iPhone”) and
   the app walks it recursively, keeping the directory structure, skipping
   duplicates, with progress and a cancel button.

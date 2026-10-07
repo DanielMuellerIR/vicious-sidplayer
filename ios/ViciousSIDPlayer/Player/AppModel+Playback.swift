@@ -16,9 +16,9 @@ extension AppModel {
 
     // MARK: - Titel laden
 
-    /// Laedt einen Titel und spielt ihn ab.
-    func play(trackID: String) {
-        loadTrack(id: trackID, autoplay: true)
+    /// Bereitet die Bibliotheksauswahl vor. Erst die Play-Aktion startet Audio.
+    func select(trackID: String) {
+        loadTrack(id: trackID, autoplay: false)
     }
 
     /// Gemeinsamer Ladeweg. Entspricht `loadTrack(index:autoplay:)` der Mac-App.

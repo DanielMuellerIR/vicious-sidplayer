@@ -12,7 +12,7 @@
    Datei-/Ordnerkommentare, Subtunes, eindeutige Pfadenden sowie unbekannte und
    mehrdeutige Titel. Reine Ordnerkommentare werden seit v1.9.24 ebenfalls
    aufgelöst; breite Seitenleisten schneiden keine Beschriftungen mehr ab.
-   **Die visuelle STIL-Abnahme auf iOS bleibt offen.**
+   **iOS-Simulatoranzeige am 2026-10-07 geprüft:** Datei-/Ordner-/Subtune-Kommentare, unbekannte und mehrdeutige Titel; persönliche Geräteabnahme bleibt separat.
 2. ~~HVSC-Browser/Bibliotheksansicht~~ **erledigt am 2026-08-23 (v1.9.14).** Die
    Mac-App hat jetzt denselben aufklappbaren Ordnerbaum wie die iPhone-App,
    umschaltbar im Kopf der Seitenleiste. Das Flachklopfen des Baums steht im
@@ -59,10 +59,13 @@
   bleibt als dauerhaft relevante Entscheidungsgrundlage im Repo.
 - Querformat funktioniert, ist aber nicht ausgereizt (Hochformat war die Vorgabe).
 - App-Icon ist programmatisch erzeugt und zweckmäßig, kein gestaltetes Motiv.
-- Offene Entscheidung: Die Sitzungswiederherstellung bereitet den Titel nur vor und
-  spielt **nicht** von selbst los — bewusst anders als die Mac-App, damit die App beim
-  Öffnen nicht ungefragt aus der Hosentasche dudelt. Umdrehen ist eine Zeile in
-  `ios/ViciousSIDPlayer/Player/AppModel+Playback.swift`.
+- **Prepare-only bestätigt und umgesetzt am 2026-10-07 (v1.9.24):**
+  Sitzungswiederherstellung und Bibliotheksauswahl bereiten den Titel vor;
+  erst Play startet die Wiedergabe. Eine neue Auswahl stoppt den bisherigen
+  Titel. Fehlerhafte oder verschwundene Dateien erhalten den bisherigen
+  Zustand. Wechsel aus Stop/Pause/Wiedergabe, expliziter Start und Fehlerfälle
+  sind im Simulator getestet.
+
 - Der Import liest jede Datei vollständig in den Speicher (nötig für MD5-Dedupe und
   für das koordinierte Lesen von File-Provider-Platzhaltern). Bei SID-Dateien
   unkritisch; erst relevant, falls je größere Formate dazukommen.
