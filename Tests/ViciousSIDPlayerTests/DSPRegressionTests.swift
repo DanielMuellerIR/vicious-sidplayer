@@ -59,6 +59,17 @@ final class DSPRegressionTests: XCTestCase {
         XCTAssertEqual((0..<1000).map { _ in skipped.play() }, (0..<1000).map { _ in played.play() })
     }
 
+    func testRestartRestoresRAMBeforeNonIdempotentInit() throws {
+        let file = try sid([0xEE,0x00,0x20,0xAD,0x00,0x20,0x8D,0x01,0xD4,0x60])
+        let p = processor(file)
+        XCTAssertEqual(p.getChannelsData().frequencies.0, 256)
+        for _ in 0..<1000 { _ = p.play() }
+        p.seek(seconds: 0)
+        XCTAssertEqual(p.getChannelsData().frequencies.0, 256)
+        p.initSubtune(sub: 0)
+        XCTAssertEqual(p.getChannelsData().frequencies.0, 256)
+    }
+
     func testMinimalVersionOneDoesNotReadPayloadAsModelFlags() throws {
         let file = try sid([0x60], version: 1)
         XCTAssertEqual(file.binaryData, Data([0x60]))

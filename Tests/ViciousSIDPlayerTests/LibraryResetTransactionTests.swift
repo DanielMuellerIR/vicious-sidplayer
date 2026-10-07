@@ -63,6 +63,26 @@ final class LibraryResetTransactionTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: outside), Data([4]))
     }
 
+    func testAliasedSupportRootFailsBeforeAnyStateChanges() throws {
+        let fm = FailingResetFileManager()
+        let base = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        addTeardownBlock { try? FileManager.default.removeItem(at: base) }
+        let root = base.appendingPathComponent("Music")
+        let alias = base.appendingPathComponent("Alias")
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        try fm.createSymbolicLink(at: alias, withDestinationURL: root)
+        let library = MusicLibrary(root: root, supportDirectory: alias, fileManager: fm)
+        let song = root.appendingPathComponent("a.sid")
+        try Data([1]).write(to: song)
+        var cleared = false
+        XCTAssertThrowsError(try LibraryReset.run(library: library) { cleared = true }) {
+            XCTAssertEqual($0 as? LibraryReset.ResetError, .overlappingRoots)
+        }
+        XCTAssertEqual(fm.moveCount, 0)
+        XCTAssertFalse(cleared)
+        XCTAssertEqual(try Data(contentsOf: song), Data([1]))
+    }
+
     func testCommittedResetReportsRetainedStorageWithoutReindexingIt() throws {
         let fm = FailingResetFileManager()
         let (library, _) = try fixture(fm)

@@ -36,13 +36,15 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
 SECONDS_TO_RENDER=2
+SID_MODEL="${PARITY_SID_MODEL:-8580}"
+case "$SID_MODEL" in 6581|8580) ;; *) echo "PARITY_SID_MODEL muss 6581 oder 8580 sein" >&2; exit 2 ;; esac
 
 # --- 1. Synthetische Testdatei ------------------------------------------------
 # Die 6502-Routine schaltet Stimme 1 auf PULS mit maximaler Pulsbreite und laesst
 # die Frequenz Frame fuer Frame steigen. Das ist Absicht: Der Puls-Pfad rechnet
 # unterhalb und oberhalb von accuadd = 0x10000 unterschiedlich, eine steigende
 # Frequenz laeuft also durch beide Faelle.
-python3 - "$work/parity.sid" <<'PY'
+python3 - "$work/parity.sid" "$SID_MODEL" <<'PY'
 import struct, sys
 
 LOAD = 0x1000
@@ -70,7 +72,7 @@ struct.pack_into(">H", h, 12, LOAD + play_off)  # play
 struct.pack_into(">H", h, 14, 1)                # ein Subtune
 struct.pack_into(">H", h, 16, 1)                # Startsong (1-basiert)
 h[0x16:0x16 + 12] = b"Pulse Parity"
-h[0x77] = 0x20                                  # Modell 8580
+h[0x77] = 0x10 if sys.argv[2] == '6581' else 0x20
 # … deshalb folgt das Binary direkt, ohne die sonst ueblichen zwei Adressbytes.
 open(sys.argv[1], "wb").write(bytes(h) + bytes(code))
 PY

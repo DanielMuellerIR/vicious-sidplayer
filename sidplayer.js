@@ -150,7 +150,9 @@ export class SidPlayer {
    */
   async load(url, subtune = 0) {
     const myGen = ++this.loadGen;
-    this.playGen++;
+    this.stop();
+    this.loaded = false;
+    this.pendingData = null;
 
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${res.statusText}`);
@@ -185,7 +187,9 @@ export class SidPlayer {
     // wird dennoch erhoeht, damit ein evtl. noch laufender asynchroner load()
     // (mit await fetch) sich anschliessend selbst als stale erkennt.
     this.loadGen++;
-    this.playGen++;
+    this.stop();
+    this.loaded = false;
+    this.pendingData = null;
 
     const meta = parseSidHeader(uint8);
     if (!meta) throw new Error('Invalid SID file (bad header)');

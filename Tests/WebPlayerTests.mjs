@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import vm from 'node:vm';
 const wrapper = await readFile(new URL('../sidplayer.js', import.meta.url), 'utf8');
 const { SidPlayer, parseSidHeader } = await import(`data:text/javascript;base64,${Buffer.from(wrapper).toString('base64')}`);
 const source = await readFile(new URL('../sid-player-worklet.js', import.meta.url), 'utf8');
+const appSource = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
 const Engine = new Function('sampleRate', source.slice(0, source.indexOf('class SidPlayerWorklet')) + '; return SidPlayerProcessor;')(44100);
 
 function sid(code = [0x60], version = 2, playOffset = code.length - 1) {
@@ -32,6 +34,36 @@ function audioMock() {
     connect() {} disconnect() {}
   };
   return { nodes, release };
+}
+
+function ui() {
+  class Element {
+    listeners = {}; style = {}; dataset = {}; disabled = true; value = ''; children = [];
+    classes = new Set();
+    classList = { add: (...names) => names.forEach(n => this.classes.add(n)),
+      remove: (...names) => names.forEach(n => this.classes.delete(n)), contains: name => this.classes.has(name) };
+    addEventListener(name, fn) { this.listeners[name] = fn; }
+    appendChild(child) { this.children.push(child); }
+    setAttribute() {} querySelectorAll() { return []; } getContext() { return {}; }
+  }
+  let release;
+  const module = new Promise(resolve => { release = resolve; });
+  const elements = new Map();
+  const context = vm.createContext({ console, Uint8Array, WeakMap, setTimeout, clearTimeout,
+    document: { getElementById(id) { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); },
+      createElement() { return new Element(); } },
+    window: { addEventListener() {}, matchMedia() { return { matches: true }; }, AudioContext: class {
+      state = 'running'; destination = {}; audioWorklet = { addModule: () => module };
+      createBuffer() { return {}; } createBufferSource() { return { connect() {}, start() {}, disconnect() {} }; }
+    } },
+    AudioWorkletNode: class { port = { postMessage() {} }; connect() {} },
+    localStorage: { getItem() { return null; }, setItem() {} }, requestAnimationFrame() {}, WORKLET_URL: 'fixture'
+  });
+  vm.runInContext(wrapper.replaceAll('export ', ''), context);
+  vm.runInContext(appSource, context);
+  context.valid = sid();
+  vm.runInContext("trackList = [{name:'Valid',buffer:valid,isUser:true},{name:'Invalid',buffer:new Uint8Array(5),isUser:true}]", context);
+  return { elements, release, run: code => vm.runInContext(code, context) };
 }
 
 test('PSID v1 has no model flags; truncated and overlapping headers are rejected', () => {
@@ -65,6 +97,36 @@ test('seek preserves ENV3-dependent CPU decisions and following audio', () => {
   skipped.seek(1);
   assert.equal(skipped.getChannelsData().frequencies[0], 0x5000);
   assert.deepEqual(Array.from({ length: 1000 }, () => skipped.playSample()), Array.from({ length: 1000 }, () => played.playSample()));
+});
+test('seek and subtune restart restore RAM before a non-idempotent init', () => {
+  const p = engine(sid([0xEE,0,0x20,0xAD,0,0x20,0x8D,1,0xD4,0x60]));
+  assert.equal(p.getChannelsData().frequencies[0], 256);
+  for (let i = 0; i < 1000; i++) p.playSample();
+  p.seek(0);
+  assert.equal(p.getChannelsData().frequencies[0], 256);
+  p.initSubtune(0);
+  assert.equal(p.getChannelsData().frequencies[0], 256);
+});
+test('file model flags change filtered audio for each SID chip', () => {
+  for (const chip of [0, 1, 2]) {
+    const address = [0xD400, 0xD420, 0xD440][chip];
+    const code = [];
+    for (const [offset, value] of [[0x18,0x1F],[5,0],[6,0xF0],[1,0x20],[4,0x21],[0x16,0x40],[0x17,1]]) {
+      code.push(0xA9,value,0x8D,(address + offset) & 255,(address + offset) >> 8);
+    }
+    code.push(0x60);
+    const render = model => {
+      const data = sid(code, 4);
+      data[0x7A] = chip > 0 ? 0x42 : 0;
+      data[0x7B] = chip > 1 ? 0x44 : 0;
+      if (chip === 0) data[0x77] = model === 6581 ? 0x10 : 0x20;
+      if (chip === 1) data[0x77] |= model === 6581 ? 0x40 : 0x80;
+      if (chip === 2) data[0x76] = model === 6581 ? 1 : 2;
+      const p = engine(data);
+      return Array.from({ length: 4000 }, () => p.playSample());
+    };
+    assert.notDeepEqual(render(6581), render(8580));
+  }
 });
 test('concurrent play requests create one connected worklet', async () => {
   const mock = audioMock(), player = new SidPlayer();
@@ -114,4 +176,35 @@ test('worklet seek yields between blocks and a newer seek replaces it', () => {
   worklet.process([], outputs, {});
   assert.equal(worklet.seeking, false);
   assert.equal(worklet.engine.getChannelsData().playtime, 0);
+});
+
+test('a failed UI selection cannot play the previously loaded title', async () => {
+  const page = ui(); page.release();
+  await page.run('loadTrack(0, true)');
+  await page.run('loadTrack(1, true)');
+  await page.elements.get('play-btn').listeners.click();
+  assert.equal(page.elements.get('play-btn').disabled, true);
+  assert.equal(page.run('player.loaded'), false);
+  assert.equal(page.run('player.playing'), false);
+  assert.match(page.elements.get('error-display').textContent, /bad header/);
+});
+
+test('Stop during initial autoplay setup leaves the UI idle after setup completes', async () => {
+  const page = ui();
+  const pending = page.run('loadTrack(0, true)');
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(page.run('playingState'), true);
+  await page.elements.get('play-btn').listeners.click();
+  page.release(); await pending;
+  assert.equal(page.run('player.playing'), false);
+  assert.equal(page.run('playingState'), false);
+  assert.equal(page.elements.get('footer-state').textContent, '■ IDLE');
+});
+
+test('the first theme click switches a dark system default to light', () => {
+  const page = ui();
+  assert.equal(page.elements.get('theme-btn').textContent, 'LIGHT');
+  page.elements.get('theme-btn').listeners.click();
+  assert.equal(page.elements.get('player').classList.contains('theme-light'), true);
+  assert.equal(page.elements.get('theme-btn').textContent, 'DARK');
 });

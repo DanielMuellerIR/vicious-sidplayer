@@ -123,7 +123,7 @@ struct FolderRowView: View {
     }
 }
 
-/// Titelzeile. Antippen laedt und startet den Titel.
+/// Titelzeile. Antippen bereitet den Titel vor; erst Play startet ihn.
 struct TrackRowView: View {
     let row: LibraryTrackRow
     let isCurrent: Bool

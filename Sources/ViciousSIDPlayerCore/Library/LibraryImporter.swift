@@ -481,6 +481,7 @@ public struct LibraryImporter: Sendable {
     }
 
     private func isSameContent(_ url: URL, size: Int, hash: String) -> Bool {
+        guard LibraryPath.isContained(url, in: library.root) else { return false }
         let values = try? url.resourceValues(forKeys: [.fileSizeKey])
         guard values?.fileSize == size else { return false }
         guard let existing = try? Data(contentsOf: url) else { return false }

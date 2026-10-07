@@ -99,7 +99,7 @@ public enum LibraryReset {
         let root = library.root
 
         let support = library.supportDirectory
-        guard root.standardizedFileURL != support.standardizedFileURL,
+        guard LibraryPath.normalizedComponents(root) != LibraryPath.normalizedComponents(support),
               !isContained(support, in: root), !isContained(root, in: support) else {
             throw ResetError.overlappingRoots
         }

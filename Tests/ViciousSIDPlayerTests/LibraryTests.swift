@@ -335,6 +335,27 @@ final class LibraryTests: XCTestCase {
         XCTAssertFalse(fm.fileExists(atPath: root.appendingPathComponent("tune-2.sid").path))
     }
 
+    func testImportDoesNotTreatExternalVariantSymlinkAsDuplicate() async throws {
+        try writeFixture("tune.sid", in: root, title: "Original")
+        let data = makeSidFixture(title: "New", payload: Array(repeating: 0xEA, count: 128))
+        // Gleiche Link-/Dateigroesse verhindert, dass nur der Vorfilter den
+        // externen Kandidaten ausschliesst statt der Pfadpruefung.
+        let nameLength = data.count - base.path.utf8.count - 1
+        XCTAssertTrue((1...255).contains(nameLength))
+        let outside = base.appendingPathComponent(String(repeating: "x", count: nameLength))
+        try data.write(to: outside)
+        let link = root.appendingPathComponent("tune-2.sid")
+        try fm.createSymbolicLink(at: link, withDestinationURL: outside)
+        try data.write(to: source.appendingPathComponent("tune.sid"))
+        let report = try await LibraryImporter(library: library).importFolder(at: source)
+        XCTAssertEqual(report.imported, ["tune-3.sid"])
+        XCTAssertTrue(report.skipped.isEmpty)
+        XCTAssertTrue(report.failed.isEmpty)
+        XCTAssertEqual(try Data(contentsOf: outside), data)
+        XCTAssertEqual(try fm.destinationOfSymbolicLink(atPath: link.path), outside.path)
+        XCTAssertEqual(library.entries.map(\.relativePath), ["tune-3.sid", "tune.sid"])
+    }
+
     func testImportDoesNotOverwriteDifferentlyCasedCollisionVariant() async throws {
         try writeFixture("tune.sid", in: root, title: "Original")
         try writeFixture("Tune-2.SID", in: root, title: "Keep")

@@ -251,16 +251,14 @@ public struct MainView: View {
 
     // Was der Oeffnen-Dialog anbieten darf: `.sid`-Dateien und Ordner.
     //
-    // Der exportierte UTI ist der genauere Filter, steht dem System aber erst
-    // zur Verfuegung, wenn das App-Bundle registriert ist — in `swift run` also
-    // nicht. Deshalb der Rueckfall auf die Endung; findet das System auch die
-    // nicht, bleibt `.data` (alles anzeigen) besser als ein Dialog, der gar
-    // nichts mehr zeigt.
+    // SIDPLAY registriert denselben Dateisuffix mit einem unabhaengigen UTI.
+    // Beide Typen zulassen; der Endungsfilter deckt weitere registrierte Typen
+    // ab und funktioniert auch ohne unser registriertes App-Bundle.
     static let openPanelContentTypes: [UTType] = {
-        let sid = UTType(SidFileType.uti)
-            ?? UTType(filenameExtension: SidFileType.fileExtension)
-            ?? .data
-        return [sid, .folder]
+        var types = [UTType(SidFileType.uti), UTType("org.sidmusic.sidtune"),
+                     UTType(filenameExtension: SidFileType.fileExtension)].compactMap { $0 }
+        if types.isEmpty { types = [.data] }
+        return Array(Set(types)) + [.folder]
     }()
 
     public init() {}
@@ -1019,6 +1017,7 @@ public struct MainView: View {
     }
 
     private func startPlayback() {
+        guard playlist.track(at: currentTrackIdx) != nil else { return }
         suppressInitialPlayback = false
         coordinator.play()
     }

@@ -63,6 +63,7 @@ cat <<EOF > "$APPEX_CONTENTS/Info.plist"
             <key>QLSupportedContentTypes</key>
             <array>
                 <string>com.viben.sid-tune</string>
+                <string>org.sidmusic.sidtune</string>
             </array>
             <key>QLSupportsSearchableItems</key>
             <false/>

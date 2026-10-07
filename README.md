@@ -364,7 +364,7 @@ bash publish_github.sh --dry-run --release
 bash publish_github.sh --release
 ```
 
-The publishing script sets `origin` to
+The publishing script targets
 `https://github.com/DanielMuellerIR/vicious-sidplayer.git`, blocks accidentally
 tracked audio and release artifacts, and with `--release` creates the matching
 GitHub release entry with the DMG asset.

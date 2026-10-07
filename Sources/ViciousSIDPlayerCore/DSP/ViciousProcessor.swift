@@ -47,6 +47,7 @@ public final class ViciousProcessor: Sendable {
     // Nonisolated unsafe fields to satisfy Swift 6 Strict Concurrency inside core DSP thread.
     // The processor will be owned and driven solely by a single real-time audio thread callback.
     nonisolated(unsafe) private var memory = SafeMemory()
+    nonisolated(unsafe) private var loadedMemory = SafeMemory()
 
     // CPU Registers
     nonisolated(unsafe) private var PC: UInt16 = 0
@@ -226,6 +227,9 @@ public final class ViciousProcessor: Sendable {
     private func initEmulation(subt: Int) {
         if loaded {
             initialized = false
+            // Init-Routinen duerfen RAM veraendern. Jeder Neustart braucht das
+            // urspruenglich geladene Abbild, auch nach einem anderen Subtune.
+            memory = loadedMemory
             subtune = subt
             initCPU(mempos: initaddr)
             initSID()
@@ -1091,6 +1095,7 @@ public final class ViciousProcessor: Sendable {
                 memory[targetIdx] = binary[i]
             }
         }
+        loadedMemory = memory
 
         filePreferredModel = Double(sidFile.prefModel)
         filePreferredModel2 = Double(sidFile.prefModel2)

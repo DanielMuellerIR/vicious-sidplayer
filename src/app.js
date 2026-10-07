@@ -88,6 +88,8 @@ let totalSubtunesCount = 1;
 let currentMetadata = null;
 let playingState = false;
 let userVolume = 0.3;
+let trackLoadGeneration = 0;
+let playbackGeneration = 0;
 
 // Scrubber seeking state
 let isSeeking = false;
@@ -141,7 +143,8 @@ volumeSlider.addEventListener('input', (e) => {
 });
 
 playBtn.addEventListener('click', async () => {
-  if (currentIdx === -1) return;
+  if (currentIdx === -1 || playBtn.disabled) return;
+  const generation = ++playbackGeneration;
   if (playingState) {
     player.stop();
     setPlayingUI(false);
@@ -150,7 +153,9 @@ playBtn.addEventListener('click', async () => {
       player.resumeContext();
       setPlayingUI(true);
       await player.play(WORKLET_URL);
+      if (generation === playbackGeneration) setPlayingUI(player.playing);
     } catch (err) {
+      if (generation !== playbackGeneration) return;
       showError(err.message || String(err));
       setPlayingUI(false);
     }
@@ -400,16 +405,24 @@ function refreshPlaylistUI() {
 
 async function loadTrack(index, autoplay) {
   if (index < 0 || index >= trackList.length) return;
+  const generation = ++trackLoadGeneration;
+  ++playbackGeneration;
   
   currentIdx = index;
   const track = trackList[index];
   
   setPlayingUI(false);
   player.stop();
+  playBtn.disabled = true;
+  positionScrubber.disabled = true;
+  subtuneControls.style.display = 'none';
   showError(null);
   
   // Clean scrubber
   lastVisuals.playtime = 0;
+  if (seekTimer) clearTimeout(seekTimer);
+  seekTimer = null;
+  isSeeking = false;
   positionScrubber.value = 0;
   timeCurrent.textContent = '0:00';
 
@@ -433,19 +446,27 @@ async function loadTrack(index, autoplay) {
       await player.load(track.url || `audio/${track.id}.sid`, 0);
     }
   } catch (err) {
+    if (generation !== trackLoadGeneration) return;
     showError('Load failed: ' + err.message);
     return;
   }
+  if (generation !== trackLoadGeneration) return;
 
   playBtn.disabled = false;
   positionScrubber.disabled = false;
 
   if (autoplay) {
+    const playGeneration = ++playbackGeneration;
     try {
       player.resumeContext();
-      await player.play(WORKLET_URL);
       setPlayingUI(true);
+      await player.play(WORKLET_URL);
+      if (generation === trackLoadGeneration && playGeneration === playbackGeneration) {
+        setPlayingUI(player.playing);
+      }
     } catch (e) {
+      if (generation !== trackLoadGeneration || playGeneration !== playbackGeneration) return;
+      setPlayingUI(false);
       console.error('Autoplay failed:', e);
     }
   }
@@ -521,7 +542,9 @@ function draw() {
   if (W === 0 || H === 0) return;
 
   // Clear background — read from CSS custom property to follow theme
-  const computedBg = getComputedStyle(playerEl).getPropertyValue('--bg-panel').trim() || '#07080c';
+  const themeStyle = getComputedStyle(playerEl);
+  const computedBg = themeStyle.getPropertyValue('--bg-panel').trim() || '#07080c';
+  traceColors = [1, 2, 3].map(voice => themeStyle.getPropertyValue(`--scope-voice-${voice}`).trim());
   ctx.fillStyle = computedBg;
   ctx.fillRect(0, 0, W, H);
 
@@ -635,7 +658,7 @@ function draw() {
 
   // Draw HUD Chip Model indicator
   const model = currentMetadata?.prefModel === 8580 ? '8580' : '6581';
-  ctx.fillStyle = 'rgba(74, 222, 128, 0.4)';
+  ctx.fillStyle = themeStyle.getPropertyValue('--text-secondary').trim();
   ctx.font = '9px monospace';
   ctx.textAlign = 'right';
   ctx.fillText(
@@ -648,7 +671,8 @@ function draw() {
 // ─── Theme Toggle ───────────────────────────────────────────────────────────
 if (themeBtn) {
   themeBtn.addEventListener('click', () => {
-    const wasDark = playerEl.classList.contains('theme-dark');
+    const wasDark = playerEl.classList.contains('theme-dark') ||
+      (!playerEl.classList.contains('theme-light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
     playerEl.classList.remove('theme-dark', 'theme-light');
     if (wasDark) {
       playerEl.classList.add('theme-light');

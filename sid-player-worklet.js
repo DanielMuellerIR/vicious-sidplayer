@@ -51,6 +51,7 @@ class SidPlayerProcessor {
     let SID_model = 8580.0;
     let SID_address = [0xD400, 0, 0];
     let memory = new Uint8Array(65536);
+    let loadedMemory = new Uint8Array(65536);
     
     let loaded = 0;
     let initialized = 0;
@@ -194,6 +195,8 @@ class SidPlayerProcessor {
     function init(subt) {
       if (loaded) {
         initialized = 0;
+        // Init kann RAM veraendern; Seek und Subtune beginnen beim Ladeabbild.
+        memory.set(loadedMemory);
         subtune = subt;
         initCPU(initaddr);
         initSID();
@@ -355,6 +358,7 @@ class SidPlayerProcessor {
     }
 
     function SID_core(num, SIDaddr) {
+      SID_model = preferred_SID_model[num];
       filtin = 0;
       output = 0;
 
@@ -612,6 +616,7 @@ class SidPlayerProcessor {
           memory[loadaddr + i - binOffs] = filedata[i];
         }
       }
+      loadedMemory.set(memory);
       
       let strend = 1;
       for (let i = 0; i < 32; i++) {
