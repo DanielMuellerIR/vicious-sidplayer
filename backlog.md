@@ -150,10 +150,17 @@ Systemverhalten"). Was dabei auffiel und **offen** bleibt:
   Folgenlos für die App, aber unsauber — beobachtet am 2026-08-23.~~ **Behoben am
   2026-10-01:** feste Suite je Testklasse, vor und nach jedem Test geleert.
   Die 35 Simulator-Tests bestehen; nur zwei feste Test-Suite-Dateien bleiben.
-- Der Hintergrund-Scan über 50.001 Dateien dauert headless 4,2 s, in der
-  laufenden App aber 3,6 bis 24 s — er läuft mit niedriger Priorität neben der
-  Wiedergabe. Erträglich, aber ungemessen ist, ob ein Zwischenstand der Liste
-  (statt „alles am Ende") sich lohnt.
+- Der Hintergrund-Scan wurde am **2026-10-07 mit v1.9.24** mit identischen
+  synthetischen Beständen erneut verglichen (je drei Läufe): 5.001 Titel
+  benötigen headless 0,19–0,23 s und im App-Abgleich ohne Index 0,24–0,25 s.
+  Bei 50.001 Titeln sind es headless 1,78–1,80 s und in der App 2,20–2,22 s;
+  mit geladenem Index und laufender Wiedergabe 2,33–2,45 s. Der frühere
+  24-s-Ausreißer wurde unter diesen Bedingungen nicht reproduziert. Die
+  gespeicherte Liste steht beim Wiederstart bereits vor dem Abgleich bereit.
+  Ein zusätzlicher inkrementeller Anzeigepfad hat damit derzeit keinen
+  belegten Nutzen; bei langsamen Datenträgern oder echten Sammlungen erneut
+  messen, bevor der Scan umgebaut wird.
+
 
 Linux-Port (CLI, ALSA und MPRIS) implementiert nach
 `tasks/2026-07-05-linux-port/plan.md`. Core und Startfehler auf Linux geprüft;
