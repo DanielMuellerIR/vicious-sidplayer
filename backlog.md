@@ -163,9 +163,14 @@ Systemverhalten"). Was dabei auffiel und **offen** bleibt:
 
 
 Linux-Port (CLI, ALSA und MPRIS) implementiert nach
-`tasks/2026-07-05-linux-port/plan.md`. Core und Startfehler auf Linux geprüft;
-die hörbare Wiedergabe, Pause/Subtune ohne Knackser und Desktop-Medientasten
-benötigen weiterhin eine echte Linux-Audio-/Desktop-Sitzung.
+`tasks/2026-07-05-linux-port/plan.md`. **Desktop-Vertrag am 2026-10-07 geprüft:**
+Linux x86_64, Swift 6.0, isolierte Cinnamon-/X11-/D-Bus-Sitzung und ALSA-Nullgerät.
+MPRIS Play/Pause sowie Subtune Next/Previous ändern den bestätigten Zustand;
+synthetische XF86AudioPlay-/Stop-Ereignisse laufen über die echten
+Cinnamon-Medientastenbindungen bis zum Player, Stop beendet ihn erfolgreich.
+Die persönliche hörbare Wiedergabe, Knackserfreiheit und physische Tastatur sind
+mit dieser stummen, isolierten Prüfung nicht abgenommen.
+
 
 Permanent zurückgestellt, nur Kandidaten für schlimme Langeweile: Audiofingerprint/
 WhatsSID (bräuchte serverseitige Fingerprint-DB über die HVSC), MUS/CGSC (eigenes Format
