@@ -303,6 +303,7 @@ public struct LibraryImporter: Sendable {
 
         var imported: [String] = []
         var skipped: [LibraryImportSkip] = []
+        let destinations = DestinationIndex()
         // Die beim Zaehlen eingesammelten Traversierungsfehler stehen mit im
         // Bericht — der Nutzer sieht so, dass (und wo) ein Teilbaum fehlt.
         var failed: [LibraryImportFailure] = traversalFailures
@@ -322,7 +323,7 @@ public struct LibraryImporter: Sendable {
 
             let outcome: Outcome
             do {
-                outcome = try await process(job)
+                outcome = try await process(job, destinations: destinations)
             } catch {
                 // `process` wirft ausschliesslich `CancellationError` weiter:
                 // ein mitten im Materialisieren abgebrochener Auftrag ist kein
@@ -373,7 +374,7 @@ public struct LibraryImporter: Sendable {
 
     /// - Throws: nur `CancellationError` — jeder andere Fehler wird zum
     ///   per-Datei-Ergebnis `.failed` (Grundsatz 1: Fehler pro Datei).
-    private func process(_ job: Job) async throws -> Outcome {
+    private func process(_ job: Job, destinations: DestinationIndex) async throws -> Outcome {
         let fm = library.fileManager
 
         // Einzeln gewaehlte Dateien bringen ihren eigenen Sicherheits-Scope mit.
@@ -406,7 +407,7 @@ public struct LibraryImporter: Sendable {
         guard LibraryPath.isContained(destination, in: library.root) else {
             return .failed(.copyFailed, "Der Zielpfad liegt ausserhalb der Bibliothek.")
         }
-        switch resolveDestination(destination, sourceData: data) {
+        switch resolveDestination(destination, sourceData: data, destinations: destinations) {
         case .duplicate:
             return .skipped(.duplicate)
         case .use(let target):
@@ -420,6 +421,7 @@ public struct LibraryImporter: Sendable {
                     return .failed(.copyFailed, "Der Zielpfad liegt ausserhalb der Bibliothek.")
                 }
                 try data.write(to: target, options: .atomic)
+                destinations.record(target)
             } catch {
                 return .failed(.copyFailed, error.localizedDescription)
             }
@@ -433,6 +435,56 @@ public struct LibraryImporter: Sendable {
     }
 
     // MARK: - Dedupe
+
+    /// Nur fuer diesen Importauftrag: je Zielordner einmal lesen und danach
+    /// eigene Schreibvorgaenge nachtragen. Die Gruppen vermeiden auch einen
+    /// erneuten Durchlauf aller Namen je Datei bei grossen flachen Sammlungen.
+    private final class DestinationIndex {
+        private struct Key: Hashable {
+            let base: String
+            let ext: String
+
+            init(base: String, ext: String) {
+                self.base = base.folding(options: .caseInsensitive, locale: nil)
+                self.ext = ext.folding(options: .caseInsensitive, locale: nil)
+            }
+        }
+
+        private final class Directory {
+            var variants: [Key: [Int: [URL]]] = [:]
+
+            func record(_ url: URL) {
+                let name = url.deletingPathExtension().lastPathComponent
+                guard let dash = name.lastIndex(of: "-"),
+                      let number = Int(name[name.index(after: dash)...]), number >= 2,
+                      String(number) == name[name.index(after: dash)...] else { return }
+                let key = Key(base: String(name[..<dash]), ext: url.pathExtension)
+                variants[key, default: [:]][number, default: []].append(url)
+            }
+        }
+
+        private var directories: [URL: Directory] = [:]
+
+        func variants(for preferred: URL, fm: FileManager) -> [Int: [URL]] {
+            let folder = preferred.deletingLastPathComponent().standardizedFileURL
+            let directory: Directory
+            if let existing = directories[folder] {
+                directory = existing
+            } else {
+                directory = Directory()
+                let entries = (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+                for entry in entries { directory.record(entry) }
+                directories[folder] = directory
+            }
+            let key = Key(base: preferred.deletingPathExtension().lastPathComponent,
+                          ext: preferred.pathExtension)
+            return directory.variants[key] ?? [:]
+        }
+
+        func record(_ url: URL) {
+            directories[url.deletingLastPathComponent().standardizedFileURL]?.record(url)
+        }
+    }
 
     private enum Destination {
         /// Inhaltsgleiche Datei liegt schon da.
@@ -451,7 +503,8 @@ public struct LibraryImporter: Sendable {
     /// Der Inhaltsvergleich laeuft ueber die Dateigroesse als billigen Vorfilter
     /// und erst danach ueber MD5 — verschieden grosse Dateien koennen gar nicht
     /// gleich sein, und dann muss man sie auch nicht einlesen.
-    private func resolveDestination(_ preferred: URL, sourceData: Data) -> Destination {
+    private func resolveDestination(_ preferred: URL, sourceData: Data,
+                                    destinations: DestinationIndex) -> Destination {
         let fm = library.fileManager
         let sourceHash = MD5.hexString(of: sourceData)
         if isSameContent(preferred, size: sourceData.count, hash: sourceHash) { return .duplicate }
@@ -461,19 +514,15 @@ public struct LibraryImporter: Sendable {
         let ext = preferred.pathExtension
 
         // Auch hinter einer inzwischen geloeschten Variante koennen Duplikate liegen.
-        let existing = (try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.fileSizeKey])) ?? []
-        var occupied = Set<Int>()
-        for candidate in existing where candidate.pathExtension.caseInsensitiveCompare(ext) == .orderedSame {
-            let name = candidate.deletingPathExtension().lastPathComponent
-            guard let prefix = name.range(of: base + "-", options: [.anchored, .caseInsensitive]),
-                  let suffix = Int(name[prefix.upperBound...]), suffix >= 2,
-                  String(suffix) == name[prefix.upperBound...] else { continue }
-            occupied.insert(suffix)
-            if isSameContent(candidate, size: sourceData.count, hash: sourceHash) { return .duplicate }
+        let variants = destinations.variants(for: preferred, fm: fm)
+        for candidates in variants.values {
+            for candidate in candidates {
+                if isSameContent(candidate, size: sourceData.count, hash: sourceHash) { return .duplicate }
+            }
         }
         if !fm.fileExists(atPath: preferred.path) { return .use(preferred) }
         var suffix = 2
-        while occupied.contains(suffix) || fm.fileExists(atPath: directory
+        while variants[suffix] != nil || fm.fileExists(atPath: directory
             .appendingPathComponent("\(base)-\(suffix)").appendingPathExtension(ext).path) {
             suffix += 1
         }

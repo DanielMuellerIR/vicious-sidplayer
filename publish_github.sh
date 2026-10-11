@@ -213,7 +213,8 @@ if [[ "$DO_RELEASE" == "1" ]]; then
     # einen aelteren Commit, haengt am Ende das frische DMG (per `--clobber`) am
     # Release eines alten Quellstands — Quelle und Auslieferung liefen dauerhaft
     # auseinander (Review-Fund 2026-08-20).
-    BRANCH_COMMIT="$(git rev-parse "${BRANCH}^{commit}")"
+    # Den oben gegen HEAD geprueften refs/heads-Commit beibehalten: Ein
+    # gleichnamiger Tag darf die Quelle des Release-Tags nicht veraendern.
     # Vollstaendig qualifiziert pruefen: Ein Branch desselben Namens loeste den
     # nackten Namen genauso auf, und das Skript hielte einen fehlenden Tag
     # faelschlich fuer vorhanden.

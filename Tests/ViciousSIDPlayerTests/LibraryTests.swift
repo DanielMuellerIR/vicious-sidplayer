@@ -335,6 +335,45 @@ final class LibraryTests: XCTestCase {
         XCTAssertFalse(fm.fileExists(atPath: root.appendingPathComponent("tune-2.sid").path))
     }
 
+    func testFlatImportReadsDestinationDirectoryOncePerBatch() async throws {
+        let counting = CountingFileManager()
+        let countedLibrary = MusicLibrary(root: root, supportDirectory: support, fileManager: counting)
+        var urls: [URL] = []
+        for index in 0..<200 {
+            urls.append(try writeFixture("tune-\(index).sid", in: source))
+        }
+        let importer = LibraryImporter(library: countedLibrary)
+        let first = try await importer.importFiles(urls)
+        XCTAssertEqual(first.imported.count, 200)
+        XCTAssertTrue(first.failed.isEmpty)
+        XCTAssertEqual(counting.directoryReads, 1)
+
+        try writeFixture("tune-199.sid", in: source, title: "Changed")
+        let second = try await importer.importFiles([urls[199], urls[199]])
+        XCTAssertEqual(second.imported, ["tune-199-2.sid"])
+        XCTAssertEqual(second.skipped.map(\.reason), [.duplicate])
+        XCTAssertEqual(counting.directoryReads, 2, "Ein neuer Auftrag muss den Bestand neu lesen")
+    }
+
+    private final class CountingFileManager: FileManager, @unchecked Sendable {
+        private let counterLock = NSLock()
+        private var reads = 0
+
+        var directoryReads: Int {
+            counterLock.lock()
+            defer { counterLock.unlock() }
+            return reads
+        }
+
+        override func contentsOfDirectory(at url: URL, includingPropertiesForKeys keys: [URLResourceKey]?,
+                                          options mask: FileManager.DirectoryEnumerationOptions = []) throws -> [URL] {
+            counterLock.lock()
+            reads += 1
+            counterLock.unlock()
+            return try super.contentsOfDirectory(at: url, includingPropertiesForKeys: keys, options: mask)
+        }
+    }
+
     func testImportDoesNotTreatExternalVariantSymlinkAsDuplicate() async throws {
         try writeFixture("tune.sid", in: root, title: "Original")
         let data = makeSidFixture(title: "New", payload: Array(repeating: 0xEA, count: 128))
@@ -364,6 +403,15 @@ final class LibraryTests: XCTestCase {
         let report = try await LibraryImporter(library: library).importFolder(at: source)
         XCTAssertEqual(report.imported, ["tune-3.sid"])
         XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("Tune-2.SID")), existing)
+    }
+
+    func testImportRecognizesUnicodeCaseVariantsBeyondNumberGaps() async throws {
+        try writeFixture("Straße-3.SID", in: root, title: "Variant")
+        try writeFixture("STRASSE.sid", in: source, title: "Variant")
+        let report = try await LibraryImporter(library: library).importFolder(at: source)
+        XCTAssertTrue(report.imported.isEmpty)
+        XCTAssertEqual(report.skipped.map(\.reason), [.duplicate])
+        XCTAssertFalse(fm.fileExists(atPath: root.appendingPathComponent("STRASSE.sid").path))
     }
 
     func testImportCollectsPerFileFailuresWithoutStopping() async throws {

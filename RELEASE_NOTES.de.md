@@ -1,3 +1,12 @@
+Vicious SID Player 1.9.25 korrigiert Seek, Bibliotheksimport und das Zurücksetzen auf iOS.
+
+- Beim nativen Seek gilt die Stummschaltung schon während des Vorspulens. Dadurch stimmt der Filterzustand an der Zielposition.
+- Große flache Importe lesen jeden Zielordner einmal je Auftrag. Die Duplikaterkennung berücksichtigt weiterhin nummerierte Varianten, Nummernlücken und Unicode-Groß-/Kleinschreibung.
+- Während des Zurücksetzens auf iOS starten Titel- und Subtunewechsel keine neuen Songlängenschätzungen.
+- Release-Tags behalten den geprüften Branch-Commit auch dann, wenn ein Tag genauso heißt wie der Branch.
+
+## Frühere Änderungen
+
 Vicious SID Player 1.9.21 macht die macOS-App tauglich für eine echte Sammlung.
 An 50.001 Dateien geprüft — der Größe einer vollständigen High Voltage SID
 Collection — stürzte die Vorversion beim Start ab. Jetzt startet sie im

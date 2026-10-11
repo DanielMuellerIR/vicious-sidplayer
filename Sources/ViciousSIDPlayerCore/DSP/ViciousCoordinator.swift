@@ -417,13 +417,10 @@ public final class ViciousCoordinator: ObservableObject {
             let sub = currentSubtune
             let rate = processor.sampleRate
             let model = modelOverride
+            let muted = voiceMuted
             let worker = Task.detached(priority: .userInitiated) {
-                let prepared = ViciousProcessor(sampleRate: rate)
-                _ = prepared.loadSID(sidFile: sid)
-                prepared.setModelOverride(model.map { Double($0) })
-                prepared.initSubtune(sub: sub)
-                try prepared.seekCancellable(seconds: target) { try Task.checkCancellation() }
-                return prepared
+                try Self.prepareSeekProcessor(sid: sid, subtune: sub, sampleRate: rate,
+                                              model: model, voiceMuted: muted, seconds: target)
             }
             seekTask = Task { [weak self] in
                 do {
@@ -454,6 +451,20 @@ public final class ViciousCoordinator: ObservableObject {
         }
         visualsBuffer.updatePlaytime(target)
         elapsedSeconds = target
+    }
+
+    nonisolated static func prepareSeekProcessor(sid: SidFileData, subtune: Int,
+                                                sampleRate: Double, model: Int?,
+                                                voiceMuted: [Bool], seconds: Double) throws -> ViciousProcessor {
+        let prepared = ViciousProcessor(sampleRate: sampleRate)
+        _ = prepared.loadSID(sidFile: sid)
+        prepared.setModelOverride(model.map { Double($0) })
+        prepared.initSubtune(sub: subtune)
+        // Mute beeinflusst den Filtereingang und muss deshalb schon beim
+        // Vorspulen gelten; spaeteres Setzen liesse einen hoerbaren Filterrest.
+        for voice in 0..<3 { prepared.setVoiceMuted(voice: voice, muted: voiceMuted[voice]) }
+        try prepared.seekCancellable(seconds: seconds) { try Task.checkCancellation() }
+        return prepared
     }
 
     public func setSubtune(sub: Int) {

@@ -21,12 +21,28 @@ name = pathlib.Path(sys.argv[0]).name
 args = sys.argv[1:]
 with open(os.environ['VSP_TEST_CALLS'], 'a') as stream:
     stream.write(json.dumps([name] + args) + '\\n')
+if name == 'git' and args and args[0] == 'ls-remote':
+    ref = args[-1]
+    commit = subprocess.check_output([os.environ['VSP_TEST_REAL_GIT'], 'rev-parse', ref], text=True).strip()
+    print(commit + '\\t' + ref)
+    sys.exit(0)
 if name == 'git' and (not args or args[0] != 'push'):
     sys.exit(subprocess.call([os.environ['VSP_TEST_REAL_GIT']] + args))
+if name == 'hdiutil' and args[0] == 'attach':
+    app = pathlib.Path(args[args.index('-mountpoint') + 1]) / 'Fixture.app/Contents'
+    app.mkdir(parents=True)
+    (app / 'Info.plist').write_text('fixture')
+if name == 'hdiutil' and args[0] == 'detach':
+    import shutil
+    shutil.rmtree(pathlib.Path(args[1]) / 'Fixture.app')
+if name == 'plutil':
+    print('99.0.0')
+if name == 'gh' and args[:2] == ['release', 'view']:
+    sys.exit(1)
 if name == 'codesign' and args[-1] == os.environ.get('VSP_TEST_INVALID_APP'):
     sys.exit(1)
 '''
-    for name in ['git', 'hdiutil', 'codesign', 'spctl', 'xcrun']:
+    for name in ['git', 'hdiutil', 'codesign', 'spctl', 'xcrun', 'plutil', 'gh']:
         path = commands / name
         path.write_text(stub)
         path.chmod(0o755)
@@ -79,6 +95,22 @@ if name == 'codesign' and args[-1] == os.environ.get('VSP_TEST_INVALID_APP'):
     assert not [call for call in recorded() if call[:2] == ['git', 'push']]
     clear()
 
+    # Ein alter Tag namens main darf den neueren Branch main nicht verdecken.
+    git('tag', 'main', 'refs/heads/older')
+    (public / '.git/info/exclude').write_text('build/\n')
+    (public / 'build').mkdir()
+    (public / 'build/Vicious SID Player.dmg').write_bytes(b'fixture')
+    result = subprocess.run(['bash', 'publish_github.sh', '--release'], cwd=public, env=env, capture_output=True)
+    assert result.returncode == 0, result.stderr.decode()
+    assert git('rev-parse', 'refs/tags/v99.0.0^{commit}').stdout == git('rev-parse', 'refs/heads/main^{commit}').stdout
+    assert any(call[:3] == ['gh', 'release', 'create'] for call in recorded())
+    pushes = [call for call in recorded() if call[:2] == ['git', 'push']]
+    assert pushes == [
+        ['git', 'push', '--no-follow-tags', target, 'refs/heads/main:refs/heads/main'],
+        ['git', 'push', '--no-follow-tags', target, 'refs/tags/v99.0.0:refs/tags/v99.0.0'],
+    ], pushes
+    clear()
+
     # Nur den echten Ziel-Guard ausfuehren; alle Ziele liegen im Testordner.
     script = (repo / 'install.sh').read_text()
     guard = script[script.index('TEAM='):script.index('STAGE_DIR=')]
@@ -98,4 +130,4 @@ if name == 'codesign' and args[-1] == os.environ.get('VSP_TEST_INVALID_APP'):
     result = subprocess.run(['bash', '-c', harness, 'guard', str(new), str(linked)], env=env, capture_output=True)
     assert result.returncode != 0
     assert sentinel.read_text() == 'foreign app'
-print('Release-Gates: fremdes Volume/Artefakt, mehrere Pushziele, Branch-Abweichung und fremde Installationsziele bestanden.')
+print('Release-Gates: fremdes Volume/Artefakt, mehrere Pushziele, Branch-Abweichung, gleichnamiger Tag und fremde Installationsziele bestanden.')

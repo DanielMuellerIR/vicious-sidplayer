@@ -498,6 +498,9 @@ extension AppModel {
     /// gelten darf. Hier bleibt nur der Hintergrund-Task und das, was danach in
     /// der Oberflaeche passiert.
     func resolveComputedLengthIfNeeded() {
+        // Reset wartet alle zuvor gestarteten Schaetzer ab. Bis zum Commit
+        // darf auch ein Titel-/Subtunewechsel keinen neuen Cache-Schreiber starten.
+        guard services.resetTask == nil else { return }
         computedLength = nil
         let fileURL = currentTrackID.flatMap { trackURL(for: $0) }
         switch lengthResolver.plan(md5: currentMD5,

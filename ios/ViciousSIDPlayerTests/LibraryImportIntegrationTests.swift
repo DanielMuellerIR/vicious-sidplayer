@@ -1,5 +1,5 @@
 import XCTest
-import ViciousSIDPlayerCore
+@testable import ViciousSIDPlayerCore
 @testable import ViciousSIDPlayer
 
 /// Haelt genau den ersten Dateizugriff offen, bis der Test den zweiten Import
@@ -41,6 +41,22 @@ private actor ImportReadBarrier {
 
     func release() {
         wasReleased = true
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+private actor ResetEstimateBarrier {
+    private var released = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        guard !released else { return }
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func release() {
+        released = true
         continuation?.resume()
         continuation = nil
     }
@@ -388,6 +404,56 @@ final class LibraryImportIntegrationTests: XCTestCase {
 
         await resetLibrary(keepFavorites: false)
         XCTAssertFalse(model.isFavorite("A/one.sid"))
+    }
+
+    func testResetBlocksNewEstimatesDuringTrackAndSubtuneChanges() async throws {
+        try write("one.sid", payload: [0x60, 0xEA, 0xEA, 0x60])
+        let second = try write("two.sid", payload: [0x60, 0xEA, 0x00, 0x60])
+        var data = try Data(contentsOf: second)
+        data[0x0F] = 2
+        try data.write(to: second)
+        await importSource()
+        XCTAssertTrue(model.loadTrack(id: "one.sid", autoplay: false))
+        model.cancelLengthEstimate()
+        let md5 = try XCTUnwrap(model.currentMD5)
+        let root = try XCTUnwrap(model.libraryRoot)
+        let resolver = model.lengthResolver
+        guard case .estimate(let ticket) = resolver.plan(md5: md5, subtune: 0,
+            databaseLengths: nil, fileURL: root.appendingPathComponent("one.sid")) else {
+            return XCTFail("Kein Schaetzauftrag")
+        }
+        let barrier = ResetEstimateBarrier()
+        let running = Task.detached {
+            await barrier.wait()
+            resolver.storeIfCurrent(ticket: ticket, seconds: 123)
+        }
+        model.lengthEstimateOwner = ticket
+        model.lengthEstimateTask = running
+        model.lengthCache.store(md5: md5, subtune: 0, seconds: 42)
+
+        model.resetLibrary(keepFavorites: true)
+        XCTAssertNotNil(model.services.resetTask)
+        // Der Reset wartet am alten Task; die Dateien sind noch verfuegbar.
+        XCTAssertTrue(model.loadTrack(id: "two.sid", autoplay: false))
+        XCTAssertNil(model.lengthEstimateTask, "Titelwechsel darf keinen Schaetzer starten")
+        model.setSubtune(1)
+        XCTAssertEqual(model.coordinator.currentSubtune, 1)
+        XCTAssertNil(model.lengthEstimateTask, "Subtunewechsel darf keinen Schaetzer starten")
+        XCTAssertFalse(resolver.isEstimating)
+        XCTAssertEqual(model.lengthCache.length(md5: md5, subtune: 0), 42,
+                       "Vor dem Ende des alten Tasks darf der Cache noch nicht geleert sein")
+        let secondMD5 = model.currentMD5
+        model.cancelLengthEstimate()
+        await barrier.release()
+        await running.value
+        await waitForReset()
+        await waitForLibrary()
+        XCTAssertNil(model.lengthCache.length(md5: md5, subtune: 0))
+        if let secondMD5 {
+            XCTAssertNil(model.lengthCache.length(md5: secondMD5, subtune: 1))
+        }
+        XCTAssertNil(model.lengthEstimateTask)
+        XCTAssertTrue(model.tracks.isEmpty)
     }
 
     func testFailedResetPreservesTrackPositionSessionFavoritesAndLibrary() async throws {

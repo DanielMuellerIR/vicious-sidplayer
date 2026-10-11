@@ -59,6 +59,33 @@ final class DSPRegressionTests: XCTestCase {
         XCTAssertEqual((0..<1000).map { _ in skipped.play() }, (0..<1000).map { _ in played.play() })
     }
 
+    #if canImport(AVFoundation)
+    func testSeekWorkerRebuildsFilterWithTheMutedVoiceState() throws {
+        // Stimme 1: Saegezahn, dauerhaftes Gate, Tiefpass mit Resonanz.
+        let file = try sid([0xA9,0x1F,0x8D,0x18,0xD4, 0xA9,0xF1,0x8D,0x17,0xD4,
+            0xA9,0x20,0x8D,0x16,0xD4, 0xA9,0x00,0x8D,0x05,0xD4,
+            0xA9,0xF0,0x8D,0x06,0xD4, 0xA9,0x20,0x8D,0x01,0xD4,
+            0xA9,0x21,0x8D,0x04,0xD4,0x60])
+        for model in [6581, 8580] {
+            let audible = processor(file)
+            audible.setModelOverride(Double(model))
+            audible.seek(seconds: 1)
+            XCTAssertGreaterThan((0..<200).map { _ in abs(audible.play()) }.max() ?? 0, 0.001)
+
+            let continuous = processor(file)
+            continuous.setModelOverride(Double(model))
+            continuous.setVoiceMuted(voice: 0, muted: true)
+            for _ in 0..<44100 { _ = continuous.play() }
+            let prepared = try ViciousCoordinator.prepareSeekProcessor(
+                sid: file, subtune: 0, sampleRate: 44100, model: model,
+                voiceMuted: [true, false, false], seconds: 1)
+            let expected = (0..<200).map { _ in continuous.play() }
+            XCTAssertEqual((0..<200).map { _ in prepared.play() }, expected)
+            XCTAssertTrue(expected.allSatisfy { $0 == 0 })
+        }
+    }
+    #endif
+
     func testRestartRestoresRAMBeforeNonIdempotentInit() throws {
         let file = try sid([0xEE,0x00,0x20,0xAD,0x00,0x20,0x8D,0x01,0xD4,0x60])
         let p = processor(file)
