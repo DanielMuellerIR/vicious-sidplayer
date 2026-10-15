@@ -19,6 +19,16 @@ on:
   workflow_dispatch:
 
 jobs:
+  sparkle:
+    name: macOS update signatures
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Feed and archive signature verification
+        run: bash Tests/sparkle-appcast.sh
+      - name: Stable release guard
+        run: python3 Tests/sparkle-workflow.py
+
   linux:
     name: Linux (Swift 6.0)
     runs-on: ubuntu-latest

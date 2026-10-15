@@ -66,6 +66,7 @@ Der Titelpfad gilt relativ zum Autoplay-Ordner. Absolute Pfade, `..` und alles, 
 - **Playlist mit Duplikaterkennung**: Bereits geladene Titel werden nicht doppelt aufgenommen. Die Playlist kann jederzeit geleert werden.
 - **Shuffle**: Zufallswiedergabe, die über Neustarts erhalten bleibt; ist sie aktiv, startet beim App-Start ein zufälliger Song.
 - **Media-Tasten**: Play/Pause, Stop und Titelsprung über F7/F8/F9, Touch Bar und AirPods — die App registriert sich als *Now Playing*-App des Systems.
+- **macOS-Updates**: Sparkle sucht im Hintergrund nach signierten Updates; „Nach Updates suchen…“ im App-Menü prüft sofort. Die Installation braucht deine Zustimmung. Die erste Sparkle-fähige Version muss einmal manuell installiert werden.
 - **Keine externen Assets**: Die gesamte Oberfläche (inkl. macOS-Fensterdekorationen und Icons) ist rein prozedural in CSS bzw. SwiftUI Canvas gezeichnet.
 
 ---
@@ -373,6 +374,10 @@ Das Veröffentlichungsskript verwendet als Ziel
 getrackte Audio- und Release-Artefakte und erzeugt bei `--release` den passenden
 GitHub-Release-Eintrag mit DMG-Asset.
 
+Den macOS-Updatefeed veröffentlicht `.github/workflows/publish-appcast.yml`.
+Vor dem ersten Release müssen GitHub Pages und das projektspezifische Signiersecret
+wie im [Sparkle-Release-Leitfaden](docs/sparkle-release.md) eingerichtet werden.
+
 ## Herkunft
 
 Die SID- und CPU-Emulation wurde aus dem JavaScript-Projekt **jsSID** von Hermit portiert und um die oben genannten Bugfixes erweitert. Die native macOS-App ist eine vollständige Neuimplementierung in Swift.
@@ -380,3 +385,6 @@ Die SID- und CPU-Emulation wurde aus dem JavaScript-Projekt **jsSID** von Hermit
 ## Lizenz
 
 **WTFPL** — siehe [LICENSE](LICENSE).
+
+Die macOS-App enthält [Sparkle](https://sparkle-project.org/) unter seiner MIT-Lizenz;
+der vollständige Lizenztext liegt unter `Contents/Resources/Sparkle-LICENSE.txt`.

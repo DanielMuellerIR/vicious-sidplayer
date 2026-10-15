@@ -72,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct ViciousSIDPlayerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @StateObject private var updates = UpdateController()
 
     var body: some Scene {
         // Window (nicht WindowGroup): genau EIN Fenster. WindowGroup oeffnete beim
@@ -96,6 +97,13 @@ struct ViciousSIDPlayerApp: App {
                     )
                     NSApplication.shared.orderFrontStandardAboutPanel(options: [.credits: credits])
                 }
+            }
+
+            CommandGroup(after: .appInfo) {
+                Button("Nach Updates suchen…") {
+                    updates.checkForUpdates()
+                }
+                .disabled(!updates.canCheckForUpdates)
             }
 
             CommandMenu("Wiedergabe") {

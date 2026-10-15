@@ -26,6 +26,8 @@ var products: [Product] = [
     .library(name: "ViciousSIDPlayerCore", targets: ["ViciousSIDPlayerCore"])
 ]
 
+var dependencies: [Package.Dependency] = []
+
 var targets: [Target] = [
         // ALSA-Systembibliothek (nur Linux; siehe Sources/CALSA/module.modulemap).
         // Braucht auf dem Build-Rechner das Paket libasound2-dev.
@@ -85,13 +87,21 @@ var targets: [Target] = [
 // Nur auf Apple-Rechnern: die SwiftUI-App und die Quick-Look-Extension.
 // Auf Linux existieren diese Targets gar nicht erst — siehe Erklaerung oben.
 #if os(macOS)
+// Update-Code bekommt neue Versionen nur nach bewusster Prüfung.
+dependencies.append(.package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"))
 products.append(.executable(name: "ViciousSIDPlayerApp", targets: ["ViciousSIDPlayerApp"]))
 
 targets.append(
     .executableTarget(
         name: "ViciousSIDPlayerApp",
-        dependencies: ["ViciousSIDPlayerCore"],
-        path: "Sources/ViciousSIDPlayerApp"
+        dependencies: [
+            "ViciousSIDPlayerCore",
+            .product(name: "Sparkle", package: "Sparkle")
+        ],
+        path: "Sources/ViciousSIDPlayerApp",
+        linkerSettings: [
+            .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@loader_path/../Frameworks"])
+        ]
     )
 )
 
@@ -125,5 +135,6 @@ let package = Package(
         .iOS(.v17)
     ],
     products: products,
+    dependencies: dependencies,
     targets: targets
 )

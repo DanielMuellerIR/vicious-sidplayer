@@ -1,0 +1,150 @@
+name: Publish Sparkle appcast
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published stable release tag, for example v1.9.26
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: sparkle-appcast
+  cancel-in-progress: false
+
+jobs:
+  appcast:
+    runs-on: macos-15
+    if: github.event_name != 'release' || github.event.release.prerelease == false
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+    steps:
+      # Volle Commit-IDs verhindern unbemerkte Änderungen beweglicher Action-Tags.
+      - name: Check out release source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Verify latest stable release
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail() { echo "ERROR: $1" >&2; exit 1; }
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail 'Invalid release tag.'
+          [[ "$(git rev-parse HEAD)" == "$(git rev-parse "$RELEASE_TAG^{commit}")" ]] || fail 'Checkout differs from release tag.'
+          [[ "$(cat VERSION)" == "${RELEASE_TAG#v}" ]] || fail 'Source version differs from release tag.'
+          state="$(gh release view "$RELEASE_TAG" --json isDraft,isPrerelease --jq '[.isDraft, .isPrerelease] | @tsv')"
+          [[ "$state" == $'false\tfalse' ]] || fail 'Release is a draft or prerelease, or its state is missing.'
+          [[ "$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)" == "$RELEASE_TAG" ]] || fail 'Release is not the latest stable release.'
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
+
+      - name: Download and verify release disk image
+        shell: bash
+        run: |
+          set -euo pipefail
+          fail() { echo "ERROR: $1" >&2; exit 1; }
+          mkdir -p update site
+          gh release download "$RELEASE_TAG" --pattern '*.dmg' --dir update
+          shopt -s nullglob
+          dmgs=(update/*.dmg)
+          (( ${#dmgs[@]} == 1 )) || fail 'Release must contain exactly one DMG.'
+          dmg="${dmgs[0]}"
+          xcrun stapler validate "$dmg"
+          codesign --verify --strict "$dmg"
+          spctl --assess --type open --context context:primary-signature "$dmg"
+
+          mount_dir="$(mktemp -d)"
+          mounted=0
+          cleanup() {
+            if [[ "$mounted" == 1 ]]; then
+              hdiutil detach "$mount_dir" -quiet || return 1
+            fi
+            rmdir "$mount_dir"
+          }
+          trap cleanup EXIT
+          hdiutil attach "$dmg" -readonly -nobrowse -mountpoint "$mount_dir" >/dev/null
+          mounted=1
+          apps=("$mount_dir"/*.app)
+          (( ${#apps[@]} == 1 )) || fail 'DMG must contain exactly one app.'
+          app="${apps[0]}"
+          [[ "$(basename "$app")" == 'Vicious SID Player.app' && ! -L "$app" ]] || fail 'Unexpected app in DMG.'
+          codesign --verify --deep --strict \
+            -R='anchor apple generic and certificate leaf[subject.OU] = "9QSWKSR4NQ" and identifier "com.viben.ViciousSIDPlayer"' "$app"
+          xcrun stapler validate "$app"
+          spctl --assess --type execute "$app"
+          plist="$app/Contents/Info.plist"
+          [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")" == com.viben.ViciousSIDPlayer ]] || fail 'Unexpected bundle ID.'
+          [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")" == "${RELEASE_TAG#v}" ]] || fail 'Wrong bundle version.'
+          [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" == "${RELEASE_TAG#v}" ]] || fail 'Wrong display version.'
+          [[ "$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$plist")" == 'https://danielmuellerir.github.io/vicious-sidplayer/appcast.xml' ]] || fail 'Unexpected feed URL.'
+          /usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$plist" > update/public-key.txt
+          [[ "$(cat update/public-key.txt)" == "$(cat config/sparkle-public-key.txt)" ]] || fail 'Wrong public key in app.'
+          # Gleicher Basisname ordnet die eingebetteten Release Notes dem DMG zu.
+          gh release view "$RELEASE_TAG" --json body --jq .body > "${dmg%.dmg}.md"
+
+      # Paketmanifeste und Drittanbieter-Actions erhalten keinen Signierschlüssel.
+      - name: Resolve pinned Sparkle package
+        run: swift package resolve
+
+      - name: Generate and verify signed appcast
+        shell: bash
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          fail() { echo "ERROR: $1" >&2; exit 1; }
+          sparkle_private_key="$SPARKLE_PRIVATE_KEY"
+          unset SPARKLE_PRIVATE_KEY
+          [[ -n "$sparkle_private_key" ]] || fail 'SPARKLE_PRIVATE_KEY is missing.'
+          tool="$(find .build/artifacts/sparkle -type f -name generate_appcast -print -quit)"
+          [[ -n "$tool" ]] || fail 'Sparkle signing tool is missing.'
+          # Der private Schlüssel gelangt nur über stdin zum Signierwerkzeug.
+          printf '%s' "$sparkle_private_key" | "$tool" \
+            --ed-key-file - --embed-release-notes \
+            --maximum-versions 1 --maximum-deltas 0 \
+            --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/" \
+            --link "https://github.com/${GITHUB_REPOSITORY}" \
+            -o "$PWD/site/appcast.xml" "$PWD/update"
+          unset sparkle_private_key
+          xmllint --noout site/appcast.xml
+          shopt -s nullglob
+          dmgs=(update/*.dmg)
+          encoded_name="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$(basename "${dmgs[0]}")")"
+          swift scripts/verify-appcast.swift site/appcast.xml update/public-key.txt "${dmgs[0]}" \
+            "${RELEASE_TAG#v}" "https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${encoded_name}"
+
+      - name: Recheck latest stable release before deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)" != "$RELEASE_TAG" ]]; then
+            echo 'ERROR: A newer stable release appeared during this run.' >&2
+            exit 1
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+        with:
+          name: github-pages-${{ github.run_attempt }}
+          path: site
+
+      - name: Publish appcast on GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}

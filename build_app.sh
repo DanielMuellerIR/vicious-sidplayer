@@ -4,6 +4,7 @@ set -euo pipefail
 echo "=== Building Vicious SID Player App in Release Mode ==="
 swift build -c release
 APP_VERSION="$(cat VERSION)"
+SPARKLE_PUBLIC_KEY="$(cat config/sparkle-public-key.txt)"
 
 echo "=== Creating macOS App Bundle structure ==="
 APP_DIR="Vicious SID Player.app"
@@ -21,6 +22,20 @@ mkdir -p "$RESOURCES_DIR"
 
 # Copy release binary
 cp ".build/release/ViciousSIDPlayerApp" "$MACOS_DIR/"
+
+echo "=== Embedding Sparkle ==="
+SPARKLE_SOURCE="$(find .build/artifacts/sparkle -type d -name Sparkle.framework -print -quit)"
+SPARKLE_LICENSE="$(find .build/artifacts/sparkle -type f -name LICENSE -print -quit)"
+if [[ -z "$SPARKLE_SOURCE" || -z "$SPARKLE_LICENSE" ]]; then
+    echo "ABBRUCH: Sparkle-Framework oder Lizenz fehlt nach dem Build." >&2
+    exit 1
+fi
+SPARKLE_FRAMEWORK="$CONTENTS_DIR/Frameworks/Sparkle.framework"
+mkdir -p "$CONTENTS_DIR/Frameworks"
+ditto "$SPARKLE_SOURCE" "$SPARKLE_FRAMEWORK"
+# Die Haupt-App ist nicht sandboxed; nur ihre Quick-Look-Extension ist es.
+rm -rf "$SPARKLE_FRAMEWORK/Versions/B/XPCServices" "$SPARKLE_FRAMEWORK/XPCServices"
+cp "$SPARKLE_LICENSE" "$RESOURCES_DIR/Sparkle-LICENSE.txt"
 
 echo "=== Assembling Quick Look extension (.appex) ==="
 # Die Quick-Look-Preview-Extension spielt .sid-Dateien direkt im Finder ab
@@ -134,6 +149,22 @@ cat <<EOF > "$CONTENTS_DIR/Info.plist"
     <string>13.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>SUFeedURL</key>
+    <string>https://danielmuellerir.github.io/vicious-sidplayer/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>$SPARKLE_PUBLIC_KEY</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUAutomaticallyUpdate</key>
+    <false/>
+    <key>SUAllowsAutomaticUpdates</key>
+    <false/>
+    <key>SUEnableSystemProfiling</key>
+    <false/>
+    <key>SUVerifyUpdateBeforeExtraction</key>
+    <true/>
+    <key>SURequireSignedFeed</key>
+    <true/>
     <key>CFBundleDocumentTypes</key>
     <array>
         <dict>
@@ -222,8 +253,25 @@ sign_with_retry() {
 # Auch hier von innen nach aussen und die .appex MIT ihren Entitlements — ohne
 # die laedt das System die sandboxed Extension nicht.
 sign_adhoc() {
+    sign_sparkle -
     codesign --force --options runtime --entitlements "$QL_ENTITLEMENTS" --sign - "$APPEX_DIR"
-    codesign --force --options runtime --sign - "$APP_DIR"
+    # Ohne Team-ID würde Library Validation das ad hoc signierte Framework sperren.
+    codesign --force --sign - "$APP_DIR"
+}
+
+sign_sparkle() {
+    local identity="$1" target
+    for target in \
+        "$SPARKLE_FRAMEWORK/Versions/B/Autoupdate" \
+        "$SPARKLE_FRAMEWORK/Versions/B/Updater.app" \
+        "$SPARKLE_FRAMEWORK"
+    do
+        if [[ "$identity" == "-" ]]; then
+            codesign --force --sign - "$target"
+        else
+            sign_with_retry --sign "$identity" "$target"
+        fi
+    done
 }
 
 # Debug-Symbole entfernen, BEVOR signiert wird (strip veraendert das Binary und
@@ -258,9 +306,10 @@ if [[ "$SIGN_APP" == "0" ]]; then
     sign_adhoc
 elif security find-identity -v -p codesigning | grep -Fq "$CODESIGN_IDENTITY"; then
     echo "=== Signing App Bundle ==="
-    # Von innen nach aussen signieren: erst die .appex MIT ihren
-    # Sandbox-Entitlements, dann die App. (Kein --deep mehr: das wuerde
-    # die appex ohne Entitlements neu signieren -> Quick Look laedt sie nicht.)
+    # Von innen nach außen: Sparkles Helfer und Framework, dann die .appex
+    # mit Sandbox-Entitlements, zuletzt die App. --deep würde unter anderem
+    # die Entitlements der Extension überschreiben.
+    sign_sparkle "$CODESIGN_IDENTITY"
     sign_with_retry --entitlements "$QL_ENTITLEMENTS" --sign "$CODESIGN_IDENTITY" "$APPEX_DIR"
     sign_with_retry --sign "$CODESIGN_IDENTITY" "$APP_DIR"
     codesign --verify --deep --strict --verbose=2 "$APP_DIR"

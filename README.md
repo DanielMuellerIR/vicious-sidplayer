@@ -66,6 +66,7 @@ Track paths are relative to the autoplay folder. Absolute paths, `..` and anythi
 - **Playlist with duplicate detection**: Already loaded tunes are not added twice. The playlist can be cleared at any time.
 - **Shuffle**: Random playback that persists across restarts; a random song starts on launch when enabled.
 - **Media keys**: Play/pause, stop, and track skipping via F7/F8/F9, the Touch Bar, and AirPods — the app registers as the system's *Now Playing* app.
+- **macOS updates**: Sparkle checks for signed updates in the background; “Nach Updates suchen…” in the app menu checks immediately. Installing an update requires your approval. The first Sparkle-enabled release needs a manual installation.
 - **No external assets**: The entire interface (including macOS window decorations and icons) is drawn procedurally in CSS and SwiftUI Canvas.
 
 ---
@@ -369,6 +370,10 @@ The publishing script targets
 tracked audio and release artifacts, and with `--release` creates the matching
 GitHub release entry with the DMG asset.
 
+The macOS update feed is published by `.github/workflows/publish-appcast.yml`.
+Before the first release, configure GitHub Pages and the project-specific signing
+secret as described in [the Sparkle release guide](docs/sparkle-release.md).
+
 ## Origin
 
 The SID and CPU emulation was ported from the JavaScript project **jsSID** by Hermit and extended with the bugfixes listed above. The native macOS app is a complete reimplementation in Swift.
@@ -376,3 +381,6 @@ The SID and CPU emulation was ported from the JavaScript project **jsSID** by He
 ## License
 
 **WTFPL** — see [LICENSE](LICENSE).
+
+The macOS app includes [Sparkle](https://sparkle-project.org/) under its MIT license;
+the full license is included as `Contents/Resources/Sparkle-LICENSE.txt`.

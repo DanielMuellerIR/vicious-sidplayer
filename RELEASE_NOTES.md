@@ -1,11 +1,17 @@
+Vicious SID Player 1.9.26 adds Sparkle updates to the macOS app.
+
+- The app checks for signed updates in the background. “Nach Updates suchen…” in the app menu starts an immediate check; installation requires your approval.
+- The release workflow validates the notarized DMG and signs the update feed. Feed and archive signatures are checked against the public key in the shipped app before publication.
+- The first Sparkle-enabled release needs a manual installation. GitHub Pages and the signing secret must be configured before publishing the first feed.
+
+## Earlier changes
+
 Vicious SID Player 1.9.25 fixes seek, library import and iOS reset behavior.
 
 - Native seek applies voice mute before fast-forwarding, preserving the correct filter state at the destination.
 - Large flat imports read each destination directory once per batch. Numbered variants, gaps and Unicode case variants remain covered by duplicate detection.
 - iOS library reset prevents track and subtune changes from starting new song-length estimates while reset is in progress.
 - Release tagging keeps the verified branch commit even when a tag has the same name as the branch.
-
-## Earlier changes
 
 Vicious SID Player 1.9.24 improves library safety, playback state and compatibility across macOS, iOS, Linux and the standalone HTML5 player.
 

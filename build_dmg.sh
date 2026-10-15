@@ -97,7 +97,7 @@ else
     echo "WARNUNG: App ist nicht gueltig signiert. Notarisierung wird fehlschlagen."
 fi
 
-cp -R "${APP_NAME}" "${WORK_DIR}/dmg_temp/"
+ditto "${APP_NAME}" "${WORK_DIR}/dmg_temp/${APP_NAME}"
 ln -s /Applications "${WORK_DIR}/dmg_temp/Applications"
 
 sips -s format png -s dpiWidth 72 -s dpiHeight 72 -z 600 600 src/DmgBackground.png --out "${WORK_DIR}/DmgBg_1x.png"
@@ -139,7 +139,7 @@ fi
 MOUNTED_VOL_NAME="$(basename "$MOUNT_DIR")"
 
 echo "=== Copying files to DMG ==="
-cp -R "${WORK_DIR}/dmg_temp/${APP_NAME}" "$MOUNT_DIR/"
+ditto "${WORK_DIR}/dmg_temp/${APP_NAME}" "$MOUNT_DIR/${APP_NAME}"
 ln -s /Applications "$MOUNT_DIR/Applications"
 
 mkdir -p "$MOUNT_DIR/.background"
