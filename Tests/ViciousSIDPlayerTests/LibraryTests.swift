@@ -336,7 +336,11 @@ final class LibraryTests: XCTestCase {
     }
 
     func testFlatImportReadsDestinationDirectoryOncePerBatch() async throws {
+        #if canImport(Darwin)
         let counting = CountingFileManager()
+        #else
+        let counting = FileManager.default
+        #endif
         let countedLibrary = MusicLibrary(root: root, supportDirectory: support, fileManager: counting)
         var urls: [URL] = []
         for index in 0..<200 {
@@ -346,15 +350,22 @@ final class LibraryTests: XCTestCase {
         let first = try await importer.importFiles(urls)
         XCTAssertEqual(first.imported.count, 200)
         XCTAssertTrue(first.failed.isEmpty)
+        #if canImport(Darwin)
         XCTAssertEqual(counting.directoryReads, 1)
+        #endif
 
         try writeFixture("tune-199.sid", in: source, title: "Changed")
         let second = try await importer.importFiles([urls[199], urls[199]])
         XCTAssertEqual(second.imported, ["tune-199-2.sid"])
         XCTAssertEqual(second.skipped.map(\.reason), [.duplicate])
+        #if canImport(Darwin)
         XCTAssertEqual(counting.directoryReads, 2, "Ein neuer Auftrag muss den Bestand neu lesen")
+        #endif
     }
 
+    // Foundation stellt diese Methode auf Linux in einer nicht überschreibbaren
+    // Extension bereit. Dort bleibt der funktionale Importtest ohne Zählung aktiv.
+    #if canImport(Darwin)
     private final class CountingFileManager: FileManager, @unchecked Sendable {
         private let counterLock = NSLock()
         private var reads = 0
@@ -373,6 +384,7 @@ final class LibraryTests: XCTestCase {
             return try super.contentsOfDirectory(at: url, includingPropertiesForKeys: keys, options: mask)
         }
     }
+    #endif
 
     func testImportDoesNotTreatExternalVariantSymlinkAsDuplicate() async throws {
         try writeFixture("tune.sid", in: root, title: "Original")
