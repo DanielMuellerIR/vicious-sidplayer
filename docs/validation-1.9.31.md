@@ -18,7 +18,7 @@ Der Einschlaftimer verwendet eine monotone Frist, läuft während Pause weiter u
 
 ## Echte Ansichten
 
-Auf dem Mac wurden beim ersten Öffnen das richtige Endzeitziel, Eingabe und Speicherung von zwei Sekunden sowie die Repeat-Auswahl geprüft. Die kontrollierte Prüfung von Repeat und anschließendem Subtune-Stopp steht noch aus: Im ersten Lauf wechselte Auto Next vor der Einstellung den Subtune; außerdem unterschied eine zu weit gefasste GUI-Assertion den Play-Knopf nicht sicher vom Optionenknopf. Dieser Lauf belegt deshalb keine vollständige Mac-Endabnahme. Eine Nachprobe muss Auto Next ausschalten, denselben Subtune mit zwei Sekunden Endzeit wiederholen und danach den tatsächlichen Stopp über exakt identifizierte Controls prüfen.
+Auf dem Mac wurden beim ersten Öffnen das richtige Endzeitziel, Eingabe und Speicherung von zwei Sekunden sowie die Repeat-Auswahl geprüft. Die kontrollierte Nachprobe am 2026-10-16 bestand mit ausgeschaltetem Auto Next: Derselbe Subtune lief bei zwei Sekunden Endzeit über zwei Enden hinaus weiter. „Nach diesem Subtune“ stoppte anschließend die Wiederholung. Exakt identifizierte Play-/Pause-Controls, unveränderte Subtune-Anzeige und eigene Fensterscreenshots belegten beide Zustände. Einstellungen und persönliche Dateien wurden danach bytegleich wiederhergestellt.
 
 Die Hüllkurvenform ist durch die Sampletests belegt; GUI-Proben verwendeten stumme synthetische Dateien. Wiedergabeoptionen wurden im Hellmodus, Bibliotheksansichten in Hell/Dunkel und schmal geprüft. Testeinstellungen und persönliche Dateien wurden anschließend wiederhergestellt.
 
