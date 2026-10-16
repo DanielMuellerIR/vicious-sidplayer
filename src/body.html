@@ -44,6 +44,9 @@
         <span id="subtune-label" style="font-size: 12px; color: var(--text-primary);">SUBTUNE: 1/1</span>
         <button id="next-subtune">▶</button>
       </div>
+      <button id="previous-track" aria-label="Previous listening entry">⏮</button>
+      <button id="next-track" aria-label="Next listening entry">⏭</button>
+      <label><input type="checkbox" id="listening-shuffle"> Shuffle</label>
       <button id="play-btn" disabled>▶ PLAY</button>
     </div>
   </div>
@@ -61,15 +64,40 @@
   <div class="main">
     <!-- Sidebar / Playlist -->
     <div class="sidebar">
-      <h3>PLAYLIST</h3>
+      <div class="sidebar-tabs" role="tablist" aria-label="Collection view">
+        <button id="tab-library" role="tab">Music</button>
+        <button id="tab-lists" role="tab">Lists</button>
+        <button id="tab-queue" role="tab">Queue</button>
+      </div>
+      <div id="listening-status" class="listening-status" role="status"></div>
+      <div class="sidebar-tools" id="library-tools">
+        <input id="library-search" type="search" placeholder="Search titles or folders" aria-label="Search titles or folders">
+        <label><input type="checkbox" id="favorites-only"> Favorites only</label>
+        <div class="tool-row"><button id="play-library">Play all</button><button id="play-selection">Play results</button><button id="play-favorites">Favorites</button></div>
+        <div class="tool-row"><input id="folder-path" placeholder="Folder path" aria-label="Folder path"><button id="play-folder">Play folder</button></div>
+        <div class="tool-row"><button id="save-selection">Save results</button><button id="clear-library">Clear</button></div>
+        <select id="append-list" aria-label="List for adding tracks"><option value="">Add tracks to a list…</option></select>
+      </div>
+      <div class="sidebar-tools" id="lists-tools" hidden>
+        <select id="list-picker" aria-label="Saved listening list"></select>
+        <div class="tool-row"><button id="new-list">New</button><button id="rename-list">Rename</button><button id="delete-list">Delete</button></div>
+        <div class="tool-row"><button id="play-list">Play list</button><button id="append-subtune">Add current subtune</button></div>
+        <small>List changes apply the next time you start it.</small>
+      </div>
+      <div class="sidebar-tools" id="queue-tools" hidden>
+        <strong id="queue-title"></strong><span id="queue-position"></span>
+        <div class="tool-row"><button id="save-queue">Save as list</button><button id="end-queue">End queue</button></div>
+      </div>
       <div class="track-list" id="track-list">
         <!-- Javascript renders track rows here -->
       </div>
+      <div class="tool-row pagination"><button id="entries-previous">‹</button><span id="entries-page"></span><button id="entries-next">›</button></div>
       <div class="status">
         <div class="line"><span>TITLE:</span><span id="meta-title">---</span></div>
         <div class="line"><span>COMPOSER:</span><span id="meta-author">---</span></div>
         <div class="line"><span>INFO:</span><span id="meta-info">---</span></div>
         <div class="line"><span>CLOCK:</span><span id="meta-clock">PAL (AUTO)</span></div>
+        <button id="favorite-subtune" disabled>☆ Favorite subtune</button>
         <div id="error-display" class="error-msg" style="display: none;"></div>
       </div>
     </div>
@@ -79,6 +107,19 @@
       <canvas id="oscilloscope"></canvas>
     </div>
   </div>
+
+  <dialog id="list-name-dialog" aria-labelledby="list-name-heading">
+    <form id="list-name-form"><h3 id="list-name-heading">Save listening list</h3>
+      <label>Name <input id="list-name" required maxlength="200"></label>
+      <div class="tool-row"><button type="button" id="cancel-list-name">Cancel</button><button type="submit">Save</button></div>
+    </form>
+  </dialog>
+  <dialog id="entry-subtune-dialog" aria-labelledby="entry-subtune-heading">
+    <form id="entry-subtune-form"><h3 id="entry-subtune-heading">Choose subtune</h3>
+      <label>Subtune <input id="entry-subtune" type="number" min="1" max="256" required></label>
+      <div class="tool-row"><button type="button" id="cancel-entry-subtune">Cancel</button><button type="submit">Apply</button></div>
+    </form>
+  </dialog>
 
   <!-- ─── Footer ─────────────────────────────────────────────── -->
   <div class="footer">

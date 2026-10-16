@@ -8,7 +8,7 @@ Dieser Plan setzt die [Erweiterungsanalyse](feature-opportunities.md) um. Jede S
 |---|---|---|---|
 | 01 | PAL/NTSC-Timing | 6–10 h | Abgeschlossen in v1.9.27 |
 | 02 | Hörfolgen, Subtunes und Warteschlange: Core und Mac | 8–12 h | Abgeschlossen in v1.9.28 |
-| 02b | Hörfolgen auf iPhone und HTML5 | 6–10 h | Geplant |
+| 02b | Hörfolgen auf iPhone und HTML5 | 6–10 h | Implementiert in v1.9.29; visuelle iPhone-Abnahme offen |
 | 03 | Metadatensuche und gespeicherte Filter | 6–10 h | Geplant |
 | 04 | Repeat, Fadeout, Endzeiten und Einschlaftimer | 6–10 h | Geplant |
 | 05 | Verlauf, Lesezeichen und Notizen | 6–10 h | Geplant |

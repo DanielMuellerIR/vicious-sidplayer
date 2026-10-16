@@ -36,7 +36,7 @@ final class AppModelTests: XCTestCase {
 
     /// Ein Modell auf der Testsuite — nie auf dem produktiven Speicher.
     @MainActor
-    private func makeModel() -> AppModel { AppModel(defaults: defaults) }
+    private func makeModel() -> AppModel { AppModel(defaults: defaults, listeningFileURL: nil) }
 
     // MARK: - Titel-Anmerkungen (STIL)
 

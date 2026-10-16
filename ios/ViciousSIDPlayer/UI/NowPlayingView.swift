@@ -34,6 +34,17 @@ struct NowPlayingView: View {
                         model.setSubtune(index)
                     }
 
+                    if let id = model.currentTrackID {
+                        Button {
+                            model.listening.toggleSubtuneFavorite(trackID: id, subtune: model.coordinator.currentSubtune)
+                        } label: {
+                            Label(model.listening.isSubtuneFavorite(trackID: id, subtune: model.coordinator.currentSubtune)
+                                ? String(localized: "Subtune gemerkt") : String(localized: "Subtune merken"), systemImage: "star")
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(model.listening.isReadOnly || !model.listening.isLoaded)
+                    }
+
                     ScrubberView(coordinator: model.coordinator,
                                  duration: model.currentDuration) { seconds in
                         model.seek(to: seconds)

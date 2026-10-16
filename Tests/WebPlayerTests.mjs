@@ -5,6 +5,8 @@ import vm from 'node:vm';
 const wrapper = await readFile(new URL('../sidplayer.js', import.meta.url), 'utf8');
 const { SidPlayer, parseSidHeader } = await import(`data:text/javascript;base64,${Buffer.from(wrapper).toString('base64')}`);
 const source = await readFile(new URL('../sid-player-worklet.js', import.meta.url), 'utf8');
+const listeningSource = await readFile(new URL('../src/listening.js', import.meta.url), 'utf8');
+const listeningUI = await readFile(new URL('../src/listening-ui.js', import.meta.url), 'utf8');
 const appSource = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
 const Engine = new Function('sampleRate', source.slice(0, source.indexOf('class SidPlayerWorklet')) + '; return SidPlayerProcessor;')(44100);
 
@@ -97,6 +99,8 @@ function ui() {
     localStorage: { getItem() { return null; }, setItem() {} }, requestAnimationFrame() {}, WORKLET_URL: 'fixture'
   });
   vm.runInContext(wrapper.replaceAll('export ', ''), context);
+  vm.runInContext(listeningSource, context);
+  vm.runInContext(listeningUI, context);
   vm.runInContext(appSource, context);
   context.valid = sid();
   vm.runInContext("trackList = [{name:'Valid',buffer:valid,isUser:true},{name:'Invalid',buffer:new Uint8Array(5),isUser:true}]", context);
@@ -244,4 +248,57 @@ test('the first theme click switches a dark system default to light', () => {
   page.elements.get('theme-btn').listeners.click();
   assert.equal(page.elements.get('player').classList.contains('theme-light'), true);
   assert.equal(page.elements.get('theme-btn').textContent, 'DARK');
+});
+
+test('seek before the first audio node is sent between load and play', async () => {
+  const mock = audioMock(), player = new SidPlayer();
+  await player.loadBuffer(sid()); player.seek(12); const pending = player.play('fixture'); mock.release(); await pending;
+  const messages = mock.nodes[0].messages;
+  const load = messages.findIndex(m => m.type === 'load'), seek = messages.findIndex(m => m.type === 'seek'), play = messages.findIndex(m => m.type === 'play');
+  assert.ok(load < seek && seek < play); assert.equal(messages[seek].seconds, 12); assert.equal(player.pendingSeekSeconds, null);
+});
+test('a different file or subtune clears a buffered seek', async () => {
+  const player = new SidPlayer(); await player.loadBuffer(sid()); player.seek(12);
+  player.setSubtune(0); assert.equal(player.pendingSeekSeconds, null);
+  player.seek(5); await player.loadBuffer(sid()); assert.equal(player.pendingSeekSeconds, null);
+});
+test('late visualizer messages cannot advance the next file or subtune', async () => {
+  const mock = audioMock(), player = new SidPlayer(); mock.release(); await player.loadBuffer(sid()); await player.play('fixture');
+  const node = mock.nodes[0], oldGeneration = player.loadGen; let visuals = 0; player.watchVisuals(() => visuals++);
+  player.setSubtune(0); node.port.onmessage({ data: { type: 'visualizer', generation: oldGeneration, data: {} } });
+  assert.equal(visuals, 0);
+  node.port.onmessage({ data: { type: 'visualizer', generation: player.loadGen, data: {} } }); assert.equal(visuals, 1);
+});
+test('explicit search selection is stable after the visible filter changes', async () => {
+  const page = ui(); page.release();
+  page.run(`files = [{name:'Alpha.sid', arrayBuffer: async () => valid.buffer}, {name:'Beta.sid', arrayBuffer: async () => valid.buffer}]`);
+  await page.run('importUserFiles(files, false)');
+  page.elements.get('library-search').value = 'Alpha'; await page.run("startWebScope('visible')");
+  assert.equal(page.run('listeningQueue.items.length'), 1);
+  page.elements.get('library-search').value = 'Beta'; page.run('refreshPlaylistUI()');
+  assert.match(page.run('listeningQueue.current.trackID'), /Alpha/);
+});
+test('reselecting one moved file reconnects its saved identity without autoplay', async () => {
+  const page = ui(); page.release();
+  page.run(`trackList=[];currentIdx=-1;files=[{name:'A.sid',webkitRelativePath:'Old/A.sid',arrayBuffer:async()=>valid.buffer}]`);
+  await page.run('importUserFiles(files,false);');
+  await page.run('loadTrack(0,false)');
+  const id = page.run('trackList[0].id');
+  page.run(`trackList=[];currentIdx=-1;pendingWebRestore=true;files=[{name:'A.sid',webkitRelativePath:'Moved/A.sid',arrayBuffer:async()=>valid.buffer}]`);
+  await page.run('importUserFiles(files,true)');
+  assert.equal(page.run('trackList[0].id'), id);
+  assert.equal(page.run('webListeningStore.document.catalog[0].path'), 'Moved/A.sid');
+  assert.equal(page.run('playingState'), false);
+});
+test('two incoming identical copies cannot both relink to one old identity', async () => {
+  const page = ui(); page.release();
+  page.run(`trackList=[];currentIdx=-1;files=[{name:'A.sid',webkitRelativePath:'Old/A.sid',arrayBuffer:async()=>valid.buffer}]`);
+  await page.run('importUserFiles(files,false)');
+  const old = page.run('trackList[0].id');
+  page.run(`trackList=[];currentIdx=-1;pendingWebRestore=true;files=['First','Second'].map(folder=>({name:'A.sid',webkitRelativePath:folder+'/A.sid',arrayBuffer:async()=>valid.buffer}))`);
+  await page.run('importUserFiles(files,false)');
+  assert.equal(page.run('trackList.length'), 2);
+  assert.notEqual(page.run('trackList[0].id'), old);
+  assert.notEqual(page.run('trackList[1].id'), old);
+  assert.notEqual(page.run('trackList[0].id'), page.run('trackList[1].id'));
 });

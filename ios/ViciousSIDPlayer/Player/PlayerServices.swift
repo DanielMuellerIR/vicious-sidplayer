@@ -25,7 +25,11 @@ final class PlayerServices {
     /// Support-Ordner fuer Index und Caches). `nil` heisst: das System hat die
     /// Ordner nicht herausgerueckt — dann kann die App nur noch eine
     /// Fehlermeldung zeigen, raten waere schlimmer.
-    let library: MusicLibrary? = MusicLibrary.standard()
+    let library: MusicLibrary?
+
+    init(library: MusicLibrary? = MusicLibrary.standard()) {
+        self.library = library
+    }
 
     /// Kategorie, Unterbrechungen (Anruf), Routenwechsel (Kopfhoerer raus).
     let audioSession = AudioSessionController()
@@ -97,5 +101,4 @@ final class PlayerServices {
     /// Laufende Summe ueber alle Auftraege der aktuellen Import-Aktion.
     var importTally = ImportTally()
 
-    init() {}
 }

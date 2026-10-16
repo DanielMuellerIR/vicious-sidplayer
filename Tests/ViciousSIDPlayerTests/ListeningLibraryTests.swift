@@ -81,6 +81,17 @@ final class ListeningLibraryTests: XCTestCase {
         XCTAssertEqual(queue.current?.subtune, 2)
     }
 
+    func testMultiRowMoveKeepsOrderIdentityAndRejectsInvalidOffsets() {
+        let items = entries(6)
+        var queue = ListeningQueue(libraryID: "root", name: "Move", entries: items, startingAt: 2)
+        queue.move(fromOffsets: IndexSet([1, 3]), toOffset: 6)
+        XCTAssertEqual(queue.items.map(\.id), [items[0],items[2],items[4],items[5],items[1],items[3]].map(\.id))
+        XCTAssertEqual(queue.current, items[2])
+        let unchanged = queue
+        queue.move(fromOffsets: IndexSet([99]), toOffset: 0)
+        XCTAssertEqual(queue, unchanged)
+    }
+
     func testRelativeIDsResolveAcrossContainersAndRejectTraversal() {
         let entry = ListeningEntry(trackID: "Composer/Tune.sid", subtune: 2)
         XCTAssertEqual(entry.url(relativeTo: URL(fileURLWithPath: "/old-container/Documents"))?.path, "/old-container/Documents/Composer/Tune.sid")

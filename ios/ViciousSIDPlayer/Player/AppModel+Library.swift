@@ -406,6 +406,8 @@ extension AppModel {
                     self.currentTrackLengths = nil
                     self.computedLength = nil
                     self.clearSessionState()
+                    self.listening.setQueue(nil)
+                    self.listening.flush()
                     self.applyLibrary(tracks: [], folderTree: AppModel.emptyFolderTree)
                     if !keepFavorites { self.setFavorites([]) }
                     if !report.retainedCleanupDirectories.isEmpty {

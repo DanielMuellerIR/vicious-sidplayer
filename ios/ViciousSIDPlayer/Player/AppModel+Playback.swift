@@ -28,7 +28,7 @@ extension AppModel {
     /// halb aktualisierten Player, in dem der alte Titel weiterlaeuft, aber der
     /// neue Name dransteht.
     @discardableResult
-    func loadTrack(id: String, autoplay: Bool) -> Bool {
+    func loadTrack(id: String, autoplay: Bool, subtune: Int = 0, updateListeningQueue: Bool = true) -> Bool {
         guard let fileURL = trackURL(for: id) else {
             errorMessage = "Der Titel ist nicht mehr vorhanden."
             return false
@@ -45,12 +45,19 @@ extension AppModel {
             // 64-KB-Speicher eines C64, ist also winzig.
             let data = try Data(contentsOf: fileURL)
             let sidFile = try SidParser.parse(data: data)
+            guard (0..<sidFile.subtuneAmount).contains(subtune) else {
+                errorMessage = String(localized: "Der gewählte Subtune ist nicht vorhanden.")
+                return false
+            }
 
             cancelLengthEstimate()
             coordinator.stop()
             setCurrentTrackID(id)
+            pendingListeningRestore = false
             coordinator.setSid(sidFile)
+            if subtune > 0 { coordinator.setSubtune(sub: subtune) }
             coordinator.setVolume(volume)
+            if updateListeningQueue { makeDefaultListeningQueue(trackID: id) }
 
             // Songlaenge aufloesen. Der MD5 der ganzen Datei ist der Schluessel
             // sowohl der HVSC-Datenbank als auch des berechneten Caches.
@@ -101,47 +108,15 @@ extension AppModel {
         saveSessionState()
     }
 
-    /// Naechster Titel in der sichtbaren Liste — also nach Suche und
-    /// Favoritenfilter, genau in der Reihenfolge, die der Nutzer gerade sieht.
-    /// Bei aktiver Zufallswiedergabe stattdessen ein zufaelliger anderer.
+    /// Die laufende Hoerfolge bleibt von der sichtbaren Suche unabhaengig.
     func playNext() {
-        guard let id = neighbourTrackID(offset: 1, shuffled: shuffle) else { return }
-        loadTrack(id: id, autoplay: coordinator.isPlaying)
+        ensureListeningQueue()
+        advanceListeningQueue(forward: true, autoplay: coordinator.isPlaying)
     }
 
-    /// Vorheriger Titel. Bewusst IMMER der Reihenfolge nach, auch bei aktiver
-    /// Zufallswiedergabe — „zurueck" soll dorthin fuehren, wo man herkommt, und
-    /// nicht wieder irgendwohin. Genauso macht es die Mac-App.
     func playPrevious() {
-        guard let id = neighbourTrackID(offset: -1, shuffled: false) else { return }
-        loadTrack(id: id, autoplay: coordinator.isPlaying)
-    }
-
-    /// Nachbar in der sichtbaren Liste.
-    /// - Parameters:
-    ///   - offset: +1 fuer vorwaerts, -1 fuer rueckwaerts (mit Umlauf).
-    ///   - shuffled: `true` waehlt stattdessen einen zufaelligen anderen Titel.
-    private func neighbourTrackID(offset: Int, shuffled: Bool) -> String? {
-        let list = visibleTracks
-        guard !list.isEmpty else { return nil }
-
-        if shuffled && list.count > 1 {
-            var index = Int.random(in: 0..<list.count)
-            // Denselben Titel noch einmal zu ziehen faende der Nutzer kaputt.
-            if list[index].id == currentTrackID {
-                index = (index + 1) % list.count
-            }
-            return list[index].id
-        }
-
-        guard let current = currentTrackID,
-              let index = list.firstIndex(where: { $0.id == current }) else {
-            // Der laufende Titel ist gar nicht sichtbar (Suche, Favoritenfilter):
-            // dann faengt die Liste von vorn an.
-            return list.first?.id
-        }
-        let target = (index + offset + list.count) % list.count
-        return list[target].id
+        ensureListeningQueue()
+        advanceListeningQueue(forward: false, autoplay: coordinator.isPlaying)
     }
 
     /// Springt an eine absolute Position, begrenzt auf [0, Songdauer].
@@ -171,6 +146,10 @@ extension AppModel {
     func setSubtune(_ index: Int) {
         guard index >= 0, index < coordinator.subtunesCount else { return }
         coordinator.setSubtune(sub: index)
+        if let trackID = currentTrackID, var queue = listening.queue {
+            queue.updateExplicitSubtune(index, trackID: trackID)
+            listening.setQueue(queue)
+        }
         // Die Laenge gilt je Subtune: der DB-Eintrag wird neu indiziert, eine
         // berechnete Laenge muss komplett neu ermittelt werden.
         computedLength = nil
@@ -261,16 +240,13 @@ extension AppModel {
     /// Songende erreicht. Reihenfolge wie auf dem Mac: erst die restlichen
     /// Subtunes DIESER Datei, dann der naechste Titel, sonst anhalten.
     private func advanceAtEndOfTrack() {
-        if coordinator.currentSubtune + 1 < coordinator.subtunesCount {
-            setSubtune(coordinator.currentSubtune + 1)
+        if let next = ListeningPlaybackPolicy.nextSubtune(entry: listening.queue?.current,
+            current: coordinator.currentSubtune, count: coordinator.subtunesCount) {
+            setSubtune(next)
             return
         }
-        if visibleTracks.count > 1,
-           let nextID = neighbourTrackID(offset: 1, shuffled: shuffle) {
-            loadTrack(id: nextID, autoplay: true)
-            return
-        }
-        coordinator.stop()
+        ensureListeningQueue()
+        advanceListeningQueue(forward: true, autoplay: true)
         // Der Takt oben hat gerade eine Position nahe dem Songende gesichert;
         // `stop()` setzt die Laufzeit auf 0. Diesen Endzustand auch speichern —
         // sonst stuende der Titel beim naechsten App-Start wieder kurz vor
@@ -596,6 +572,12 @@ extension AppModel {
         defaults.set(id, forKey: Keys.lastTrackID)
         defaults.set(coordinator.currentSubtune, forKey: Keys.lastSubtune)
         defaults.set(coordinator.elapsedSeconds, forKey: Keys.lastPosition)
+        if let entry = listening.queue?.current, entry.trackID == id,
+           entry.subtune == nil || entry.subtune == coordinator.currentSubtune {
+            defaults.set(entry.id.uuidString, forKey: Keys.lastListeningEntryID)
+        } else {
+            defaults.removeObject(forKey: Keys.lastListeningEntryID)
+        }
         services.lastSessionBucket = Int(coordinator.elapsedSeconds / 5.0)
     }
 
@@ -612,6 +594,7 @@ extension AppModel {
         defaults.removeObject(forKey: Keys.lastTrackID)
         defaults.removeObject(forKey: Keys.lastSubtune)
         defaults.removeObject(forKey: Keys.lastPosition)
+        defaults.removeObject(forKey: Keys.lastListeningEntryID)
         services.lastSessionBucket = -1
     }
 
@@ -630,6 +613,9 @@ extension AppModel {
     ///    macht der Nutzer.
     func restoreSessionIfPossible() {
         guard currentTrackID == nil, !tracks.isEmpty else { return }
+        guard listening.isLoaded else { pendingListeningRestore = true; return }
+        activateListeningLibrary()
+        if restoreListeningQueueIfPossible() { return }
 
         if shuffle {
             // Gesichert wird nicht nur der WERT, sondern auch, ob es den
@@ -640,29 +626,12 @@ extension AppModel {
             // so aus dem Nichts eine wiederherstellbare Sitzung: Wer Shuffle
             // spaeter ausschaltete, bekam den nur vorbereiteten Zufallstitel als
             // angeblich letzten Stand zurueck (Review-Fund 2026-08-20).
-            let savedID = defaults.string(forKey: Keys.lastTrackID)
-            let subtuneVorhanden = defaults.object(forKey: Keys.lastSubtune) != nil
-            let posVorhanden = defaults.object(forKey: Keys.lastPosition) != nil
-            let savedSubtune = defaults.integer(forKey: Keys.lastSubtune)
-            let savedPos = defaults.double(forKey: Keys.lastPosition)
+            let keys = [Keys.lastTrackID, Keys.lastSubtune, Keys.lastPosition, Keys.lastListeningEntryID]
+            let saved = keys.map { defaults.object(forKey: $0) }
             if let random = tracks.randomElement() {
                 loadTrack(id: random.id, autoplay: false)
-                // Den vorigen Stand exakt wiederherstellen — fehlende Schluessel
-                // bleiben danach fehlend.
-                if let savedID {
-                    defaults.set(savedID, forKey: Keys.lastTrackID)
-                } else {
-                    defaults.removeObject(forKey: Keys.lastTrackID)
-                }
-                if subtuneVorhanden {
-                    defaults.set(savedSubtune, forKey: Keys.lastSubtune)
-                } else {
-                    defaults.removeObject(forKey: Keys.lastSubtune)
-                }
-                if posVorhanden {
-                    defaults.set(savedPos, forKey: Keys.lastPosition)
-                } else {
-                    defaults.removeObject(forKey: Keys.lastPosition)
+                for (key, value) in zip(keys, saved) {
+                    if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
                 }
             }
             return

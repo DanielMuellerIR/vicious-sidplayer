@@ -61,6 +61,7 @@ export class SidPlayer {
     // Pending SID binary data (loaded without AudioContext)
     this.pendingData = null;
     this.pendingSubtune = 0;
+    this.pendingSeekSeconds = null;
 
   }
 
@@ -136,7 +137,7 @@ export class SidPlayer {
     this.workletNode.connect(ctx.destination);
     this.workletNode.port.onmessage = (e) => {
       const data = e.data;
-      if (data.type === 'visualizer') {
+      if (data.type === 'visualizer' && data.generation === this.loadGen) {
         if (this.visualCallback) this.visualCallback(data.data);
       } else if (data.type === 'loaded' && data.generation === this.loadGen) {
         this.loaded = true;
@@ -153,6 +154,7 @@ export class SidPlayer {
    */
   async load(url, subtune = 0) {
     const myGen = ++this.loadGen;
+    this.pendingSeekSeconds = null;
     this.stop();
     this.loaded = false;
     this.pendingData = null;
@@ -190,6 +192,7 @@ export class SidPlayer {
     // wird dennoch erhoeht, damit ein evtl. noch laufender asynchroner load()
     // (mit await fetch) sich anschliessend selbst als stale erkennt.
     this.loadGen++;
+    this.pendingSeekSeconds = null;
     this.stop();
     this.loaded = false;
     this.pendingData = null;
@@ -227,7 +230,12 @@ export class SidPlayer {
       });
       this.pendingData = null;
     }
-    // Port-Nachrichten behalten ihre Reihenfolge: load liegt sicher vor play.
+    // Port-Nachrichten behalten ihre Reihenfolge: load und vorbereiteter Seek
+    // liegen vor play, auch bei Wiederherstellung vor dem ersten Audiostart.
+    if (this.pendingSeekSeconds != null) {
+      this.workletNode.port.postMessage({ type: 'seek', seconds: this.pendingSeekSeconds });
+      this.pendingSeekSeconds = null;
+    }
     this.workletNode.port.postMessage({ type: 'play' });
     this.playing = true;
   }
@@ -240,8 +248,10 @@ export class SidPlayer {
 
   setSubtune(subtune) {
     this.pendingSubtune = subtune;
+    this.pendingSeekSeconds = null;
+    this.loadGen++;
     if (this.workletNode) {
-      this.workletNode.port.postMessage({ type: 'setSubtune', subtune });
+      this.workletNode.port.postMessage({ type: 'setSubtune', subtune, generation: this.loadGen });
     }
   }
 
@@ -251,9 +261,10 @@ export class SidPlayer {
    * codereview-ok: Worklet clampt NaN->0; lastVisuals.playtime nie NaN (2026-07-01)
    */
   seek(seconds) {
+    const target = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
     if (this.workletNode) {
-      this.workletNode.port.postMessage({ type: 'seek', seconds });
-    }
+      this.workletNode.port.postMessage({ type: 'seek', seconds: target });
+    } else { this.pendingSeekSeconds = target; }
   }
 
   setVolume(volume) {
@@ -279,6 +290,7 @@ export class SidPlayer {
   unload() {
     this.loadGen++;
     this.audioGen++;
+    this.pendingSeekSeconds = null;
     this.audioSetupPromise = null;
     this.stop();
     if (this.workletNode) {

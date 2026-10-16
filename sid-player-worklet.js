@@ -764,10 +764,12 @@ class SidPlayerWorklet extends AudioWorkletProcessor {
     this.seeking = false;
     
     this.visualizerTicker = 0;
+    this.generation = 0;
     
     this.port.onmessage = (e) => {
       const data = e.data;
       if (data.type === 'load') {
+        this.generation = data.generation;
         this.seeking = false;
         const metadata = this.engine.loadSID(data.data);
         this.engine.initSubtune(data.subtune || 0);
@@ -778,6 +780,7 @@ class SidPlayerWorklet extends AudioWorkletProcessor {
       } else if (data.type === 'stop') {
         this.playing = false;
       } else if (data.type === 'setSubtune') {
+        this.generation = data.generation;
         this.seeking = false;
         this.engine.initSubtune(data.subtune);
       } else if (data.type === 'setVolume') {
@@ -799,7 +802,7 @@ class SidPlayerWorklet extends AudioWorkletProcessor {
     
     if (this.seeking) {
       this.seeking = this.engine.advanceSeek(32768, 1);
-      if (!this.seeking) this.port.postMessage({ type: 'visualizer', data: this.engine.getChannelsData() });
+      if (!this.seeking) this.port.postMessage({ type: 'visualizer', generation: this.generation, data: this.engine.getChannelsData() });
       channelLeft.fill(0);
       if (channelRight) channelRight.fill(0);
       return true;
@@ -824,6 +827,7 @@ class SidPlayerWorklet extends AudioWorkletProcessor {
       this.visualizerTicker = 0;
       this.port.postMessage({
         type: 'visualizer',
+        generation: this.generation,
         data: this.engine.getChannelsData()
       });
     }

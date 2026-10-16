@@ -13,8 +13,8 @@ import ViciousSIDPlayerCore
 //     mit Ordnerpfad unter jedem Namen. Ein Baum, aus dem die Haelfte
 //     herausgefiltert ist, verwirrt mehr, als er hilft.
 //
-// Die Trefferliste ist zugleich die Reihenfolge, in der „Weiter" und „Zurück"
-// laufen — das entscheidet das Modell (`visibleTracks`), nicht diese Ansicht.
+// Suchtreffer koennen ausdruecklich als Hoerfolge gestartet werden. Spaetere
+// Filteraenderungen veraendern deren Reihenfolge nicht.
 struct LibraryView: View {
     @EnvironmentObject private var model: AppModel
 
@@ -26,6 +26,10 @@ struct LibraryView: View {
     @State private var trackIndex: [String: LibraryTrack] = [:]
     /// Dateiauswahl offen?
     @State private var showImporter = false
+    @State private var page = ListeningPage.library
+    @State private var showListeningName = false
+    @State private var listeningName = ""
+    @State private var entriesToSave: [ListeningEntry] = []
     /// Was darf ausgewaehlt werden — Ordner oder einzelne .sid-Dateien?
     @State private var importAllowedTypes: [UTType] = [.folder]
 
@@ -52,6 +56,14 @@ struct LibraryView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                Picker("Sammlungsansicht", selection: $page) {
+                    Text("Musik").tag(ListeningPage.library)
+                    Text("Listen").tag(ListeningPage.lists)
+                    Text("Folge").tag(ListeningPage.queue)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 16).padding(.vertical, 8)
+                .accessibilityIdentifier("library-listening-tabs")
                 // Fortschritt hat Vorrang vor dem Bericht des vorigen Laufs.
                 if let progress = model.importProgress {
                     ImportProgressBanner(progress: progress) {
@@ -63,13 +75,23 @@ struct LibraryView: View {
                     }
                 }
 
-                content
+                if page == .library {
+                    content
+                        .searchable(text: $model.searchText, prompt: Text("Titel oder Ordner suchen"))
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+                } else {
+                    ListeningView(controller: model.listening, page: page)
+                }
             }
             .navigationTitle("Bibliothek")
-            .toolbar { toolbarContent }
-            .searchable(text: $model.searchText, prompt: Text("Titel oder Ordner suchen"))
-            .autocorrectionDisabled()
-            .textInputAutocapitalization(.never)
+            .toolbar { if page == .library { toolbarContent } }
+            .sheet(isPresented: $showListeningName) {
+                ListeningNameSheet(name: $listeningName) {
+                    _ = model.saveListeningList(name: listeningName, entries: entriesToSave)
+                    showListeningName = false; page = .lists
+                }
+            }
             .fileImporter(
                 isPresented: $showImporter,
                 allowedContentTypes: importAllowedTypes,
@@ -123,6 +145,11 @@ struct LibraryView: View {
                     FolderRowView(row: row) {
                         toggleFolder(row.id)
                     }
+                    .contextMenu {
+                        Button("Ordner abspielen") { model.startListeningScope(.folder(row.id), name: row.name); page = .queue }
+                        Button("Ordner als Hörfolge sichern") { prepareListeningList(scope: .folder(row.id), name: row.name) }
+                            .disabled(model.listening.isReadOnly)
+                    }
                 case .track(let row):
                     trackRow(row, showsFolderPath: false)
                 }
@@ -151,6 +178,17 @@ struct LibraryView: View {
                             showsFolderPath: showsFolderPath) {
             model.select(trackID: trackID)
         }
+        .contextMenu {
+            Button("Als Nächstes") { model.enqueueNext(trackID: trackID) }
+            Menu("Zu Hörfolge hinzufügen") {
+                ForEach(model.listening.activeLists.filter { $0.kind == .regular }) { list in
+                    Button(list.name) { model.listening.append(ListeningEntry(trackID: trackID), to: list.id) }
+                }
+            }.disabled(model.listening.isReadOnly)
+            Button("Neue Hörfolge mit diesem Titel") {
+                entriesToSave = [ListeningEntry(trackID: trackID)]; listeningName = row.track.name; showListeningName = true
+            }.disabled(model.listening.isReadOnly)
+        }
         .swipeActions(edge: .leading, allowsFullSwipe: true) {
             Button {
                 model.toggleFavorite(trackID)
@@ -165,10 +203,28 @@ struct LibraryView: View {
         }
     }
 
+    private func prepareListeningList(scope: ListeningScope, name: String) {
+        entriesToSave = model.listeningEntries(scope: scope); listeningName = name; showListeningName = true
+    }
+
     // MARK: - Werkzeugleiste
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Menu {
+                Button("Gesamte Bibliothek abspielen") { model.startListeningScope(.library, name: String(localized: "Bibliothek")); page = .queue }
+                Button("Sichtbare Auswahl abspielen") {
+                    model.startListeningScope(.visible(searchText: model.searchText, favoritesOnly: model.favoritesOnly), name: String(localized: "Auswahl")); page = .queue
+                }
+                Button("Favoriten abspielen") { model.startListeningScope(.favorites, name: String(localized: "Favoriten")); page = .queue }
+                Divider()
+                Button("Sichtbare Auswahl sichern") { prepareListeningList(scope: .visible(searchText: model.searchText, favoritesOnly: model.favoritesOnly), name: String(localized: "Auswahl")) }
+                    .disabled(model.listening.isReadOnly)
+            } label: { Label("Auswahl", systemImage: "text.badge.play") }
+            .disabled(model.tracks.isEmpty || !model.listening.isLoaded)
+            .accessibilityIdentifier("listening-selection-menu")
+        }
         ToolbarItem(placement: .topBarLeading) {
             Button {
                 model.favoritesOnly.toggle()

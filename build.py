@@ -7,6 +7,8 @@ Quelldateien:
     sid-player-worklet.js       AudioWorklet-CPU- & SID-Emulator
     src/styles.css              UI-Styles
     src/body.html               Body-Markup
+    src/listening.js            Hoerfolgen und lokale Metadatenablage
+    src/listening-ui.js         Sammlungsansichten und Listenbedienung
     src/app.js                  App-Logik (DOM-Wiring, Drag&Drop, …)
 
 """
@@ -189,7 +191,7 @@ def build(minify: bool = True) -> Path:
     sidplayer_src = (HERE / 'sidplayer.js').read_text()
     css_src = (SRC_DIR / 'styles.css').read_text()
     body_src = (SRC_DIR / 'body.html').read_text()
-    app_src = (SRC_DIR / 'app.js').read_text()
+    app_src = (SRC_DIR / 'listening.js').read_text() + '\n' + (SRC_DIR / 'listening-ui.js').read_text() + '\n' + (SRC_DIR / 'app.js').read_text()
 
     # Version einpflegen
     version = (HERE / 'VERSION').read_text().strip()

@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import ViciousSIDPlayerCore
 
 // Das Gehirn der iPhone-App.
@@ -30,6 +31,12 @@ final class AppModel: ObservableObject {
     /// Der plattformneutrale Koordinator aus dem Core (AVAudioEngine + Emulator).
     /// Views beobachten ihn direkt fuer Titel, Laufzeit und Oszilloskopdaten.
     let coordinator = ViciousCoordinator()
+    let listening: ListeningLibraryController
+    var listeningPlaylist = Playlist()
+    var listeningSubscriptions = Set<AnyCancellable>()
+    var pendingListeningRestore = false
+    static let listeningCollectionID = "ios-documents"
+
 
     // MARK: - Bibliothek
 
@@ -55,8 +62,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var favorites: Set<String> = []
 
     /// `tracks`, gefiltert nach `searchText` und `favoritesOnly`. Das ist die
-    /// Liste, die die UI zeigt, und zugleich die Reihenfolge, in der
-    /// „Weiter" und „Zurueck" laufen.
+    /// Liste, die die UI zeigt. Eine Hoerfolge wird daraus ausdruecklich gestartet;
+    /// spaetere Filteraenderungen veraendern sie nicht.
     /// Die Suchregel selbst steht im Core (`PlaylistSearch`), weil die Mac-App
     /// dieselbe braucht — vorher stand sie hier und dort in je eigener Fassung.
     var visibleTracks: [LibraryTrack] {
@@ -77,7 +84,7 @@ final class AppModel: ObservableObject {
     // MARK: - Transport
 
     /// Zufallswiedergabe. Ueberlebt den App-Neustart.
-    @Published var shuffle: Bool = false { didSet { defaults.set(shuffle, forKey: Keys.shuffle) } }
+    @Published var shuffle: Bool = false { didSet { defaults.set(shuffle, forKey: Keys.shuffle); listening.setShuffle(shuffle) } }
 
     /// Am Songende automatisch zum naechsten Titel.
     @Published var autoNext: Bool = true { didSet { defaults.set(autoNext, forKey: Keys.autoNext) } }
@@ -212,11 +219,25 @@ final class AppModel: ObservableObject {
         static let lastTrackID = "lastTrackID"
         static let lastSubtune = "lastSubtune"
         static let lastPosition = "lastPosition"
+        static let lastListeningEntryID = "lastListeningEntryID"
     }
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, listeningFileURL: URL? = ListeningLibraryStore.defaultURL()) {
         self.defaults = defaults
+        self.listening = ListeningLibraryController(fileURL: listeningFileURL)
         loadSettings()
+        listening.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &listeningSubscriptions)
+        listening.$isLoaded.filter { $0 }.sink { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.activateListeningLibrary()
+                if self.pendingListeningRestore {
+                    self.pendingListeningRestore = false
+                    self.restoreSessionIfPossible()
+                }
+            }
+        }.store(in: &listeningSubscriptions)
     }
 
     // MARK: - Einstellungen laden
@@ -242,6 +263,11 @@ final class AppModel: ObservableObject {
     func applyLibrary(tracks: [LibraryTrack], folderTree: MusicLibraryFolder) {
         self.tracks = tracks
         self.folderTree = folderTree
+        let root = services.library?.root ?? URL(fileURLWithPath: "/")
+        listeningPlaylist = Playlist(tracks: tracks.map {
+            PlaylistTrack(id: $0.id, name: $0.name, folderPath: $0.folderPath, url: $0.url(in: root))
+        })
+        activateListeningLibrary(removeMissing: true)
         // Ist der laufende Titel verschwunden (z.B. per Finder geloescht),
         // gilt kein Titel mehr als aktuell — die Wiedergabe laeuft aber weiter,
         // bis der Nutzer etwas anderes waehlt.
@@ -311,6 +337,7 @@ final class AppModel: ObservableObject {
         let active = (phase == .active)
         guard active != isSceneActive else { return }
         isSceneActive = active
+        if !active { listening.flush() }
         // Den Spiegel-Takt des Koordinators mitziehen: im Vordergrund fluessige
         // 50 Hz fuers Oszilloskop, im Hintergrund einmal pro Sekunde. Das reicht
         // dort fuer Auto-Next und die Sperrbildschirm-Anzeige und kostet

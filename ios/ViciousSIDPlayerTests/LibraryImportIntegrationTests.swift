@@ -100,7 +100,7 @@ final class LibraryImportIntegrationTests: XCTestCase {
         try await super.setUp()
         defaults = UserDefaults(suiteName: suiteName)
         defaults.removePersistentDomain(forName: suiteName)
-        model = AppModel(defaults: defaults)
+        model = AppModel(defaults: defaults, listeningFileURL: nil)
         source = fm.temporaryDirectory.appendingPathComponent("vicious-import-\(UUID().uuidString)")
         try fm.createDirectory(at: source, withIntermediateDirectories: true)
         await resetLibrary()

@@ -92,6 +92,11 @@ let playingState = false;
 let userVolume = 0.3;
 let trackLoadGeneration = 0;
 let playbackGeneration = 0;
+let webListeningStore;
+let listeningQueue = null;
+let pendingWebRestore = false;
+let webAdvanceInProgress = false;
+let lastWebSessionBucket = -1;
 
 // Scrubber seeking state
 let isSeeking = false;
@@ -111,6 +116,7 @@ const lastVisuals = {
 
 // No built-in tracks — all SIDs come from user via drag & drop or file picker
 trackList = [];
+initializeListeningUI();
 refreshPlaylistUI();
 
 // ─── Event Listeners ────────────────────────────────────────────────────────
@@ -192,11 +198,7 @@ nextSubtuneBtn.addEventListener('click', () => {
 
 // Keyboard Shortcuts
 window.addEventListener('keydown', (e) => {
-  if (document.activeElement && (
-    document.activeElement.tagName === 'INPUT' && document.activeElement.type !== 'range' && document.activeElement.type !== 'checkbox' ||
-    document.activeElement.tagName === 'SELECT')) {
-    return;
-  }
+  if (document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(document.activeElement.tagName)) return;
 
   const key = e.key.toLowerCase();
 
@@ -236,9 +238,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
     e.preventDefault();
     if (trackList.length <= 1) return;
-    const dir = e.key === 'ArrowUp' ? -1 : 1;
-    const next = (currentIdx + dir + trackList.length) % trackList.length;
-    loadTrack(next, true);
+    advanceWebQueue(e.key !== 'ArrowUp', playingState);
   }
 });
 
@@ -329,83 +329,53 @@ function addUserFiles(files, playFirst) {
 async function importUserFiles(files, playFirst) {
   const sids = files.filter(f => f.name.toLowerCase().endsWith('.sid'));
   if (!sids.length) return;
-
+  const relinking = pendingWebRestore || missingWebFileCount() > 0;
+  const catalog = webListeningStore.document.catalog;
+  const catalogByID = new Map(catalog.map(t => [t.id, t]));
+  const loaded = new Map(trackList.map((t, index) => [t.id, index]));
+  const byFingerprint = new Map();
+  for (const item of catalog) {
+    const key = item.fingerprint + ':' + item.size;
+    if (!byFingerprint.has(key)) byFingerprint.set(key, []);
+    byFingerprint.get(key).push(item);
+  }
+  const libraryIDs = new Set(webListeningStore.document.libraryIDs);
   let firstAddedIdx = -1;
-  const addedTracks = [];
-  
+  const imported = [], incomingCounts = new Map();
   for (const file of sids) {
     try {
       const sourcePath = file.webkitRelativePath || droppedPaths.get(file) || file.name;
-      const trackName = sourcePath.replace(/\.sid$/i, '');
-      const uint8 = new Uint8Array(await file.arrayBuffer());
-      const existingIdx = [...trackList, ...addedTracks].findIndex(t =>
-        t.sourcePath === sourcePath && t.buffer.length === uint8.length &&
-        t.buffer.every((value, index) => value === uint8[index]));
-      if (existingIdx !== -1) {
-        if (firstAddedIdx === -1) firstAddedIdx = existingIdx;
-        continue;
-      }
-      const trackId = `user:${sourcePath}:${trackList.length + addedTracks.length}`;
-      const newTrack = {
-        id: trackId,
-        sourcePath,
-        name: trackName,
-        composer: 'Unknown Composer',
-        year: 'N/A',
-        isUser: true,
-        buffer: uint8
-      };
-      
-      addedTracks.push(newTrack);
-      if (firstAddedIdx === -1) {
-        firstAddedIdx = trackList.length + addedTracks.length - 1;
-      }
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (!bytes.length) continue;
+      const fingerprint = listeningFileFingerprint(bytes), key = fingerprint + ':' + bytes.length;
+      imported.push({ sourcePath, bytes, fingerprint }); incomingCounts.set(key, (incomingCounts.get(key) || 0) + 1);
     } catch (_) {}
   }
-
-  if (addedTracks.length > 0) {
-    trackList = [...trackList, ...addedTracks];
-    refreshPlaylistUI();
+  for (const { sourcePath, bytes, fingerprint } of imported) {
+    try {
+      const exactID = sourcePath + ':' + fingerprint;
+      const matches = byFingerprint.get(fingerprint + ':' + bytes.length) || [];
+      const old = catalogByID.get(exactID) || (relinking && matches.length === 1 && incomingCounts.get(fingerprint + ':' + bytes.length) === 1 ? matches[0] : null);
+      const id = old?.id || exactID, metadata = parseSidHeader(bytes);
+      const item = { id, path: sourcePath, name: sourcePath.replace(/\.sid$/i, ''), fingerprint, size: bytes.length, subtunesCount: metadata?.subtunesCount || 1 };
+      if (old) Object.assign(old, item);
+      else { catalog.push(item); catalogByID.set(id, item); }
+      libraryIDs.add(id);
+      if (!loaded.has(id)) {
+        loaded.set(id, trackList.length);
+        trackList.push({ id, sourcePath, name: item.name, composer: 'Unknown Composer', year: 'N/A', isUser: true, buffer: bytes });
+      }
+      if (firstAddedIdx < 0) firstAddedIdx = loaded.get(id);
+    } catch (_) {}
   }
-
-  if (playFirst && firstAddedIdx !== -1) {
-    loadTrack(firstAddedIdx, true);
-  }
+  webListeningStore.document.libraryIDs = [...libraryIDs];
+  const restored = pendingWebRestore && await restoreWebListeningAfterImport();
+  persistWebListening(); refreshPlaylistUI();
+  if (playFirst && !relinking && !restored && firstAddedIdx >= 0) await loadTrack(firstAddedIdx, true);
 }
+function refreshPlaylistUI() { renderListeningUI(); }
 
-function refreshPlaylistUI() {
-  // Dropdown list
-  trackSelect.innerHTML = '';
-  const placeholder = document.createElement('option');
-  placeholder.value = '';
-  placeholder.textContent = `— ${trackList.length} Tunes —`;
-  trackSelect.appendChild(placeholder);
-  
-  // Sidebar list HTML
-  trackListContainer.innerHTML = '';
-
-  trackList.forEach((track, i) => {
-    const opt = document.createElement('option');
-    opt.value = String(i);
-    opt.textContent = track.name;
-    trackSelect.appendChild(opt);
-
-    const row = document.createElement('div');
-    row.className = `track-row ${i === currentIdx ? 'active' : ''}`;
-    const name = document.createElement('span');
-    name.className = 'track-name';
-    name.textContent = track.name;
-    row.appendChild(name);
-    row.addEventListener('click', () => loadTrack(i, true));
-    trackListContainer.appendChild(row);
-  });
-
-  if (currentIdx !== -1) {
-    trackSelect.value = String(currentIdx);
-  }
-}
-
-async function loadTrack(index, autoplay) {
+async function loadTrack(index, autoplay, subtune = 0, updateListeningQueue = true) {
   if (index < 0 || index >= trackList.length) return;
   const generation = ++trackLoadGeneration;
   ++playbackGeneration;
@@ -442,17 +412,21 @@ async function loadTrack(index, autoplay) {
 
   try {
     if (track.isUser && track.buffer) {
-      await player.loadBuffer(track.buffer, 0);
+      await player.loadBuffer(track.buffer, subtune);
     } else {
       // Fallback to URL fetch
-      await player.load(track.url || `audio/${track.id}.sid`, 0);
+      await player.load(track.url || `audio/${track.id}.sid`, subtune);
     }
   } catch (err) {
     if (generation !== trackLoadGeneration) return;
     showError('Load failed: ' + err.message);
     return;
   }
-  if (generation !== trackLoadGeneration) return;
+  if (generation !== trackLoadGeneration) return false;
+  currentSubtune = subtune;
+  subtuneLabel.textContent = `SUBTUNE: ${subtune + 1}/${totalSubtunesCount}`;
+  if (updateListeningQueue) { makeDefaultWebQueue(index); pendingWebRestore = false; }
+  persistWebListening(); refreshPlaylistUI();
 
   playBtn.disabled = false;
   positionScrubber.disabled = false;
@@ -472,6 +446,7 @@ async function loadTrack(index, autoplay) {
       console.error('Autoplay failed:', e);
     }
   }
+  return generation === trackLoadGeneration;
 }
 
 function setPlayingUI(isPlaying) {
@@ -482,8 +457,12 @@ function setPlayingUI(isPlaying) {
 }
 
 function setSubtune(sub) {
+  if (!Number.isInteger(sub) || sub < 0 || sub >= totalSubtunesCount) return;
   currentSubtune = sub;
   player.setSubtune(sub);
+  lastVisuals.playtime = 0;
+  listeningQueue?.updateSubtune(sub, trackList[currentIdx]?.id);
+  persistWebListening(); refreshPlaylistUI();
   subtuneLabel.textContent = `SUBTUNE: ${sub + 1}/${totalSubtunesCount}`;
 }
 
@@ -537,7 +516,21 @@ player.watchVisuals((visuals) => {
   lastVisuals.waveforms = visuals.waveforms;
   lastVisuals.pulsewidths = visuals.pulsewidths;
   lastVisuals.playtime = visuals.playtime;
+  const bucket = Math.floor((visuals.playtime || 0) / 5);
+  if (bucket !== lastWebSessionBucket) { lastWebSessionBucket = bucket; persistWebListening(); }
+  checkWebAutoNext(visuals.playtime);
 });
+
+async function checkWebAutoNext(playtime) {
+  if (webAdvanceInProgress || !playingState || !autoNextCheck.checked || playtime < SCRUB_MAX) return;
+  webAdvanceInProgress = true;
+  try {
+    if (listeningQueue?.current?.subtune == null && currentSubtune + 1 < totalSubtunesCount) {
+      await loadTrack(currentIdx, true, currentSubtune + 1, false);
+    } else await advanceWebQueue(true, true);
+  } finally { webAdvanceInProgress = false; }
+}
+
 
 // ─── Visualizer Loop ────────────────────────────────────────────────────────
 const ctx = canvas.getContext('2d');
@@ -594,16 +587,6 @@ function draw() {
   if (!isSeeking && positionScrubber) {
     positionScrubber.value = String(Math.min(playtime, SCRUB_MAX));
     timeCurrent.textContent = fmtTime(playtime);
-  }
-
-  // Playlist Auto Next
-  if (live && autoNextCheck.checked && playtime >= SCRUB_MAX) {
-    player.stop();
-    setPlayingUI(false);
-    if (trackList.length > 1) {
-      const next = (currentIdx + 1) % trackList.length;
-      loadTrack(next, true);
-    }
   }
 
   const channelH = H / 3;
@@ -693,16 +676,16 @@ if (themeBtn) {
     if (wasDark) {
       playerEl.classList.add('theme-light');
       themeBtn.textContent = 'DARK';
-      localStorage.setItem('vicious-theme', 'light');
+      try { localStorage.setItem('vicious-theme', 'light'); } catch (_) {}
     } else {
       playerEl.classList.add('theme-dark');
       themeBtn.textContent = 'LIGHT';
-      localStorage.setItem('vicious-theme', 'dark');
+      try { localStorage.setItem('vicious-theme', 'dark'); } catch (_) {}
     }
   });
 
   // Restore saved theme or use system preference
-  const savedTheme = localStorage.getItem('vicious-theme');
+  let savedTheme; try { savedTheme = localStorage.getItem('vicious-theme'); } catch (_) {}
   if (savedTheme === 'dark') {
     playerEl.classList.add('theme-dark');
     themeBtn.textContent = 'LIGHT';

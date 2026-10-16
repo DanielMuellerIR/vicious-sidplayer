@@ -72,7 +72,7 @@ jobs:
         run: apt-get install -y -qq python3 nodejs
 
       - name: JavaScript-Zustand und Emulationsregressionen
-        run: node --test Tests/WebPlayerTests.mjs
+        run: node --test Tests/WebPlayerTests.mjs Tests/WebListeningTests.mjs
 
       - name: CLI-Abbruch und ungueltige Dump-Dauer
         run: python3 Tests/cli-regressions.py .build/debug/vicious-sid .build/debug/sidcheck

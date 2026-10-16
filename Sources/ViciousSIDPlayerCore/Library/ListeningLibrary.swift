@@ -209,6 +209,10 @@ public struct ListeningQueue: Codable, Equatable, Sendable {
         items.insert(entry, at: target)
     }
 
+    public mutating func move(fromOffsets offsets: IndexSet, toOffset destination: Int) {
+        moveListeningEntries(&items, fromOffsets: offsets, toOffset: destination)
+    }
+
     public mutating func remove(_ id: UUID) {
         // Der laufende Eintrag bleibt bis zum Titelwechsel eindeutig zugeordnet.
         guard id != currentID else { return }
@@ -274,9 +278,9 @@ public enum ListeningLibraryError: Error, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .unsupportedVersion: return "Die Hörfolgen-Datei stammt aus einer nicht unterstützten Version. Sie bleibt unverändert."
-        case .invalidData: return "Die Hörfolgen-Datei enthält ungültige Einträge. Sie bleibt unverändert."
-        case .unavailableLocation: return "Der Speicherort für Hörfolgen ist nicht erreichbar."
+        case .unsupportedVersion: return NSLocalizedString("Die Hörfolgen-Datei stammt aus einer nicht unterstützten Version. Sie bleibt unverändert.", comment: "")
+        case .invalidData: return NSLocalizedString("Die Hörfolgen-Datei enthält ungültige Einträge. Sie bleibt unverändert.", comment: "")
+        case .unavailableLocation: return NSLocalizedString("Der Speicherort für Hörfolgen ist nicht erreichbar.", comment: "")
         }
     }
 }
@@ -309,4 +313,12 @@ public final class ListeningLibraryStore: @unchecked Sendable {
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: fileURL, options: .atomic)
     }
+}
+
+func moveListeningEntries(_ entries: inout [ListeningEntry], fromOffsets offsets: IndexSet, toOffset destination: Int) {
+    guard (0...entries.count).contains(destination), offsets.allSatisfy({ entries.indices.contains($0) }) else { return }
+    let moving = offsets.map { entries[$0] }
+    let insertion = destination - offsets.filter { $0 < destination }.count
+    for index in offsets.reversed() { entries.remove(at: index) }
+    entries.insert(contentsOf: moving, at: insertion)
 }

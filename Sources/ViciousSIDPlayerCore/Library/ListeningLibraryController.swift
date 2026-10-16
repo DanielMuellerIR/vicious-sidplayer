@@ -44,7 +44,7 @@ public final class ListeningLibraryController: ObservableObject {
             if queueChangedBeforeLoad { document.queue = self.document.queue }
             self.document = document
         case .failure(let error):
-            storageError = "Hörfolgen konnten nicht geladen werden: \(error.localizedDescription) Die vorhandene Datei bleibt erhalten."
+            storageError = String(format: NSLocalizedString("Hörfolgen konnten nicht geladen werden: %@ Die vorhandene Datei bleibt erhalten.", comment: ""), error.localizedDescription)
             isReadOnly = true
         }
         isLoaded = true
@@ -89,6 +89,12 @@ public final class ListeningLibraryController: ObservableObject {
     public func moveQueueEntry(_ id: UUID, by offset: Int) {
         guard var queue = document.queue else { return }
         queue.move(id, by: offset)
+        setQueue(queue)
+    }
+
+    public func moveQueueEntries(fromOffsets offsets: IndexSet, toOffset destination: Int) {
+        guard var queue = document.queue else { return }
+        queue.move(fromOffsets: offsets, toOffset: destination)
         setQueue(queue)
     }
 
@@ -141,6 +147,12 @@ public final class ListeningLibraryController: ObservableObject {
         saveSoon()
     }
 
+    public func moveListEntries(in listID: UUID, fromOffsets offsets: IndexSet, toOffset destination: Int) {
+        guard isLoaded, !isReadOnly, let index = document.lists.firstIndex(where: { $0.id == listID }) else { return }
+        moveListeningEntries(&document.lists[index].entries, fromOffsets: offsets, toOffset: destination)
+        saveSoon()
+    }
+
     public func removeListEntry(_ id: UUID, from listID: UUID) {
         guard isLoaded, !isReadOnly, let index = document.lists.firstIndex(where: { $0.id == listID }) else { return }
         document.lists[index].entries.removeAll { $0.id == id }
@@ -189,7 +201,7 @@ public final class ListeningLibraryController: ObservableObject {
                 self.isSaving = false
                 switch result {
                 case .success: self.storageError = nil
-                case .failure(let error): self.storageError = "Hörfolgen sind noch nicht gesichert: \(error.localizedDescription)"
+                case .failure(let error): self.storageError = String(format: NSLocalizedString("Hörfolgen sind noch nicht gesichert: %@", comment: ""), error.localizedDescription)
                 }
             }
         }
@@ -209,7 +221,7 @@ public final class ListeningLibraryController: ObservableObject {
             try writer.sync { try store.save(snapshot) }
             storageError = nil
             isSaving = false
-        } catch { storageError = "Hörfolgen konnten nicht gesichert werden: \(error.localizedDescription)" }
+        } catch { storageError = String(format: NSLocalizedString("Hörfolgen konnten nicht gesichert werden: %@", comment: ""), error.localizedDescription) }
     }
 }
 #endif
