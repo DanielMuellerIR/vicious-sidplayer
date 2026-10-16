@@ -1,0 +1,82 @@
+{
+  "bookmarks" : [
+    {
+      "id" : "CDB63E9F-7AF8-4CD5-9AC5-EB225E44E72F",
+      "name" : "Native Bruecke 42",
+      "position" : 42.125,
+      "reference" : {
+        "md5" : "806e34138a4ac2377e1d3a4dbc2dc10e",
+        "path" : "Moved\/PAL.sid",
+        "subtune" : 2
+      },
+      "updatedAt" : "2026-10-16T13:00:00.000Z"
+    }
+  ],
+  "createdAt" : "2026-10-16T14:12:39.151Z",
+  "endTimes" : [
+    {
+      "md5" : "806e34138a4ac2377e1d3a4dbc2dc10e",
+      "seconds" : 125.5,
+      "subtune" : 2
+    }
+  ],
+  "favorites" : [
+    {
+      "md5" : "806e34138a4ac2377e1d3a4dbc2dc10e",
+      "path" : "Moved\/PAL.sid"
+    },
+    {
+      "md5" : "f44e9b5b0ab0af7dcfc2064d95b3ad58",
+      "path" : "Trust.sid"
+    }
+  ],
+  "format" : "vicioussid.personal-collection",
+  "lists" : [
+    {
+      "entries" : [
+        {
+          "id" : "41152BB5-4DAC-4B5E-8F07-2F35CE874D05",
+          "reference" : {
+            "md5" : "806e34138a4ac2377e1d3a4dbc2dc10e",
+            "path" : "Moved\/PAL.sid",
+            "subtune" : 2
+          }
+        },
+        {
+          "id" : "EAFD2963-EACD-4C63-98C7-C421578F09C7",
+          "reference" : {
+            "md5" : "806e34138a4ac2377e1d3a4dbc2dc10e",
+            "path" : "Moved\/PAL.sid",
+            "subtune" : 2
+          }
+        }
+      ],
+      "id" : "E5AA9AA5-6072-4565-8D14-4ACBC72853BA",
+      "kind" : "regular",
+      "name" : "Doppelte Subtunes"
+    }
+  ],
+  "name" : "Music",
+  "notes" : [
+    {
+      "id" : "0F526A5C-7325-4F36-933F-E6458DE5CFE4",
+      "reference" : {
+        "md5" : "806e34138a4ac2377e1d3a4dbc2dc10e",
+        "path" : "Moved\/PAL.sid"
+      },
+      "text" : "Importierte Dateinotiz",
+      "updatedAt" : "2026-10-16T13:00:00.000Z"
+    },
+    {
+      "id" : "512EF2C7-194F-458D-B14C-EF922A67B3B4",
+      "reference" : {
+        "md5" : "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "path" : "Missing.sid",
+        "subtune" : 1
+      },
+      "text" : "Fehlende Datei behalten",
+      "updatedAt" : "2026-10-16T13:00:00.000Z"
+    }
+  ],
+  "version" : 1
+}

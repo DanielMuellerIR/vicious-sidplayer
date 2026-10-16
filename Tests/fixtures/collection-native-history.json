@@ -1,0 +1,141 @@
+{
+  "bookmarks" : [
+    {
+      "id" : "CDB63E9F-7AF8-4CD5-9AC5-EB225E44E72F",
+      "name" : "Native Bruecke 42",
+      "position" : 42.125,
+      "reference" : {
+        "md5" : "806e34138a4ac2377e1d3a4dbc2dc10e",
+        "path" : "Moved\/PAL.sid",
+        "subtune" : 2
+      },
+      "updatedAt" : "2026-10-16T13:00:00.000Z"
+    }
+  ],
+  "createdAt" : "2026-10-16T14:14:20.720Z",
+  "endTimes" : [
+    {
+      "md5" : "806e34138a4ac2377e1d3a4dbc2dc10e",
+      "seconds" : 125.5,
+      "subtune" : 2
+    }
+  ],
+  "favorites" : [
+    {
+      "md5" : "806e34138a4ac2377e1d3a4dbc2dc10e",
+      "path" : "Moved\/PAL.sid"
+    },
+    {
+      "md5" : "f44e9b5b0ab0af7dcfc2064d95b3ad58",
+      "path" : "Trust.sid"
+    }
+  ],
+  "format" : "vicioussid.personal-collection",
+  "history" : {
+    "events" : [
+      {
+        "heardSeconds" : 301.5765272916651,
+        "id" : "E9A5D4EA-2519-4800-AA23-B1A9D9BD7F60",
+        "lastHeardAt" : "2026-10-16T14:14:20.002Z",
+        "lastPosition" : 302.59199547782356,
+        "reference" : {
+          "md5" : "806e34138a4ac2377e1d3a4dbc2dc10e",
+          "path" : "Moved\/PAL.sid",
+          "subtune" : 1
+        },
+        "startedAt" : "2026-10-16T14:09:18.094Z",
+        "title" : "PAL Listening Probe"
+      },
+      {
+        "heardSeconds" : 359.088614458331,
+        "id" : "1F109E90-E612-4EB9-8D39-BEAEA24D52E6",
+        "lastHeardAt" : "2026-10-16T14:09:17.042Z",
+        "lastPosition" : 360.0746711686608,
+        "reference" : {
+          "md5" : "806e34138a4ac2377e1d3a4dbc2dc10e",
+          "path" : "Moved\/PAL.sid",
+          "subtune" : 0
+        },
+        "startedAt" : "2026-10-16T14:03:17.953Z",
+        "title" : "PAL Listening Probe"
+      },
+      {
+        "heardSeconds" : 57.786769916667254,
+        "id" : "7F8D7CC3-5BA0-44F4-BE44-00042F6AA1AC",
+        "lastHeardAt" : "2026-10-16T14:03:16.941Z",
+        "lastPosition" : 99.04800453286339,
+        "reference" : {
+          "md5" : "806e34138a4ac2377e1d3a4dbc2dc10e",
+          "path" : "Moved\/PAL.sid",
+          "subtune" : 2
+        },
+        "startedAt" : "2026-10-16T14:02:19.154Z",
+        "title" : "PAL Listening Probe"
+      },
+      {
+        "heardSeconds" : 25,
+        "id" : "D2459E9A-EBFA-4D40-8D0F-BFC0B68B3536",
+        "lastHeardAt" : "2026-10-16T12:00:25.000Z",
+        "lastPosition" : 55.25,
+        "reference" : {
+          "md5" : "806e34138a4ac2377e1d3a4dbc2dc10e",
+          "path" : "Moved\/PAL.sid",
+          "subtune" : 2
+        },
+        "startedAt" : "2026-10-16T12:00:00.000Z",
+        "title" : "Brueckenereignis"
+      }
+    ],
+    "heardMD5s" : [
+      "806e34138a4ac2377e1d3a4dbc2dc10e"
+    ]
+  },
+  "lists" : [
+    {
+      "entries" : [
+        {
+          "id" : "41152BB5-4DAC-4B5E-8F07-2F35CE874D05",
+          "reference" : {
+            "md5" : "806e34138a4ac2377e1d3a4dbc2dc10e",
+            "path" : "Moved\/PAL.sid",
+            "subtune" : 2
+          }
+        },
+        {
+          "id" : "EAFD2963-EACD-4C63-98C7-C421578F09C7",
+          "reference" : {
+            "md5" : "806e34138a4ac2377e1d3a4dbc2dc10e",
+            "path" : "Moved\/PAL.sid",
+            "subtune" : 2
+          }
+        }
+      ],
+      "id" : "E5AA9AA5-6072-4565-8D14-4ACBC72853BA",
+      "kind" : "regular",
+      "name" : "Doppelte Subtunes"
+    }
+  ],
+  "name" : "Music",
+  "notes" : [
+    {
+      "id" : "0F526A5C-7325-4F36-933F-E6458DE5CFE4",
+      "reference" : {
+        "md5" : "806e34138a4ac2377e1d3a4dbc2dc10e",
+        "path" : "Moved\/PAL.sid"
+      },
+      "text" : "Importierte Dateinotiz",
+      "updatedAt" : "2026-10-16T13:00:00.000Z"
+    },
+    {
+      "id" : "512EF2C7-194F-458D-B14C-EF922A67B3B4",
+      "reference" : {
+        "md5" : "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "path" : "Missing.sid",
+        "subtune" : 1
+      },
+      "text" : "Fehlende Datei behalten",
+      "updatedAt" : "2026-10-16T13:00:00.000Z"
+    }
+  ],
+  "version" : 1
+}

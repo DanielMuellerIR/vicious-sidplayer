@@ -1,7 +1,8 @@
 // Wie im nativen Core: monotone Hoerzeit, begrenzte Ereignisse und ein
-// davon unabhaengiger Gehoert-Index. Webreferenzen nutzen den Katalogfingerprint.
+// davon unabhaengiger Gehoert-Index. Alte FNV-Referenzen bleiben lesbar;
+// nach Inhaltsprüfung ergänzt MD5 die portable Identität.
 function emptyHistoryDocument() { return { version: 1, events: [], heard: [], bookmarks: [], notes: [] }; }
-function historyContentKey(reference) { return reference.fingerprint + ':' + (reference.subtune ?? 'file'); }
+function historyContentKey(reference) { return (reference.md5 || reference.fingerprint) + ':' + (reference.subtune ?? 'file'); }
 function validateHistoryDocument(doc) {
   const string = (value, maximum) => typeof value === 'string' && value.length > 0 && value.length <= maximum && !value.includes('\0');
   const position = value => Number.isFinite(value) && value >= 0;

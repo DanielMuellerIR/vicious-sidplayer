@@ -1,3 +1,9 @@
+Vicious SID Player 1.9.36 ergänzt den Sammlungsaustausch im eigenständigen HTML5-Player.
+
+- Native Sammlungsdateien mit konkreter Konfliktwahl, widerrufbarer Pfadannahme und optionalem Verlauf importieren. Heruntergeladene Browserdaten verwenden dasselbe native Format und erhalten geordnete Listenduplikate sowie genaue Lesezeichenpositionen.
+- Belegte Musikbytes liefern MD5-Identitäten; ältere FNV-Daten und ursprüngliche Ablagen bleiben geschützt. Browserschreibzugriffe teilen sich einen Web Lock und behandeln unterbrochene Zwei-Dokument-Importe. Ohne Browserunterstützung bleiben persönliche Daten schreibgeschützt.
+- Native persönliche Endzeiten sind in HTML5 ausdrücklich ausgenommen; das Originalarchiv bleibt unverändert. Die lokale Einzeldatei bleibt ohne Server nutzbar. Siehe [Prüfstand](docs/validation-1.9.36.md).
+
 Vicious SID Player 1.9.35 ergänzt den Sammlungsaustausch auf Mac und iPhone.
 
 - Ausgewählte Favoriten, geordnete Hörfolgen, Lieblings-Subtunes, Lesezeichen, Notizen und persönliche Endzeiten als lokale JSON-Datei exportieren. Verlauf ist optional und standardmäßig aus.

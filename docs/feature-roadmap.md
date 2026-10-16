@@ -13,7 +13,7 @@ Dieser Plan setzt die [Erweiterungsanalyse](feature-opportunities.md) um. Jede S
 | 04 | Repeat, Fadeout, Endzeiten und Einschlaftimer | 6–10 h | Abgeschlossen in v1.9.31; kontrollierte Mac-Nachprobe bestanden |
 | 05 | Verlauf, Lesezeichen und Notizen | 6–10 h | Abgeschlossen in v1.9.32; native und HTML5-Abnahme bestanden |
 | 06 | Nativer Austausch persönlicher Sammlungsdaten | 6–10 h | Auf Mac und iPhone in v1.9.35 abgenommen |
-| 06b | Sammlungsaustausch in HTML5 | 4–6 h | Detailentwurf vorbereitet; native MD5- und bisherige Browser-FNV-Identitäten getrennt behandeln |
+| 06b | Sammlungsaustausch in HTML5 | 4–6 h | Abgeschlossen in v1.9.36; nativer Rundlauf und Browser-Speicherschutz geprüft |
 | 07 | Solo und getrennte Multi-SID-Steuerung | 4–6 h | Geplant |
 | 08 | Piano-, Registeransicht und A/B-Schleifen | 8–12 h | Geplant |
 | 09 | Batch-WAV-Export und Mixwahl | 6–10 h | Geplant |

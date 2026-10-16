@@ -9,8 +9,11 @@ Quelldateien:
     src/body.html               Body-Markup
     src/listening.js            Hoerfolgen und lokale Metadatenablage
     src/history.js              Verlauf, Lesezeichen und persoenliche Notizen
+    src/collection.js           Portables Sammlungsformat, Identitaet und Merge
+    src/personal-storage.js     Wiederherstellbarer Browser-Speicher
     src/history-ui.js           Bedienung der persoenlichen Daten
     src/listening-ui.js         Sammlungsansichten und Listenbedienung
+    src/collection-ui.js        Import, Export und konkrete Konfliktvorschau
     src/app.js                  App-Logik (DOM-Wiring, Drag&Drop, …)
 
 """
@@ -193,7 +196,9 @@ def build(minify: bool = True) -> Path:
     sidplayer_src = (HERE / 'sidplayer.js').read_text()
     css_src = (SRC_DIR / 'styles.css').read_text()
     body_src = (SRC_DIR / 'body.html').read_text()
-    app_src = (SRC_DIR / 'listening.js').read_text() + '\n' + (SRC_DIR / 'history.js').read_text() + '\n' + (SRC_DIR / 'history-ui.js').read_text() + '\n' + (SRC_DIR / 'listening-ui.js').read_text() + '\n' + (SRC_DIR / 'app.js').read_text()
+    app_src = '\n'.join((SRC_DIR / name).read_text() for name in (
+        'listening.js', 'history.js', 'collection.js', 'personal-storage.js',
+        'history-ui.js', 'listening-ui.js', 'collection-ui.js', 'app.js'))
 
     # Version einpflegen
     version = (HERE / 'VERSION').read_text().strip()

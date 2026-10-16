@@ -18,7 +18,7 @@
 
 A self-contained Commodore 64 SID music player in three variants:
 
-1. **HTML5 (`vicious-sid-player.html`)** — a single HTML file (~50 KB) that runs straight from the file system via double click, no web server required.
+1. **HTML5 (`vicious-sid-player.html`)** — a single HTML file that runs straight from the file system via double click, no web server required.
 2. **Native macOS app (`Vicious SID Player.app`)** — SwiftUI desktop application with `AVAudioEngine` and a real-time oscilloscope.
 3. **Native iOS app (`ios/`)** — SwiftUI iPhone app with background playback, lock-screen controls, and folder import. Built from source with your own developer team; see [iOS app](#ios-app-iphone).
 
@@ -63,7 +63,7 @@ Track paths are relative to the autoplay folder. Absolute paths, `..` and anythi
 - **2SID / 3SID stereo**: Multi-SID tunes (PSID v3/v4) play with all chips, panned in stereo, including per-chip 6581/8580 model preferences from the file header.
 - **Session restore**: With shuffle off, the app resumes the last tune, subtune, and position on launch. On macOS and iPhone this also restores the listening sequence and pending **Als Nächstes** entries. The iPhone prepares the restored title without playing. With shuffle on, a fresh shuffled sequence starts and pending requests are retained.
 - **History, bookmarks and personal notes (macOS, iPhone and HTML5)**: A History tab beside Music, Lists and Queue records actual listening, with subtune and last position. Save named position bookmarks and notes for a whole file or one subtune. Visible history keeps up to 2,000 plays from 180 days; the separate heard status powers “Never heard” and survives automatic retention. Clearing history also clears heard status and keeps bookmarks and notes. Native search supports `heard:never`, `heard:yes` and `heard:unknown`. Position jumps support up to 20 minutes; later saved marks are retained with an explicit limit. Browser data stays in local browser storage; select music files again after reopening.
-- **Native collection transfer (macOS and iPhone)**: Export and import favorites, ordered listening lists, favorite subtunes, bookmarks, notes and custom end times as local JSON. History and heard status are optional and off by default. Preview file matches and explicit conflicts before merging; missing or ambiguous path entries require confirmation before they are skipped. Music, the active queue, playback position and timer remain unchanged. On Mac, choose “Sammlungsdaten …” in the sidebar; on iPhone, open “Persönliche Sammlungsdaten …” from the library menu. HTML5 transfer follows separately. See [format and merge rules](docs/personal-collection.md).
+- **Collection transfer (macOS, iPhone and HTML5)**: Exchange favorites, ordered lists, favorite subtunes, bookmarks and notes as local JSON. History and heard status are optional and off by default. Preview content matches and concrete conflicts before merging; confirm skipped favorite/list entries. Music, the active queue and playback position are preserved. On Mac, choose “Sammlungsdaten …”; on iPhone, “Persönliche Sammlungsdaten …”; in HTML5, “Import / export personal collection”. Native apps also exchange custom end times; HTML5 explicitly excludes them. Older browser FNV data stays local until selected music supplies verified MD5 identities. Safe browser writes require Web Locks support. See [format and merge rules](docs/personal-collection.md).
 - **Metadata search (macOS and iPhone)**: The library appears from its file index immediately; SID titles, authors, release information and chip models are added in the background. Search words include file names, folders and header metadata. Combine fields such as `author:"Rob Hubbard" chips:3 model:8580` or `min:1:00 max:3:00`; duration refers to subtune 1 and uses custom end times before known HVSC/cache values. `duration:unknown`, `model:unknown` and `metadata:unknown` keep missing information explicit. Save, recall, rename and delete search views, including the favorites filter. Later filter changes leave the listening sequence unchanged.
 - **Favorites**: A persistent star per track with a favorites-only filter.
 - **Voice muting & filter toggle**: Mute each of the three SID voices individually and bypass the SID filter — directly in the oscilloscope view, useful for analyzing how a tune is built.
@@ -301,7 +301,7 @@ The following fixes were applied on top of the original:
 ### HTML5
 
 ```bash
-python3 build.py                  # → vicious-sid-player.html (~50 KB)
+python3 build.py                  # → vicious-sid-player.html
 python3 build.py --no-min         # without minification
 ```
 

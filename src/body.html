@@ -71,6 +71,7 @@
         <button id="tab-history" role="tab">History</button>
       </div>
       <div id="listening-status" class="listening-status" role="status"></div>
+      <div class="sidebar-tools"><button id="collection-open">Import / export personal collection</button></div>
       <div class="sidebar-tools" id="library-tools">
         <input id="library-search" type="search" placeholder="Search titles or folders" aria-label="Search titles or folders">
         <label><input type="checkbox" id="favorites-only"> Favorites only</label>
@@ -148,4 +149,32 @@
     <textarea id="history-editor-text" rows="7" maxlength="16000"></textarea>
     <div class="tool-row"><button type="button" id="history-editor-cancel">Cancel</button><button type="submit">Save</button></div>
   </form>
+</dialog>
+
+<dialog id="collection-dialog" aria-labelledby="collection-heading">
+  <div class="collection-layout">
+    <div class="collection-heading"><h2 id="collection-heading">Personal collection</h2><button id="collection-close" type="button">Close</button></div>
+    <p>Exchange favorites, lists, bookmarks and notes with the Mac and iPhone apps. Music files and file permissions are never included.</p>
+    <p id="collection-protection" class="collection-warning" role="status"></p>
+    <label>Action <select id="collection-mode"><option value="import">Import collection file</option><option value="export">Export this browser's collection</option></select></label>
+    <div id="collection-import-controls">
+      <label>Collection JSON file <input id="collection-file" type="file" accept=".json,application/json"></label>
+    </div>
+    <fieldset id="collection-areas"><legend>Included data</legend></fieldset>
+    <p id="collection-unsupported"></p>
+    <div id="collection-preview" hidden>
+      <div class="tool-row"><button id="collection-refresh" type="button">Refresh preview</button><button id="collection-original" type="button">Save original file</button></div>
+      <p id="collection-summary" role="status"></p>
+      <div id="collection-rows"></div>
+      <div class="tool-row collection-pagination"><button id="collection-previous" type="button">Previous</button><span id="collection-page"></span><button id="collection-next" type="button">Next</button></div>
+      <label id="collection-skip-row" hidden><input id="collection-skip" type="checkbox"><span id="collection-skip-label"></span></label>
+      <button id="collection-apply" type="button" disabled>Import selected data</button>
+    </div>
+    <div id="collection-export-controls" hidden>
+      <p id="collection-export-report"></p>
+      <label id="collection-export-ack-row" hidden><input id="collection-export-ack" type="checkbox">Export this partial or unverified collection; keep all unresolved data in this browser.</label>
+      <button id="collection-export" type="button">Download collection JSON</button>
+    </div>
+    <p id="collection-error" role="status" aria-live="polite"></p>
+  </div>
 </dialog>

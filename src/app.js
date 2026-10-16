@@ -116,8 +116,8 @@ const lastVisuals = {
 
 // No built-in tracks — all SIDs come from user via drag & drop or file picker
 trackList = [];
-initializeListeningUI();
-refreshPlaylistUI();
+$('player').inert = true;
+const webListeningReady = initializeListeningUI().then(() => { $('player').inert = false; refreshPlaylistUI(); });
 
 // ─── Event Listeners ────────────────────────────────────────────────────────
 fileInput.addEventListener('change', (e) => {
@@ -327,6 +327,7 @@ function addUserFiles(files, playFirst) {
 }
 
 async function importUserFiles(files, playFirst) {
+  if (webCollectionBusy) return;
   const sids = files.filter(f => f.name.toLowerCase().endsWith('.sid'));
   if (!sids.length) return;
   const relinking = pendingWebRestore || missingWebFileCount() > 0;
@@ -348,16 +349,17 @@ async function importUserFiles(files, playFirst) {
       const bytes = new Uint8Array(await file.arrayBuffer());
       if (!bytes.length) continue;
       const fingerprint = listeningFileFingerprint(bytes), key = fingerprint + ':' + bytes.length;
-      imported.push({ sourcePath, bytes, fingerprint }); incomingCounts.set(key, (incomingCounts.get(key) || 0) + 1);
+      imported.push({ sourcePath, bytes, fingerprint, md5: collectionMD5(bytes) }); incomingCounts.set(key, (incomingCounts.get(key) || 0) + 1);
     } catch (_) {}
   }
-  for (const { sourcePath, bytes, fingerprint } of imported) {
+  if (webCollectionBusy) return;
+  for (const { sourcePath, bytes, fingerprint, md5 } of imported) {
     try {
       const exactID = sourcePath + ':' + fingerprint;
       const matches = byFingerprint.get(fingerprint + ':' + bytes.length) || [];
       const old = catalogByID.get(exactID) || (relinking && matches.length === 1 && incomingCounts.get(fingerprint + ':' + bytes.length) === 1 ? matches[0] : null);
       const id = old?.id || exactID, metadata = parseSidHeader(bytes);
-      const item = { id, path: sourcePath, name: sourcePath.replace(/\.sid$/i, ''), fingerprint, size: bytes.length, subtunesCount: metadata?.subtunesCount || 1 };
+      const item = { id, path: sourcePath, name: sourcePath.replace(/\.sid$/i, ''), fingerprint, md5, size: bytes.length, subtunesCount: metadata?.subtunesCount || 1 };
       if (old) Object.assign(old, item);
       else { catalog.push(item); catalogByID.set(id, item); }
       libraryIDs.add(id);
@@ -369,6 +371,7 @@ async function importUserFiles(files, playFirst) {
     } catch (_) {}
   }
   webListeningStore.document.libraryIDs = [...libraryIDs];
+  if (webHistoryStore.document.version === 2 && !webHistoryStore.readOnly) bindCollectionHistory(webHistoryStore.document, webCollectionTracks());
   const restored = pendingWebRestore && await restoreWebListeningAfterImport();
   persistWebListening(); refreshPlaylistUI();
   if (playFirst && !relinking && !restored && firstAddedIdx >= 0) await loadTrack(firstAddedIdx, true);
@@ -376,6 +379,7 @@ async function importUserFiles(files, playFirst) {
 function refreshPlaylistUI() { renderListeningUI(); }
 
 async function loadTrack(index, autoplay, subtune = 0, updateListeningQueue = true) {
+  if (webCollectionBusy) return false;
   if (index < 0 || index >= trackList.length) return;
   const generation = ++trackLoadGeneration;
   ++playbackGeneration;
@@ -459,6 +463,7 @@ function setPlayingUI(isPlaying) {
 }
 
 function setSubtune(sub) {
+  if (webCollectionBusy) return;
   if (!Number.isInteger(sub) || sub < 0 || sub >= totalSubtunesCount) return;
   observeWebHistory(false, true);
   currentSubtune = sub;

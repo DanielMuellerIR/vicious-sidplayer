@@ -1,3 +1,9 @@
+Vicious SID Player 1.9.36 adds personal collection transfer to the standalone HTML5 player.
+
+- Import native collection JSON with explicit conflict choices, reversible path acceptance and optional history. Export downloaded browser data in the same native format, preserving ordered duplicate list entries and exact bookmark positions.
+- Verified music bytes supply MD5 identities; legacy FNV data and original storage remain protected. Browser writes share a Web Lock and recover interrupted two-document imports. Unsupported browsers keep personal data read-only.
+- Native custom end times are explicitly excluded in HTML5; the original archive remains unchanged. Single-file file-system use is preserved. See [validation](docs/validation-1.9.36.md).
+
 Vicious SID Player 1.9.35 adds collection transfer to macOS and iPhone.
 
 - Export selected favorites, ordered listening lists, favorite subtunes, bookmarks, notes and custom end times as local JSON. History is optional and disabled by default.

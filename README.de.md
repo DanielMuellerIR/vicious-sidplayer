@@ -18,7 +18,7 @@
 
 Ein eigenständiger Commodore-64-SID-Musikplayer in drei Varianten:
 
-1. **HTML5 (`vicious-sid-player.html`)** — Eine einzelne HTML-Datei (~50 KB), die ohne Webserver direkt per Doppelklick aus dem Dateisystem funktioniert.
+1. **HTML5 (`vicious-sid-player.html`)** — Eine einzelne HTML-Datei, die ohne Webserver direkt per Doppelklick aus dem Dateisystem funktioniert.
 2. **Native macOS App (`Vicious SID Player.app`)** — SwiftUI-Desktop-Anwendung mit `AVAudioEngine` und Echtzeit-Oszilloskop.
 3. **Native iOS App (`ios/`)** — SwiftUI-iPhone-App mit Hintergrundwiedergabe, Sperrbildschirm-Steuerung und Ordner-Import. Wird mit einem eigenen Developer-Team aus den Quellen gebaut; siehe [iOS-App](#ios-app-iphone).
 
@@ -63,7 +63,7 @@ Der Titelpfad gilt relativ zum Autoplay-Ordner. Absolute Pfade, `..` und alles, 
 - **2SID / 3SID stereo**: Multi-SID-Tunes (PSID v3/v4) spielen mit allen Chips, im Stereo-Panorama verteilt, inklusive Chip-eigener 6581/8580-Modellwahl aus dem Datei-Header.
 - **Session-Restore**: Bei ausgeschaltetem Shuffle setzt die App beim Start den letzten Song an der letzten Position fort (inklusive Subtune). Auf Mac und iPhone werden auch die Hörfolge und offene **Als Nächstes**-Einträge wiederhergestellt. Das iPhone bereitet den Titel vor, ohne abzuspielen. Mit Shuffle startet eine frisch gemischte Folge; offene Wünsche bleiben erhalten.
 - **Verlauf, Lesezeichen und persönliche Notizen (macOS, iPhone und HTML5)**: Neben Musik, Listen und Folge erfasst der Verlauf echte Hörzeit samt Subtune und letzter Position. Benannte Positionsmarken und Notizen gelten für die ganze Datei oder einen Subtune. Sichtbar bleiben bis zu 2.000 Wiedergaben aus 180 Tagen; die Kennzeichnung „schon gehört“ überlebt die automatische Aufbewahrung und ermöglicht „Noch nie gehört“. Bewusstes Leeren setzt auch diese Kennzeichnung zurück und erhält Lesezeichen und Notizen. Die native Suche versteht `heard:never`, `heard:yes` und `heard:unknown`. Positionssprünge reichen bis 20 Minuten; spätere Marken bleiben mit ausdrücklichem Hinweis erhalten. Browserdaten bleiben im lokalen Browserspeicher; Musikdateien nach dem erneuten Öffnen wieder auswählen.
-- **Nativer Sammlungsaustausch (macOS und iPhone)**: Favoriten, geordnete Hörfolgen, Lieblings-Subtunes, Lesezeichen, Notizen und persönliche Endzeiten als lokale JSON-Datei exportieren und importieren. Verlauf und Gehört-Kennzeichnung sind optional und standardmäßig aus. Die Vorschau zeigt Dateizuordnung und ausdrückliche Konflikte; ausgelassene fehlende oder mehrdeutige Pfade müssen bestätigt werden. Musik, aktive Folge, Wiedergabeposition und Timer bleiben erhalten. Auf dem Mac „Sammlungsdaten …“ in der Seitenleiste wählen, auf dem iPhone „Persönliche Sammlungsdaten …“ im Bibliotheksmenü. Der HTML5-Austausch folgt separat. Siehe [Format und Zusammenführung](docs/personal-collection.md).
+- **Sammlungsaustausch (macOS, iPhone und HTML5)**: Favoriten, geordnete Listen, Lieblings-Subtunes, Lesezeichen und Notizen als lokale JSON-Datei austauschen. Verlauf und Gehört-Kennzeichnung sind optional und standardmäßig aus. Die Vorschau zeigt Inhaltszuordnung und konkrete Konflikte; ausgelassene Favoriten-/Listeneinträge müssen bestätigt werden. Musik, aktive Folge und Wiedergabeposition bleiben erhalten. Auf dem Mac „Sammlungsdaten …“, auf dem iPhone „Persönliche Sammlungsdaten …“, in HTML5 „Import / export personal collection“ öffnen. Native Apps tauschen zusätzlich persönliche Endzeiten aus; HTML5 nimmt sie ausdrücklich aus. Ältere Browser-FNV-Daten bleiben lokal erhalten, bis ausgewählte Musik belegte MD5-Identitäten liefert. Sichere Browserschreibzugriffe benötigen Web Locks. Siehe [Format und Zusammenführung](docs/personal-collection.md).
 - **Metadatensuche (macOS und iPhone)**: Die Bibliothek erscheint sofort aus ihrem Dateiindex; SID-Titel, Autoren, Veröffentlichungsangaben und Chipmodelle kommen im Hintergrund hinzu. Suchwörter finden Dateinamen, Ordner und Headerangaben. Felder wie `author:"Rob Hubbard" chips:3 model:8580` oder `min:1:00 max:3:00` lassen sich kombinieren; die Dauer bezieht sich auf Subtune 1 und verwendet eigene Endzeiten vor bekannten HVSC-/Cachewerten. `duration:unknown`, `model:unknown` und `metadata:unknown` behandeln fehlende Angaben ausdrücklich. Suchansichten samt Favoritenfilter sichern, abrufen, umbenennen und löschen. Spätere Filteränderungen lassen die Hörfolge unverändert.
 - **Favoriten**: Ein dauerhafter Stern pro Titel mit „nur Favoriten“-Filter.
 - **Voice-Muting & Filter-Schalter**: Jede der drei SID-Stimmen einzeln stummschalten und den SID-Filter überbrücken — direkt im Oszilloskop, nützlich zum Analysieren, wie ein Tune aufgebaut ist.
@@ -304,7 +304,7 @@ Gegenüber dem Original wurden folgende Korrekturen vorgenommen:
 ### HTML5
 
 ```bash
-python3 build.py                  # → vicious-sid-player.html (~50 KB)
+python3 build.py                  # → vicious-sid-player.html
 python3 build.py --no-min         # ohne Minifizierung
 ```
 

@@ -1,6 +1,6 @@
 # Persönliche Sammlungsdaten
 
-Stand: 2026-10-16. Auf Mac und iPhone lassen sich persönliche Sammlungsdaten über eine lokale JSON-Datei austauschen. Die HTML5-Oberfläche behält ihre bisherigen lokalen Daten; ihr Sammlungsaustausch wird separat ergänzt.
+Stand: 2026-10-16. Mac, iPhone und HTML5 tauschen persönliche Sammlungsdaten über dieselbe lokale JSON-Datei aus. Die nativen Apps unterstützen zusätzlich persönliche Endzeiten; im Webplayer sind diese ausdrücklich ausgenommen.
 
 ## Bedienung
 
@@ -8,7 +8,13 @@ Auf dem Mac öffnet „Sammlungsdaten …“ in der Seitenleiste die gemeinsame 
 
 Nach Auswahl einer Importdatei zeigt die Vorschau Herkunft, Bereichszahlen, konkrete vorhandene und importierte Konfliktwerte sowie nicht zugeordnete Dateien. Vorhandene Werte sind voreingestellt. Ein vorhandener Pfad ohne Inhaltsbeleg braucht ausdrückliches Vertrauen; das Auslassen nicht zugeordneter Favoriten-/Listeneinträge muss bestätigt werden. Die Importdatei bleibt vollständig erhalten. Abbrechen verändert keine persönlichen Daten.
 
-Während der Vorschau läuft die Wiedergabe weiter. „Zusammenführen“ pausiert sie kurz und erhält Titel, Subtune, Position, aktive Folge und Wiedergabeoptionen. Ein inzwischen abgelaufener Einschlaftimer wird nicht bestätigt; die App setzt dann nicht automatisch fort.
+Während der Vorschau läuft die Wiedergabe weiter. In den nativen Apps pausiert „Zusammenführen“ sie kurz und erhält Titel, Subtune, Position, aktive Folge und Wiedergabeoptionen. Ein inzwischen abgelaufener Einschlaftimer wird nicht bestätigt; die App setzt dann nicht automatisch fort.
+
+## HTML5-Bedienung
+
+„Import / export personal collection“ öffnet Import und Export. Verlauf bleibt standardmäßig aus. Die Vorschau zeigt vorhandene und importierte Konfliktwerte aufklappbar in voller Länge. Eine Pfadannahme lässt sich wieder zurücknehmen; ausgelassene Favoriten-/Listeneinträge brauchen eine Bestätigung. Größere Ergebnisse erscheinen mit höchstens 20 Zeilen pro Seite. „Import selected data“ erhält die aktive Folge, Titel, Subtune und Position; vorbereitete Wiedergabe startet dabei nicht von selbst.
+
+Der Export wird als JSON heruntergeladen. Persönliche Endzeiten werden weder importiert noch exportiert; die vollständige Importdatei bleibt erhalten und kann über „Save original file“ erneut gesichert werden. Nicht bestätigte ältere FNV-Marken, Notizen und Gehört-Werte bleiben im Browser. Der Exportbericht nennt solche Auslassungen und unbestätigte Pfadreferenzen; ein unvollständiger Export braucht eine ausdrückliche Bestätigung. Musikdateien erneut auswählen, um vollständige MD5-Inhaltsbelege zu gewinnen.
 
 ## Austauschformat
 
@@ -33,3 +39,11 @@ Hörlisten und Wiedergabeoptionen vergleichen ihre Datei vor jedem Schreiben mit
 Ein Fehler vor dem atomaren Commitmarker setzt bereits ausgetauschte Dateien zurück. Nach einem Prozessende kann dieselbe Wiederherstellung erneut ausgeführt werden. Fremde Änderungen verhindern ein blindes Zurückschreiben; Dateien und Sicherungen bleiben dann für die Klärung erhalten. Ein vollständiger Commit bleibt bis zur Übernahme der Favoriten wiederherstellbar. Die Favoritenübernahme ist idempotent, danach dürfen die Sicherungen entfernt werden.
 
 Die nativen Apps behandeln offene Transaktionen gemeinsam vor dem ersten Laden der drei Controller. Vor einer Übernahme warten sie betroffene Writer ab und halten sie an; verzögerte alte Aufträge sind entwertet. Erst nach bestätigtem Dateitausch und Favoritenübernahme verwenden die Controller die neuen Dokumente. Bei einer blockierten Wiederherstellung bleiben Dateien und Sicherungen erhalten; weitere Änderungen warten auf einen Neustart beziehungsweise die Klärung der fremden Änderung.
+
+## Browser-Speicherung
+
+Versionierte Browserdokumente behalten die bisherigen Track-IDs, Queue, Favoriten und Listen. Die alten v1-Speicherwerte werden bei der Migration nicht überschrieben. Vollständige Datei-MD5 werden nur aus ausgewählten Musikbytes berechnet; FNV wird nicht als MD5 umgedeutet. Ältere Referenzen können nach erneuter Musikauswahl gebunden werden. Der unabhängige ältere Gehört-Index bleibt dabei erhalten. Nicht als UUID gespeicherte ältere Eintragskennungen erhalten stabile, kollisionsgeprüfte portable Kennungen.
+
+Alle aktuellen persönlichen Schreibzugriffe verwenden dieselbe Web-Locks-Sperre. Vor dem Schreiben werden beide bisherigen Speicherwerte und die ursprünglichen v1-Werte abgeglichen; eine andere aktuelle oder ältere Playerseite führt zum Schreibschutz. Ein begrenztes Journal hält vorherige und neue Werte der zwei Browserdokumente fest. Vor dem Commitmarker wird zurückgesetzt, danach vervollständigt der frühe Neustart die bestätigten Werte. Unbekannte fremde Änderungen verhindern blindes Zurückschreiben. Speicherknappheit verändert keine Originale; eine blockierte Wiederherstellung erhält das Journal zur Klärung.
+
+Web Locks und Unicode-Segmentierung sind für schreibenden Sammlungsaustausch erforderlich. Fehlen sie, bleibt dieser Bereich schreibgeschützt; Musik lässt sich weiterhin auswählen. Unter file:// sind Chromium 155, zwei Seiten derselben Datei und ein vollständiger Browserprozess-Neustart geprüft. Andere Browser und andere Dateipfade sind damit nicht abgenommen.

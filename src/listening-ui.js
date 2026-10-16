@@ -1,9 +1,11 @@
 const listeningUI = { page: 'library', offset: 0, pageSize: 100, selectedListID: null, nameAction: null, editingEntryID: null };
-function initializeListeningUI() {
+async function initializeListeningUI() {
   let storage;
   try { storage = localStorage; } catch (_) {}
-  webListeningStore = new ListeningDataStore(storage);
-  initializeWebHistory(storage);
+  webPersonalStorage = await new WebPersonalStorage(storage, navigator.locks).open();
+  webListeningStore = webPersonalStorage.stores[0];
+  initializeWebHistory(storage, webPersonalStorage.stores[1]);
+  initializeCollectionUI();
   listeningQueue = webListeningStore.document.queue ? ListeningSequence.fromJSON(webListeningStore.document.queue) : null;
   pendingWebRestore = !!(listeningQueue || webListeningStore.document.session);
   if (listeningQueue && webListeningStore.document.shuffle) listeningQueue.restart(true, true);
@@ -101,7 +103,9 @@ function visibleWebLibraryIDs() {
   const catalog = new Map(webListeningStore.document.catalog.map(t => [t.id, t]));
   return webListeningStore.document.libraryIDs.filter(id => {
     const track = catalog.get(id);
-    return track && (!$('never-heard').checked || !webHistoryStore.readOnly && !!webHistoryStore.storage && !webHistoryStore.document.heard.includes(track.fingerprint)) && (!$('favorites-only').checked || favorites.has(id)) && (!needle || (track.name + ' ' + track.path).toLocaleLowerCase().includes(needle));
+    return track && (!$('never-heard').checked || !webHistoryStore.readOnly && !!webHistoryStore.storage
+      && !webHistoryStore.document.heard.includes(track.fingerprint) && !webHistoryStore.document.heardMD5s?.includes(track.md5))
+      && (!$('favorites-only').checked || favorites.has(id)) && (!needle || (track.name + ' ' + track.path).toLocaleLowerCase().includes(needle));
   });
 }
 function webScopeEntries(scope) {
@@ -190,11 +194,12 @@ async function restoreWebListeningAfterImport() {
   pendingWebRestore = false; persistWebListening(); renderListeningUI(); return true;
 }
 function persistWebListening() {
-  if (!webListeningStore) return;
+  if (!webListeningStore || webCollectionBusy) return Promise.resolve(false);
   const doc = webListeningStore.document;
   doc.queue = listeningQueue; doc.shuffle = $('listening-shuffle').checked;
   if (trackList[currentIdx]?.id) doc.session = { trackID: trackList[currentIdx].id, subtune: currentSubtune, position: Math.max(0, lastVisuals.playtime || 0) };
-  webListeningStore.save(); renderWebStorageStatus();
+  const saved = webListeningStore.save(); renderWebStorageStatus();
+  return Promise.resolve(saved).then(result => { renderWebStorageStatus(); return result; });
 }
 function missingWebFileCount() {
   const doc = webListeningStore.document, loaded = new Set(trackList.map(t => t.id));

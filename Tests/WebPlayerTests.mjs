@@ -7,6 +7,9 @@ const { SidPlayer, parseSidHeader } = await import(`data:text/javascript;base64,
 const source = await readFile(new URL('../sid-player-worklet.js', import.meta.url), 'utf8');
 const listeningSource = await readFile(new URL('../src/listening.js', import.meta.url), 'utf8');
 const historySource = await readFile(new URL('../src/history.js', import.meta.url), 'utf8');
+const collectionSource = await readFile(new URL('../src/collection.js', import.meta.url), 'utf8');
+const storageSource = await readFile(new URL('../src/personal-storage.js', import.meta.url), 'utf8');
+const collectionUI = await readFile(new URL('../src/collection-ui.js', import.meta.url), 'utf8');
 const historyUI = await readFile(new URL('../src/history-ui.js', import.meta.url), 'utf8');
 const listeningUI = await readFile(new URL('../src/listening-ui.js', import.meta.url), 'utf8');
 const appSource = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
@@ -88,7 +91,7 @@ function audioMock() {
   return { nodes, release };
 }
 
-function ui() {
+async function ui() {
   class Element {
     listeners = {}; style = {}; dataset = {}; disabled = true; value = ''; children = [];
     classes = new Set();
@@ -96,28 +99,38 @@ function ui() {
       remove: (...names) => names.forEach(n => this.classes.delete(n)), contains: name => this.classes.has(name) };
     addEventListener(name, fn) { this.listeners[name] = fn; }
     appendChild(child) { this.children.push(child); }
+    append(...children) { this.children.push(...children); }
+    replaceChildren(...children) { this.children = children; }
+    removeAttribute() {}
     setAttribute() {} querySelectorAll() { return []; } getContext() { return {}; }
     showModal() { this.open = true; } close() { this.open = false; } focus() {}
   }
   let release;
   const module = new Promise(resolve => { release = resolve; });
   const elements = new Map();
-  const context = vm.createContext({ console, Uint8Array, WeakMap, setTimeout, clearTimeout, performance,
+  const storageValues = new Map();
+  const context = vm.createContext({ console, Uint8Array, WeakMap, setTimeout, clearTimeout, performance, TextEncoder, AbortController,
+    navigator: { locks: { request: (_name, _options, action) => Promise.resolve().then(action) } },
     document: { getElementById(id) { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); },
-      createElement() { return new Element(); } },
+      createElement() { return new Element(); }, createTextNode(value) { return value; } },
     window: { addEventListener() {}, matchMedia() { return { matches: true }; }, AudioContext: class {
       state = 'running'; destination = {}; audioWorklet = { addModule: () => module };
       createBuffer() { return {}; } createBufferSource() { return { connect() {}, start() {}, disconnect() {} }; }
     } },
-    AudioWorkletNode: class { port = { postMessage() {} }; connect() {} },
-    localStorage: { getItem() { return null; }, setItem() {} }, requestAnimationFrame() {}, WORKLET_URL: 'fixture'
+    AudioWorkletNode: class { messages = []; port = { postMessage: message => this.messages.push(message) }; connect() {} },
+    localStorage: { getItem(key) { return storageValues.get(key) ?? null; }, setItem(key, value) { storageValues.set(key, value); }, removeItem(key) { storageValues.delete(key); } }, requestAnimationFrame() {}, WORKLET_URL: 'fixture'
   });
+  context.window.document = context.document;
   vm.runInContext(wrapper.replaceAll('export ', ''), context);
   vm.runInContext(listeningSource, context);
   vm.runInContext(historySource, context);
+  vm.runInContext(collectionSource, context);
+  vm.runInContext(storageSource, context);
   vm.runInContext(historyUI, context);
   vm.runInContext(listeningUI, context);
+  vm.runInContext(collectionUI, context);
   vm.runInContext(appSource, context);
+  await vm.runInContext('webListeningReady', context);
   context.valid = sid();
   vm.runInContext("trackList = [{name:'Valid',buffer:valid,isUser:true},{name:'Invalid',buffer:new Uint8Array(5),isUser:true}]", context);
   return { elements, release, run: code => vm.runInContext(code, context) };
@@ -236,7 +249,7 @@ test('worklet seek yields between blocks and a newer seek replaces it', () => {
 });
 
 test('a failed UI selection cannot play the previously loaded title', async () => {
-  const page = ui(); page.release();
+  const page = await ui(); page.release();
   await page.run('loadTrack(0, true)');
   await page.run('loadTrack(1, true)');
   await page.elements.get('play-btn').listeners.click();
@@ -247,7 +260,7 @@ test('a failed UI selection cannot play the previously loaded title', async () =
 });
 
 test('Stop during initial autoplay setup leaves the UI idle after setup completes', async () => {
-  const page = ui();
+  const page = await ui();
   const pending = page.run('loadTrack(0, true)');
   await Promise.resolve(); await Promise.resolve();
   assert.equal(page.run('playingState'), true);
@@ -258,8 +271,8 @@ test('Stop during initial autoplay setup leaves the UI idle after setup complete
   assert.equal(page.elements.get('footer-state').textContent, '■ IDLE');
 });
 
-test('the first theme click switches a dark system default to light', () => {
-  const page = ui();
+test('the first theme click switches a dark system default to light', async () => {
+  const page = await ui();
   assert.equal(page.elements.get('theme-btn').textContent, 'LIGHT');
   page.elements.get('theme-btn').listeners.click();
   assert.equal(page.elements.get('player').classList.contains('theme-light'), true);
@@ -286,7 +299,7 @@ test('late visualizer messages cannot advance the next file or subtune', async (
   node.port.onmessage({ data: { type: 'visualizer', generation: player.loadGen, data: {} } }); assert.equal(visuals, 1);
 });
 test('explicit search selection is stable after the visible filter changes', async () => {
-  const page = ui(); page.release();
+  const page = await ui(); page.release();
   page.run(`files = [{name:'Alpha.sid', arrayBuffer: async () => valid.buffer}, {name:'Beta.sid', arrayBuffer: async () => valid.buffer}]`);
   await page.run('importUserFiles(files, false)');
   page.elements.get('library-search').value = 'Alpha'; await page.run("startWebScope('visible')");
@@ -295,7 +308,7 @@ test('explicit search selection is stable after the visible filter changes', asy
   assert.match(page.run('listeningQueue.current.trackID'), /Alpha/);
 });
 test('reselecting one moved file reconnects its saved identity without autoplay', async () => {
-  const page = ui(); page.release();
+  const page = await ui(); page.release();
   page.run(`trackList=[];currentIdx=-1;files=[{name:'A.sid',webkitRelativePath:'Old/A.sid',arrayBuffer:async()=>valid.buffer}]`);
   await page.run('importUserFiles(files,false);');
   await page.run('loadTrack(0,false)');
@@ -307,7 +320,7 @@ test('reselecting one moved file reconnects its saved identity without autoplay'
   assert.equal(page.run('playingState'), false);
 });
 test('two incoming identical copies cannot both relink to one old identity', async () => {
-  const page = ui(); page.release();
+  const page = await ui(); page.release();
   page.run(`trackList=[];currentIdx=-1;files=[{name:'A.sid',webkitRelativePath:'Old/A.sid',arrayBuffer:async()=>valid.buffer}]`);
   await page.run('importUserFiles(files,false)');
   const old = page.run('trackList[0].id');
@@ -336,9 +349,40 @@ test('only the latest seek completion can resume the listening clock', async () 
 });
 
 test('a note editor keeps its original subtune when playback changes behind the dialog', async () => {
-  const model = ui();
+  const model = await ui();
   model.run("trackList=[{id:'one',name:'One',buffer:valid,isUser:true}];webListeningStore.document.catalog=[{id:'one',path:'A/One.sid',fingerprint:'123456789abcdef0',size:valid.length,name:'One',subtunesCount:3}]");
   await model.run('loadTrack(0,false)');
   model.run("openWebHistoryEditor('note');currentSubtune=2;document.getElementById('history-note-scope').value='file';document.getElementById('history-note-scope').listeners.change();document.getElementById('history-note-scope').value='subtune';document.getElementById('history-note-scope').listeners.change()");
   assert.equal(model.run('historyEditor.reference.subtune'), 0);
+});
+
+test('collection apply during initial audio setup invalidates the old play and resumes the requested playback once', async () => {
+  const page = await ui();
+  await page.run(`trackList=[{id:'one',name:'One',buffer:valid,isUser:true}];
+    webListeningStore.document.catalog=[{id:'one',path:'A/One.sid',fingerprint:'123456789abcdef0',md5:collectionMD5(valid),size:valid.length,name:'One',subtunesCount:1}];
+    webListeningStore.document.libraryIDs=['one']; loadTrack(0,false)`);
+  page.run(`collectionUI.document=emptyCollectionDocument();collectionUI.document.favorites=[{path:'A/One.sid',md5:collectionMD5(valid)}];
+    $('collection-dialog').showModal();refreshCollectionPreview();renderCollectionUI()`);
+  const oldPlay = page.elements.get('play-btn').listeners.click();
+  assert.equal(page.run('playingState'), true); assert.equal(page.run('player.playing'), false);
+  const importing = page.run('applyCollectionImport()');
+  for (let i = 0; i < 10; i++) await new Promise(resolve => setImmediate(resolve));
+  assert.equal(page.run('webListeningStore.document.favorites.includes("one")'), true);
+  assert.equal(page.run('webCollectionBusy'), true);
+  page.release(); await Promise.all([oldPlay, importing]);
+  assert.equal(page.run('player.playing'), true); assert.equal(page.run('playingState'), true);
+  assert.equal(page.run('player.workletNode.messages.filter(m=>m.type==="play").length'), 1);
+});
+
+test('a delayed close event from the previous dialog cannot invalidate a newly opened preview', async () => {
+  const page = await ui(), dialog = page.elements.get('collection-dialog');
+  page.elements.get('collection-open').listeners.click();
+  page.run('collectionUI.document=emptyCollectionDocument();refreshCollectionPreview()');
+  const generation = page.run('collectionUI.generation');
+  dialog.listeners.close();
+  assert.equal(page.run('collectionUI.generation'), generation);
+  assert.equal(page.run('collectionUI.preview!=null'), true);
+  dialog.open = false; dialog.listeners.close();
+  assert.equal(page.run('collectionUI.document'), null);
+  assert.equal(page.run('collectionUI.generation'), generation + 1);
 });
