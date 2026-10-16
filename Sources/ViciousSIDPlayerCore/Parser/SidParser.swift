@@ -21,6 +21,7 @@ public struct SidFileData: Sendable {
     // 0 = keine eigene Angabe -> wie der erste Chip.
     public let prefModel2: Int
     public let prefModel3: Int
+    public let clockPreference: SidClockPreference
     public let timermodes: [Bool] // true for 16-bit timer (CIA), false for vertical blank interrupt (VBI)
     public let binaryData: Data // Execution binary to map into memory
 }
@@ -165,6 +166,8 @@ public enum SidParser {
             thirdSidAddress: thirdSidAddress,
             prefModel2: prefModel2,
             prefModel3: prefModel3,
+            clockPreference: version >= 2
+                ? SidClockPreference(rawValue: (data[0x77] >> 2) & 3)! : .unknown,
             timermodes: timermodes,
             binaryData: binaryData
         )

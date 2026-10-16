@@ -19,6 +19,43 @@ function sid(code = [0x60], version = 2, playOffset = code.length - 1) {
   return data;
 }
 function engine(data) { const p = new Engine(); p.loadSID(data); p.initSubtune(0); return p; }
+
+test('clock flags select PAL/NTSC VBI and CIA pacing', () => {
+  for (const [flag, calls] of [[4, 50], [8, 60], [0, 50], [12, 50]]) {
+    const data = sid([0x60, 0xEE,0x00,0xD4,0x60], 2, 1);
+    data[0x77] |= flag;
+    assert.equal(parseSidHeader(data).clockPreference, ['unknown', 'pal', 'ntsc', 'both'][flag >> 2]);
+    const p = engine(data);
+    for (let i = 0; i < 44100; i++) p.playSample();
+    assert.equal(p.getChannelsData().frequencies[0], calls);
+    data[0x15] = 1;
+    const cia = engine(data);
+    for (let i = 0; i < 44100; i++) cia.playSample();
+    assert.equal(cia.getChannelsData().frequencies[0], 60);
+  }
+});
+
+test('clock override rebuilds the same position and preserves seek determinism', () => {
+  const data = sid([0x60,0xEE,0x00,0xD4,0x60], 2, 1);
+  data[0x77] |= 8;
+  const p = engine(data);
+  for (let i = 0; i < 44100; i++) p.playSample();
+  p.setClockMode('pal'); p.advanceSeek(Number.MAX_SAFE_INTEGER);
+  assert.equal(p.getChannelsData().frequencies[0], 50);
+  assert.equal(p.getChannelsData().clock, 'pal');
+  p.setClockMode('auto'); p.advanceSeek(Number.MAX_SAFE_INTEGER);
+  assert.equal(p.getChannelsData().frequencies[0], 60);
+  assert.equal(p.getChannelsData().clock, 'ntsc');
+});
+
+test('CIA latch changes during play take effect after the running interval', () => {
+  const data = sid([0x60,0xA9,0,0x8D,4,0xDC,0xA9,0x10,0x8D,5,0xDC,0xEE,0,0xD4,0x60], 2, 1);
+  data[0x77] |= 8; data[0x15] = 1;
+  const p = engine(data);
+  for (let i = 0; i < 22050; i++) p.playSample();
+  const expected = 1 + (0.5 - 17046 / 1022727) * 1022727 / 4097;
+  assert.ok(Math.abs(p.getChannelsData().frequencies[0] - expected) < 1.5);
+});
 function audioMock() {
   let release;
   const module = new Promise(resolve => { release = resolve; });

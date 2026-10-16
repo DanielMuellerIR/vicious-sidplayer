@@ -19,8 +19,13 @@ class SidPlayerProcessor {
     // Instance-isolated engine state to support multiple panels or reload cycles cleanly
     let samplerate = sampleRate;
     
-    let C64_PAL_CPUCLK = 985248;
-    let PAL_FRAMERATE = 50;
+    let clockMode = 'auto';
+    let fileClock = 0;
+    let clock = 'pal';
+    let cpuClock = 985248;
+    let frameRate = 50;
+    let defaultCIATimer = 0x4025;
+    let usesCIATimer = false;
     let SID_CHANNEL_AMOUNT = 3;
     let OUTPUT_SCALEDOWN = 0x10000 * SID_CHANNEL_AMOUNT * 16;
     
@@ -59,8 +64,8 @@ class SidPlayerProcessor {
     let playtime = 0;
     let seekRemaining = 0;
 
-    let clk_ratio = C64_PAL_CPUCLK / samplerate;
-    let frame_sampleperiod = samplerate / PAL_FRAMERATE;
+    let clk_ratio = cpuClock / samplerate;
+    let frame_sampleperiod = samplerate / frameRate;
     
     let framecnt = 1;
     let volume = 1.0;
@@ -203,20 +208,21 @@ class SidPlayerProcessor {
 
         A = subtune;
         memory[1] = 0x37;
-        memory[0xDC05] = 0;
+        memory[0x02A6] = clock === 'pal' ? 1 : 0;
+        memory[0xDC04] = defaultCIATimer & 255;
+        memory[0xDC05] = defaultCIATimer >> 8;
+        usesCIATimer = !!timerModeForSubtune();
 
         for (let timeout = 100000; timeout >= 0; timeout--) {
-          if (CPU()) break;
+          const result = CPU();
+          if ((storadd === 0xDC04 || storadd === 0xDC05) && (memory[1] & 3)) usesCIATimer = true;
+          if (result >= 0xFE) break;
         }
 
-        if (timerModeForSubtune() || memory[0xDC05]) {
-          if (!memory[0xDC05]) {
-            memory[0xDC04] = 0x24;
-            memory[0xDC05] = 0x40;
-          }
-          frame_sampleperiod = (memory[0xDC04] + memory[0xDC05] * 256) / clk_ratio;
+        if (usesCIATimer) {
+          frame_sampleperiod = (memory[0xDC04] + memory[0xDC05] * 256 + 1) / clk_ratio;
         } else {
-          frame_sampleperiod = samplerate / PAL_FRAMERATE;
+          frame_sampleperiod = samplerate / frameRate;
         }
 
         if (playaddf == 0) {
@@ -556,8 +562,8 @@ class SidPlayerProcessor {
               finished = 1;
               break;
             }
-            if ((addr == 0xDC05 || addr == 0xDC04) && (memory[1] & 3) && timerModeForSubtune()) {
-              frame_sampleperiod = (memory[0xDC04] + memory[0xDC05] * 256) / clk_ratio;
+            if ((storadd == 0xDC05 || storadd == 0xDC04) && (memory[1] & 3) && usesCIATimer) {
+              frame_sampleperiod = (memory[0xDC04] + memory[0xDC05] * 256 + 1) / clk_ratio;
             }
             if (storadd >= 0xD420 && storadd < 0xD800 && (memory[1] & 3)) {
               if (!(SID_address[1] <= storadd && storadd < SID_address[1] + 0x1F) &&
@@ -644,6 +650,8 @@ class SidPlayerProcessor {
       subtune_amount = Math.min(256, Math.max(1, (filedata[0x0E] << 8) | filedata[0x0F]));
       
       const version = filedata[4] * 256 + filedata[5];
+      fileClock = version >= 2 ? (filedata[0x77] >> 2) & 3 : 0;
+      applyClock();
       preferred_SID_model[0] = version >= 2 && (filedata[0x77] & 0x30) >= 0x20 ? 8580 : 6581;
       const model = bits => bits >= 2 ? 8580 : bits === 1 ? 6581 : preferred_SID_model[0];
       preferred_SID_model[1] = version >= 3 ? model((filedata[0x77] >> 6) & 3) : preferred_SID_model[0];
@@ -666,6 +674,22 @@ class SidPlayerProcessor {
     
     this.initSubtune = function(subt) {
       init(subt);
+    };
+
+    function applyClock() {
+      clock = clockMode === 'auto' ? (fileClock === 2 ? 'ntsc' : 'pal') : clockMode;
+      cpuClock = clock === 'pal' ? 985248 : 1022727;
+      frameRate = clock === 'pal' ? 50 : 60;
+      defaultCIATimer = clock === 'pal' ? 0x4025 : 0x4295;
+      clk_ratio = cpuClock / samplerate;
+      ADSRperiods[0] = Math.max(clk_ratio, 9);
+      ADSRstep[0] = Math.ceil(ADSRperiods[0] / 9);
+    }
+
+    this.setClockMode = function(mode) {
+      clockMode = ['pal', 'ntsc'].includes(mode) ? mode : 'auto';
+      applyClock();
+      if (loaded) this.beginSeek(playtime);
     };
     
     this.setVolume = function(vol) {
@@ -724,7 +748,8 @@ class SidPlayerProcessor {
           (memory[0xD409] + (memory[0xD40A] & 0x0F) * 256) / 4096,
           (memory[0xD410] + (memory[0xD411] & 0x0F) * 256) / 4096
         ],
-        playtime: playtime
+        playtime: playtime,
+        clock: clock
       };
     };
   }
@@ -757,6 +782,9 @@ class SidPlayerWorklet extends AudioWorkletProcessor {
         this.engine.initSubtune(data.subtune);
       } else if (data.type === 'setVolume') {
         this.engine.setVolume(data.volume);
+      } else if (data.type === 'setClockMode') {
+        this.engine.setClockMode(data.mode);
+        this.seeking = this.loaded;
       } else if (data.type === 'seek') {
         this.engine.beginSeek(data.seconds);
         this.seeking = true;

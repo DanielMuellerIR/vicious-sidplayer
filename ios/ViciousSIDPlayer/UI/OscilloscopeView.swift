@@ -130,8 +130,7 @@ struct OscilloscopeView: View {
         let waveform = showWave ? visuals.waveforms[voice] : 0
         let duty = Double(visuals.pulsewidths[voice])
 
-        // Umrechnung SID-Frequenzregister -> Hertz (Faktor der PAL-Taktrate).
-        let frequencyHz = Double(rawFrequency) * 0.0587
+        let frequencyHz = coordinator.effectiveClock.oscillatorFrequency(registerValue: rawFrequency)
 
         // Nulllinie
         var baselinePath = Path()

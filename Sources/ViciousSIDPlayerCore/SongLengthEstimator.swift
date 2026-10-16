@@ -30,7 +30,8 @@ public enum SongLengthEstimator {
                                 maxSeconds: Double = 360.0,
                                 sampleRate: Double = 44100.0,
                                 silenceThreshold: Double = 0.00001,
-                                silenceSeconds: Double = 3.0) throws -> Double? {
+                                silenceSeconds: Double = 3.0,
+                                clockMode: SidClockMode = .auto) throws -> Double? {
         guard maxSeconds.isFinite,
               sampleRate.isFinite,
               silenceThreshold.isFinite,
@@ -53,7 +54,7 @@ public enum SongLengthEstimator {
         }
         let silenceSamples = Int(silenceValue.rounded(.down))
 
-        let processor = ViciousProcessor(sampleRate: sampleRate)
+        let processor = ViciousProcessor(sampleRate: sampleRate, clockMode: clockMode)
         _ = processor.loadSID(sidFile: sidFile)
         let sub = max(0, min(subtune, sidFile.metadata.subtunesCount - 1))
         processor.initSubtune(sub: sub)
@@ -84,7 +85,7 @@ public enum SongLengthEstimator {
     }
 }
 
-// Persistenter Cache der berechneten Laengen (JSON-Datei, Key "md5:subtune").
+// Persistenter Cache der berechneten Laengen je Datei, Subtune und Taktmodus.
 // Bewusst simpel: kleine Datenmenge (ein Eintrag pro tatsaechlich gespieltem
 // Tune ohne DB-Eintrag), Schreiben sofort bei jedem Store.
 public final class SongLengthCache: @unchecked Sendable {
@@ -121,20 +122,21 @@ public final class SongLengthCache: @unchecked Sendable {
         return SongLengthCache(fileURL: dir.appendingPathComponent(defaultCacheFileName))
     }
 
-    private func key(md5: String, subtune: Int) -> String {
-        return "\(md5.lowercased()):\(subtune)"
+    private func key(md5: String, subtune: Int, clockMode: SidClockMode) -> String {
+        // Alte Rechnungen verwendeten immer PAL, auch bei NTSC-Dateien.
+        return "\(md5.lowercased()):\(subtune):clock-v1:\(clockMode.rawValue)"
     }
 
-    public func length(md5: String, subtune: Int) -> Double? {
+    public func length(md5: String, subtune: Int, clockMode: SidClockMode = .auto) -> Double? {
         lock.lock()
         defer { lock.unlock() }
-        return entries[key(md5: md5, subtune: subtune)]
+        return entries[key(md5: md5, subtune: subtune, clockMode: clockMode)]
     }
 
-    public func store(md5: String, subtune: Int, seconds: Double) {
+    public func store(md5: String, subtune: Int, seconds: Double, clockMode: SidClockMode = .auto) {
         lock.lock()
         defer { lock.unlock() }
-        entries[key(md5: md5, subtune: subtune)] = seconds
+        entries[key(md5: md5, subtune: subtune, clockMode: clockMode)] = seconds
         if let data = try? JSONEncoder().encode(entries) {
             try? data.write(to: fileURL, options: .atomic)
         }

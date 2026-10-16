@@ -120,15 +120,27 @@ def collapse_js_whitespace(src: str) -> str:
 
 def tighten_js_punctuation(src: str) -> str:
     """
-    Entfernt unnötige Spaces direkt vor/nach Satzzeichen.
+    Entfernt unnötige Spaces ausserhalb von String-/Template-Literalen.
     """
     # codereview-ok: escaptes '-' ist harmlos, Regex korrekt (2026-07-01)
     punct = r'[{}()\[\];,:?=<>+\-*/%&|^!~]'
-    src = re.sub(rf' *({punct}) *', r'\1', src)
-    src = re.sub(r'\n{2,}', '\n', src)
-    src = re.sub(r'[ \t]+\n', '\n', src)
-    src = re.sub(r'\n[ \t]+', '\n', src)
-    return src.strip()
+    def tighten(code: str) -> str:
+        code = re.sub(rf' *({punct}) *', r'\1', code)
+        code = re.sub(r'\n{2,}', '\n', code)
+        code = re.sub(r'[ \t]+\n', '\n', code)
+        return re.sub(r'\n[ \t]+', '\n', code)
+
+    out = []
+    start = i = 0
+    while i < len(src):
+        if src[i] in ('"', "'", '`'):
+            out.append(tighten(src[start:i]))
+            i = _passthrough_string(src, i, out)
+            start = i
+        else:
+            i += 1
+    out.append(tighten(src[start:]))
+    return ''.join(out).strip()
 
 
 def minify_js(src: str) -> str:

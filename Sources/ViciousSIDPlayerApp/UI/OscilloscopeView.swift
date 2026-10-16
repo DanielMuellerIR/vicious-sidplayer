@@ -108,7 +108,7 @@ public struct OscilloscopeView: View {
                     let wf = showWave ? visuals.waveforms[c] : 0
                     let duty = Double(visuals.pulsewidths[c])
 
-                    let freqHz = Double(rawFreq) * 0.0587
+                    let freqHz = coordinator.effectiveClock.oscillatorFrequency(registerValue: rawFreq)
 
                     // Draw baseline
                     var baseLinePath = Path()

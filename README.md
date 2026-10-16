@@ -41,6 +41,7 @@ not tracked. It opens directly in the browser without a web server.
 - **Drag & drop**: Drop single `.sid` files or entire folders onto the player. Playback starts immediately.
 - **Real-time oscilloscope**: Shows the waveforms of the three SID voices (triangle, sawtooth, pulse, noise) along with frequencies, gate status, and ADSR envelopes.
 - **SID model selection (macOS app)**: Picker with `Auto`, `6581`, and `8580`. `Auto` follows the preference stored in the SID file; a fixed choice forces the respective chip model and applies live to the running song (many tunes only sound right on the chip they were originally written for).
+- **PAL/NTSC clock selection**: Automatically follows the SID header, with explicit PAL and NTSC overrides in the native and HTML5 players. Unknown or dual-standard files use PAL in Auto mode. The selected clock also applies to seeking and WAV export; calculated song lengths are cached separately for each clock mode.
 - **Quick Look preview (macOS app)**: Select a `.sid` file in Finder and press Space — the tune plays instantly, with title, composer, and copyright plus subtune switching for multi-song files. Setup: see [Quick Look preview](#quick-look-preview-for-sid-files-macos).
 - **Real song lengths**: Reads the HVSC `Songlengths.md5` database (chosen in the settings or found automatically next to your collection) so the position slider and auto-advance use the actual tune length. Tunes without a database entry are analyzed in the background on first play (if they end in silence) and the result is cached.
 - **Tune notes (STIL)**: Reads the HVSC `STIL.txt` (chosen in the settings or found automatically next to your collection) and shows what does not fit into the SID file header — which original a tune covers, who wrote the melody, notes on individual subtunes. The database belongs to the HVSC project and is not bundled.
@@ -83,6 +84,7 @@ Every control in the app has a tooltip: rest the pointer on it for a moment and 
 | Öffnen… | Open one or more `.sid` files. |
 | Auto Next | When a tune ends, continue automatically — first through the remaining subtunes of the file, then to the next track. |
 | SID: Auto / 6581 / 8580 | Chip model. `Auto` follows the file's preference; a fixed choice forces that model and applies live to the running song. |
+| Auto: PAL / PAL / NTSC | C64 clock. Auto follows the file and uses PAL for unknown or dual-standard files. Changing the clock rebuilds the current position in the background. |
 | ‹ n / m › | Subtune navigation. A `.sid` file can hold several songs ("subtunes"); `2 / 5` means subtune 2 of 5. |
 | Shuffle | Random playback. The setting persists across restarts; while on, a random song starts each time the app launches. |
 | ↺ 15 | Skip 15 seconds back. |

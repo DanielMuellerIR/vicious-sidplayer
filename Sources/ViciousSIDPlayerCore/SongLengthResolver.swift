@@ -33,6 +33,7 @@ public struct SongLengthEstimateTicket: Equatable, Sendable {
     public let md5: String
     public let subtune: Int
     public let fileURL: URL
+    public let clockMode: SidClockMode
     let generation: Int
 }
 
@@ -117,7 +118,7 @@ public final class SongLengthResolver: @unchecked Sendable {
     public func plan(md5: String?,
                      subtune: Int,
                      databaseLengths: [Double]?,
-                     fileURL: URL?) -> SongLengthPlan {
+                     fileURL: URL?, clockMode: SidClockMode = .auto) -> SongLengthPlan {
         lock.lock()
         defer { lock.unlock() }
 
@@ -134,7 +135,7 @@ public final class SongLengthResolver: @unchecked Sendable {
         // Aufruf mit vollstaendigen Angaben raeumt ohnehin auf.
         guard let md5, let fileURL else { return .trackNotReady }
 
-        let key = Self.key(md5: md5, subtune: subtune)
+        let key = Self.key(md5: md5, subtune: subtune, clockMode: clockMode)
         if activeKey == key { return .alreadyRunning }
 
         // Ab hier ist klar: eine andere (oder gar keine) Rechnung lief bisher.
@@ -142,7 +143,7 @@ public final class SongLengthResolver: @unchecked Sendable {
         // befindliches Ergebnis der vorigen Rechnung — `accept` weist es ab.
         cancelLocked()
 
-        if let cached = cache.length(md5: md5, subtune: subtune) {
+        if let cached = cache.length(md5: md5, subtune: subtune, clockMode: clockMode) {
             // Ein gecachtes -1 heisst „schon einmal gerechnet, kein Ende
             // gefunden" (Loop-Tune). Ohne dieses negative Ergebnis wuerde die
             // HVSC-Mehrheit bei jedem Abspielen erneut sechs Minuten lang
@@ -156,6 +157,7 @@ public final class SongLengthResolver: @unchecked Sendable {
         return .estimate(SongLengthEstimateTicket(md5: md5,
                                                   subtune: subtune,
                                                   fileURL: fileURL,
+                                                  clockMode: clockMode,
                                                   generation: generation))
     }
 
@@ -172,7 +174,8 @@ public final class SongLengthResolver: @unchecked Sendable {
         try Task.checkCancellation()
         let data = try Data(contentsOf: ticket.fileURL)
         let sidFile = try SidParser.parse(data: data)
-        let result = try SongLengthEstimator.estimate(sidFile: sidFile, subtune: ticket.subtune)
+        let result = try SongLengthEstimator.estimate(sidFile: sidFile, subtune: ticket.subtune,
+                                                     clockMode: ticket.clockMode)
         try Task.checkCancellation()
         storeIfCurrent(ticket: ticket, seconds: result ?? -1)
         return result
@@ -197,7 +200,7 @@ public final class SongLengthResolver: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         guard isCurrentLocked(ticket) else { return }
-        cache.store(md5: ticket.md5, subtune: ticket.subtune, seconds: seconds)
+        cache.store(md5: ticket.md5, subtune: ticket.subtune, seconds: seconds, clockMode: ticket.clockMode)
     }
 
     // MARK: - Schritt 3: Ergebnis annehmen oder verwerfen
@@ -250,13 +253,13 @@ public final class SongLengthResolver: @unchecked Sendable {
 
     private func isCurrentLocked(_ ticket: SongLengthEstimateTicket) -> Bool {
         return generation == ticket.generation
-            && activeKey == Self.key(md5: ticket.md5, subtune: ticket.subtune)
+            && activeKey == Self.key(md5: ticket.md5, subtune: ticket.subtune, clockMode: ticket.clockMode)
     }
 
     /// Derselbe Schluessel wie im `SongLengthCache`: klein geschrieben, damit
     /// zwei Schreibweisen desselben MD5 nicht zwei Rechnungen ausloesen.
-    private static func key(md5: String, subtune: Int) -> String {
-        return "\(md5.lowercased()):\(subtune)"
+    private static func key(md5: String, subtune: Int, clockMode: SidClockMode) -> String {
+        return "\(md5.lowercased()):\(subtune):\(clockMode.rawValue)"
     }
 }
 

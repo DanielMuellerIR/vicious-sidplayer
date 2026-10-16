@@ -31,6 +31,12 @@
         <input type="checkbox" id="auto-next" checked>
         <span>AUTO NEXT</span>
       </label>
+      <label for="clock-mode">CLOCK:</label>
+      <select id="clock-mode" aria-label="C64 clock">
+        <option value="auto">AUTO</option>
+        <option value="pal">PAL</option>
+        <option value="ntsc">NTSC</option>
+      </select>
     </div>
     <div class="group">
       <div id="subtune-controls" style="display: none; align-items: center; gap: 6px; margin-right: 8px;">
@@ -63,6 +69,7 @@
         <div class="line"><span>TITLE:</span><span id="meta-title">---</span></div>
         <div class="line"><span>COMPOSER:</span><span id="meta-author">---</span></div>
         <div class="line"><span>INFO:</span><span id="meta-info">---</span></div>
+        <div class="line"><span>CLOCK:</span><span id="meta-clock">PAL (AUTO)</span></div>
         <div id="error-display" class="error-msg" style="display: none;"></div>
       </div>
     </div>

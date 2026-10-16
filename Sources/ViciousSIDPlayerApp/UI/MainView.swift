@@ -548,6 +548,19 @@ public struct MainView: View {
                         .frame(width: 110)
                         .help("SID-Chip-Modell — Auto folgt der Datei")
 
+                        Picker("C64-Takt", selection: Binding(
+                            get: { coordinator.clockMode },
+                            set: { coordinator.setClockMode($0) }
+                        )) {
+                            Text("Auto: \(SidClockMode.auto.resolve(coordinator.clockPreference).label)").tag(SidClockMode.auto)
+                            Text("PAL").tag(SidClockMode.pal)
+                            Text("NTSC").tag(SidClockMode.ntsc)
+                        }
+                        .labelsHidden()
+                        .frame(width: 120)
+                        .accessibilityIdentifier("clock-mode")
+                        .help("C64-Takt — Datei: \(coordinator.clockPreference.label). Auto verwendet bei unklarer Angabe PAL.")
+
                         Spacer(minLength: 8)
 
                         // Subtune-Umschaltung: eine SID-Datei kann mehrere Songs
@@ -834,6 +847,7 @@ public struct MainView: View {
         .onChange(of: coordinator.isPlaying) { _ in updateNowPlayingInfo() }
         .onChange(of: coordinator.isPaused) { _ in updateNowPlayingInfo() }
         .onChange(of: coordinator.trackName) { _ in updateNowPlayingInfo() }
+        .onChange(of: coordinator.clockMode) { _ in resolveComputedLengthIfNeeded() }
         .onChange(of: currentDuration) { _ in updateNowPlayingInfo() }
         // Subtune gewechselt -> Laenge des neuen Subtunes aufloesen (DB-Array wird
         // per Index gelesen; nur die berechnete Laenge muss neu ermittelt werden).
@@ -1638,7 +1652,8 @@ public struct MainView: View {
         switch lengthResolver.plan(md5: currentMD5,
                                    subtune: coordinator.currentSubtune,
                                    databaseLengths: currentTrackLengths,
-                                   fileURL: playlist.track(at: currentTrackIdx)?.url) {
+                                   fileURL: playlist.track(at: currentTrackIdx)?.url,
+                                   clockMode: coordinator.clockMode) {
         case .databaseProvidesLength, .noLengthKnown:
             // Nichts zu rechnen. Eine ueberfluessig gewordene Rechnung hat der
             // Resolver bereits entwertet — der Task hier gehoert noch abgeraeumt.
@@ -1802,6 +1817,7 @@ public struct MainView: View {
 
         let subtune = coordinator.currentSubtune
         let model = coordinator.modelOverride
+        let clock = coordinator.clockMode
         // Echte Songlaenge, wenn bekannt — sonst das Standard-Limit.
         let seconds = currentDuration
         errorMessage = nil
@@ -1812,7 +1828,7 @@ public struct MainView: View {
                 let data = try Data(contentsOf: fileURL)
                 let sid = try SidParser.parse(data: data)
                 try WavRenderer.render(sidFile: sid, subtune: subtune, seconds: seconds,
-                                       modelOverride: model, to: dest)
+                                       modelOverride: model, clockMode: clock, to: dest)
                 await MainActor.run {
                     // Fertige Datei im Finder zeigen (erwartetes Export-Feedback).
                     NSWorkspace.shared.activateFileViewerSelecting([dest])

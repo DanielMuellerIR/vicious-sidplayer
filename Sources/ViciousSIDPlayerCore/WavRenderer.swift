@@ -62,6 +62,7 @@ public enum WavRenderer {
                               seconds: Double,
                               sampleRate: Double = 44100.0,
                               modelOverride: Int? = nil,
+                              clockMode: SidClockMode = .auto,
                               to url: URL) throws {
         let totalFrames = try frameCount(seconds: seconds, sampleRate: sampleRate)
         let channels = sidFile.secondSidAddress != 0 ? 2 : 1
@@ -76,7 +77,7 @@ public enum WavRenderer {
             throw RenderError.fileTooLarge
         }
 
-        let processor = ViciousProcessor(sampleRate: sampleRate)
+        let processor = ViciousProcessor(sampleRate: sampleRate, clockMode: clockMode)
         _ = processor.loadSID(sidFile: sidFile)
         processor.setModelOverride(modelOverride.map { Double($0) })
         // Subtune sicher in den gueltigen Bereich klemmen (0-basiert).

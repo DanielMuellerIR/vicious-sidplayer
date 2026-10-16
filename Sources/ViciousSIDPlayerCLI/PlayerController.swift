@@ -97,7 +97,8 @@ final class PlayerController: @unchecked Sendable {
     ///   - format: das Format, mit dem der Processor gebaut wurde.
     ///   - startSubtune: 0-basiert, vom Aufrufer bereits geprueft.
     ///   - seconds: Spieldauer, `nil` = endlos.
-    init(sid: SidFileData, sink: PCMSink, format: PCMFormat, startSubtune: Int, seconds: Double?) throws {
+    init(sid: SidFileData, sink: PCMSink, format: PCMFormat, startSubtune: Int, seconds: Double?,
+         clockMode: SidClockMode = .auto) throws {
         // Der Renderblock in `start()` schreibt fest ZWEI Werte je Frame, weil er
         // die Samples mit `playStereo()` holt. Der Zielpuffer ist aber nach
         // `format.channels` bemessen. Bei einem Mono-Format waere er nur halb so
@@ -114,7 +115,7 @@ final class PlayerController: @unchecked Sendable {
         self.sink = sink
         self.subtune = startSubtune
 
-        let processor = ViciousProcessor(sampleRate: format.sampleRate)
+        let processor = ViciousProcessor(sampleRate: format.sampleRate, clockMode: clockMode)
         _ = processor.loadSID(sidFile: sid)
         processor.initSubtune(sub: startSubtune)
         // Volle Lautstaerke: die Skalierung ist Sache der Quelle, nicht des Sinks

@@ -67,6 +67,8 @@ const trackListContainer = $('track-list');
 const metaTitle = $('meta-title');
 const metaAuthor = $('meta-author');
 const metaInfo = $('meta-info');
+const clockSelect = $('clock-mode');
+const metaClock = $('meta-clock');
 const errorDisplay = $('error-display');
 const themeBtn = $('theme-btn');
 const footerState = $('footer-state');
@@ -495,8 +497,22 @@ function showError(msg) {
 }
 
 // ─── Setup Callbacks ────────────────────────────────────────────────────────
+function effectiveClock() {
+  return player.clockMode === 'auto'
+    ? (currentMetadata?.clockPreference === 'ntsc' ? 'ntsc' : 'pal') : player.clockMode;
+}
+function updateClockLabel() {
+  const clock = effectiveClock();
+  metaClock.textContent = clock.toUpperCase() + (player.clockMode === 'auto' ? ' (AUTO)' : '');
+}
+clockSelect.addEventListener('change', () => {
+  player.setClockMode(clockSelect.value);
+  updateClockLabel();
+});
+
 player.watchLoaded((meta) => {
   currentMetadata = meta;
+  updateClockLabel();
   currentSubtune = 0;
   totalSubtunesCount = meta.subtunesCount || 1;
 
@@ -600,7 +616,7 @@ function draw() {
     const wf = live ? waveforms[c] : 0;
     const duty = pulsewidths[c] || 0.5;
 
-    const freqHz = rawFreq * 0.0587;
+    const freqHz = rawFreq * (effectiveClock() === 'ntsc' ? 1022727 : 985248) / 16777216;
 
     // Advance phase
     if (live) {

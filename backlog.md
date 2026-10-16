@@ -184,3 +184,7 @@ Gestrichen: ASID/Echt-SID-Hardware (2026-07-15) — nicht wieder aufnehmen.
 Erledigte Release-/Quick-Look-/v1.5.0-Arbeit nicht zurückführen. Ebenfalls erledigt und
 nicht zurückzuführen: die iOS-App selbst (früher Punkt 0) und der auf `.sid` gefilterte
 Öffnen-Dialog (früher Punkt 6, gelöst über `SidFileType` im Core).
+
+## Erweiterungsplan
+
+Die geplanten Erweiterungen werden in [docs/feature-roadmap.md](docs/feature-roadmap.md) verfolgt. Der Verlauf erhält einen weiteren Tab im Bereich von Bibliothek und Playlist.

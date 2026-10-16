@@ -188,6 +188,11 @@ extension AppModel {
         coordinator.setModelOverride(model)
     }
 
+    func setClockMode(_ mode: SidClockMode) {
+        coordinator.setClockMode(mode)
+        resolveComputedLengthIfNeeded()
+    }
+
     /// Startet die Wiedergabe.
     ///
     /// Der Umweg ueber `activate()` ist wichtig: nach einem Anruf hat das System
@@ -506,7 +511,7 @@ extension AppModel {
         switch lengthResolver.plan(md5: currentMD5,
                                    subtune: coordinator.currentSubtune,
                                    databaseLengths: currentTrackLengths,
-                                   fileURL: fileURL) {
+                                   fileURL: fileURL, clockMode: coordinator.clockMode) {
         case .databaseProvidesLength, .noLengthKnown:
             lengthEstimateTask?.cancel()
             lengthEstimateTask = nil
@@ -707,6 +712,7 @@ extension AppModel {
 
         let subtune = coordinator.currentSubtune
         let model = coordinator.modelOverride
+        let clock = coordinator.clockMode
         // Der Renderer hat eine eigene Obergrenze; alles darueber lehnt er ab.
         let seconds = min(currentDuration, WavRenderer.maximumDurationSeconds)
 
@@ -720,6 +726,7 @@ extension AppModel {
                                        subtune: subtune,
                                        seconds: seconds,
                                        modelOverride: model,
+                                       clockMode: clock,
                                        to: destination)
                 return .finished(destination)
             } catch {

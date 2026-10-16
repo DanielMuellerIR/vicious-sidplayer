@@ -16,6 +16,7 @@ struct AnalysisControlsView: View {
     let palette: PlayerPalette
     /// `nil` = Auto (die Datei entscheidet), sonst 6581 oder 8580.
     let onModelChange: (Int?) -> Void
+    let onClockChange: (SidClockMode) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -69,6 +70,19 @@ struct AnalysisControlsView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
+
+            Picker("C64-Takt", selection: Binding(
+                get: { coordinator.clockMode }, set: { onClockChange($0) }
+            )) {
+                Text("Auto").tag(SidClockMode.auto)
+                Text(verbatim: "PAL").tag(SidClockMode.pal)
+                Text(verbatim: "NTSC").tag(SidClockMode.ntsc)
+            }
+            .pickerStyle(.segmented)
+
+            Text("Takt: \(coordinator.effectiveClock.label) · Datei: \(coordinator.clockPreference.label)")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
 
             Text("Auto folgt der Angabe in der Datei. Viele Stücke klingen nur auf dem Chip richtig, für den sie geschrieben wurden.")
                 .font(.caption2)

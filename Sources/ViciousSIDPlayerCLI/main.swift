@@ -28,6 +28,7 @@ usage: vicious-sid <datei.sid> [optionen]
 Optionen:
   --subtune N     Subtune N abspielen (0-basiert, Default: 0)
   --seconds S     Nach S Sekunden beenden (max. 3600; Default: endlos bzw. 180 bei --wav)
+  --clock MODE    C64-Takt: auto, pal oder ntsc (Default: auto)
   --wav <datei>   Statt abzuspielen als WAV-Datei rendern (schneller als Echtzeit)
   --stdout        Rohes PCM (s16le, interleaved) nach stdout statt an die Soundkarte
   -h, --help      Diese Hilfe
@@ -63,6 +64,7 @@ var subtune = 0
 var seconds: Double?
 var wavPath: String?
 var useStdout = false
+var clockMode = SidClockMode.auto
 
 var argIndex = 1
 let args = CommandLine.arguments
@@ -99,6 +101,12 @@ while argIndex < args.count {
         seconds = parsed
     case "--wav":
         wavPath = value(for: "--wav")
+    case "--clock":
+        let raw = value(for: "--clock")
+        guard let parsed = SidClockMode(rawValue: raw.lowercased()) else {
+            fail("Fehler: --clock erwartet auto, pal oder ntsc.", code: 1)
+        }
+        clockMode = parsed
     case "--stdout":
         useStdout = true
     default:
@@ -152,6 +160,7 @@ note("Autor:    \(sid.metadata.author)")
 note("Info:     \(sid.metadata.info)")
 note("Subtune:  \(subtune + 1) von \(sid.metadata.subtunesCount)")
 note("Modell:   \(sid.prefModel)")
+note("Takt:     \(clockMode.resolve(sid.clockPreference).label) (\(clockMode.rawValue))")
 for diagnostic in ViciousProcessor.loadDiagnostics(for: sid) {
     note("Warnung: \(diagnostic)")
 }
@@ -162,6 +171,7 @@ if let wavPath {
     let duration = seconds ?? 180.0
     do {
         try WavRenderer.render(sidFile: sid, subtune: subtune, seconds: duration,
+                               clockMode: clockMode,
                                to: URL(fileURLWithPath: wavPath))
     } catch {
         fail("Fehler beim WAV-Export: \(error.localizedDescription)", code: 2)
@@ -190,7 +200,7 @@ do {
                                       sink: sink,
                                       format: format,
                                       startSubtune: subtune,
-                                      seconds: seconds)
+                                      seconds: seconds, clockMode: clockMode)
 } catch {
     // Erreichbar ueber eine unbrauchbare Dauer und ueber ein Ausgabeformat, das
     // der Controller nicht bedienen kann — deshalb hier keine der beiden

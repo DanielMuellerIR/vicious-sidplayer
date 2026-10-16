@@ -41,6 +41,7 @@ versioniert. Sie lässt sich ohne Webserver direkt im Browser öffnen.
 - **Drag & Drop**: Einzelne `.sid`-Dateien oder ganze Ordner können auf den Player gezogen werden. Die Wiedergabe startet sofort.
 - **Echtzeit-Oszilloskop**: Zeigt die Wellenformen der drei SID-Stimmen (Dreieck, Sägezahn, Puls, Rauschen) samt Frequenzen, Gate-Status und ADSR-Hüllkurven.
 - **SID-Modellwahl (macOS-App)**: Picker zwischen `Auto`, `6581` und `8580`. `Auto` folgt der in der SID-Datei hinterlegten Präferenz; die feste Wahl erzwingt das jeweilige Chip-Modell und wirkt live auf den laufenden Song (viele Tunes klingen nur auf dem ursprünglich gemeinten Chip korrekt).
+- **PAL/NTSC-Taktwahl**: Folgt automatisch dem SID-Dateikopf; PAL und NTSC lassen sich in den nativen Apps und im HTML5-Player ausdrücklich wählen. Unbekannte oder für beide Standards geeignete Dateien verwenden bei Auto PAL. Die Wahl gilt auch für Seek und WAV-Export; berechnete Songlängen werden je Taktmodus getrennt gecacht.
 - **Quick-Look-Vorschau (macOS-App)**: `.sid`-Datei im Finder markieren und Leertaste drücken — der Song spielt sofort, dazu erscheinen Titel, Komponist und Copyright samt Song-Umschaltung bei mehreren Subtunes. Einrichtung: siehe [Quick-Look-Vorschau](#quick-look-vorschau-für-sid-dateien-macos).
 - **Echte Songlängen**: Liest die HVSC-Datenbank `Songlengths.md5` (in den Einstellungen wählbar oder automatisch neben der Sammlung gefunden) — Positions-Slider und Auto-Next nutzen dann die tatsächliche Länge. Songs ohne Datenbank-Eintrag analysiert die App beim ersten Abspielen im Hintergrund (sofern sie in Stille enden) und merkt sich das Ergebnis.
 - **Titel-Anmerkungen (STIL)**: Liest die `STIL.txt` der HVSC (in den Einstellungen wählbar oder automatisch neben der Sammlung gefunden) und zeigt zum laufenden Titel, was im SID-Dateikopf keinen Platz hat — welche Vorlage ein Tune covert, wer die Melodie geschrieben hat, Anmerkungen zu einzelnen Subtunes. Die Datenbank gehört dem HVSC-Projekt und wird nicht mitgeliefert.
@@ -83,6 +84,7 @@ Jedes Bedienelement der App hat einen Tooltip: den Zeiger einen Moment darauf ru
 | Öffnen… | Eine oder mehrere `.sid`-Dateien öffnen. |
 | Auto Next | Am Songende automatisch weiter — erst durch die verbleibenden Subtunes der Datei, dann zum nächsten Titel. |
 | SID: Auto / 6581 / 8580 | Chip-Modell. `Auto` folgt der Präferenz der Datei; eine feste Wahl erzwingt das Modell und wirkt live auf den laufenden Song. |
+| Auto: PAL / PAL / NTSC | C64-Takt. Auto folgt der Datei und verwendet bei fehlender oder doppelter Taktangabe PAL. Ein Wechsel baut die aktuelle Position im Hintergrund neu auf. |
 | ‹ n / m › | Subtune-Navigation. Eine `.sid`-Datei kann mehrere Songs („Subtunes") enthalten; `2 / 5` heißt Subtune 2 von 5. |
 | Shuffle | Zufallswiedergabe. Die Einstellung bleibt über Neustarts erhalten; ist sie an, startet bei jedem App-Start ein zufälliger Song. |
 | ↺ 15 | 15 Sekunden zurück. |

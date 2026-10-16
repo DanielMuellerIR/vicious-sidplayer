@@ -39,7 +39,8 @@ export function parseSidHeader(data) {
   const subtunesCount = Math.min(256, Math.max(1, (data[0x0E] << 8) | data[0x0F]));
   const prefModel = version >= 2 && (data[0x77] & 0x30) >= 0x20 ? 8580 : 6581;
 
-  return { title, author, info, subtunesCount, prefModel };
+  const clockPreference = ['unknown', 'pal', 'ntsc', 'both'][version >= 2 ? (data[0x77] >> 2) & 3 : 0];
+  return { title, author, info, subtunesCount, prefModel, clockPreference };
 }
 
 export class SidPlayer {
@@ -47,6 +48,7 @@ export class SidPlayer {
     this.audioCtx = null;
     this.workletNode = null;
     this.volume = 0.3;
+    this.clockMode = 'auto';
     this.visualCallback = null;
     this.loadedCallback = null;
     this.loaded = false;
@@ -142,6 +144,7 @@ export class SidPlayer {
     };
 
     this.workletNode.port.postMessage({ type: 'setVolume', volume: this.volume });
+    this.workletNode.port.postMessage({ type: 'setClockMode', mode: this.clockMode });
   }
 
   /**
@@ -258,6 +261,11 @@ export class SidPlayer {
     if (this.workletNode) {
       this.workletNode.port.postMessage({ type: 'setVolume', volume });
     }
+  }
+
+  setClockMode(mode) {
+    this.clockMode = ['pal', 'ntsc'].includes(mode) ? mode : 'auto';
+    if (this.workletNode) this.workletNode.port.postMessage({ type: 'setClockMode', mode: this.clockMode });
   }
 
   watchVisuals(callback) {

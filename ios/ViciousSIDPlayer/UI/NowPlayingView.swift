@@ -45,9 +45,9 @@ struct NowPlayingView: View {
                     PlaybackOptionsView()
 
                     AnalysisControlsView(coordinator: model.coordinator,
-                                         palette: palette) { override in
-                        model.setModelOverride(override)
-                    }
+                                         palette: palette,
+                                         onModelChange: model.setModelOverride,
+                                         onClockChange: model.setClockMode)
 
                     STILNotesView()
 

@@ -21,6 +21,22 @@ with tempfile.TemporaryDirectory(prefix='vicious-cli-regressions-') as temporary
         struct.pack_into('>H', data, offset, value)
     sid = root / 'fixture.sid'
     sid.write_bytes(data + b'\x60\x60')
+    invalid_clock = subprocess.run([cli, sid, '--clock', 'invalid'], capture_output=True, timeout=5)
+    assert invalid_clock.returncode == 1
+    tone = bytes([0xA9,15,0x8D,0x18,0xD4,0xA9,0,0x8D,5,0xD4,
+                  0xA9,0xF0,0x8D,6,0xD4,0xA9,0x20,0x8D,1,0xD4,
+                  0xA9,0x11,0x8D,4,0xD4,0x60,0x60])
+    tone_header = bytearray(data)
+    struct.pack_into('>H', tone_header, 12, 0x1000 + len(tone) - 1)
+    tone_file = root / 'tone.sid'
+    tone_file.write_bytes(tone_header + tone)
+    outputs = []
+    for clock in ['pal', 'ntsc']:
+        wav = root / f'{clock}.wav'
+        result = subprocess.run([cli, tone_file, '--clock', clock, '--wav', wav, '--seconds', '1'], capture_output=True, timeout=5)
+        assert result.returncode == 0, result.stderr.decode()
+        outputs.append(wav.read_bytes()[44:])
+    assert outputs[0] != outputs[1], 'CLI-Taktwahl erreicht den Renderer nicht'
     for value in ['nan', 'inf', '-1', 'invalid', '3601']:
         result = subprocess.run([checker, sid, '--dump', root / 'dump.json', value], capture_output=True, timeout=5)
         assert result.returncode == 2, (value, result.returncode)

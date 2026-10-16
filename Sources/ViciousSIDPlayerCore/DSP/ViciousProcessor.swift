@@ -14,8 +14,9 @@ public final class ViciousProcessor: Sendable {
     private let samplerate: Double
 
     // C64 and SID Constants
-    private let C64_PAL_CPUCLK: Double = 985248
-    private let PAL_FRAMERATE: Double = 50
+    private let clockMode: SidClockMode
+    nonisolated(unsafe) private var clock: C64Clock = .pal
+    nonisolated(unsafe) private var usesCIATimer = false
     private let SID_CHANNEL_AMOUNT: Int = 3
     private let OUTPUT_SCALEDOWN: Double = 3145728 // 0x10000 * 3 * 16
 
@@ -146,10 +147,11 @@ public final class ViciousProcessor: Sendable {
       1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
     ]
 
-    public init(sampleRate: Double) {
+    public init(sampleRate: Double, clockMode: SidClockMode = .auto) {
         self.samplerate = sampleRate
-        self.clk_ratio = C64_PAL_CPUCLK / sampleRate
-        self.frame_sampleperiod = sampleRate / PAL_FRAMERATE
+        self.clockMode = clockMode
+        self.clk_ratio = C64Clock.pal.cpuFrequency / sampleRate
+        self.frame_sampleperiod = sampleRate / C64Clock.pal.frameRate
 
         self.cutoff_ratio_8580 = -2.0 * .pi * (12500.0 / 256.0) / sampleRate
         self.cutoff_ratio_6581 = -2.0 * .pi * (20000.0 / 256.0) / sampleRate
@@ -242,20 +244,25 @@ public final class ViciousProcessor: Sendable {
             // dem, was die Hardware und die C-Vorlage tun.
             A = UInt8(truncatingIfNeeded: subtune)
             memory[1] = 0x37
-            memory[0xDC05] = 0
+            memory[0x02A6] = clock == .pal ? 1 : 0
+            memory[0xDC04] = UInt8(clock.defaultCIATimer & 255)
+            memory[0xDC05] = UInt8(clock.defaultCIATimer >> 8)
+            usesCIATimer = timerModeForCurrentSubtune() != 0
 
             for _ in 0..<100000 {
-                if CPU() >= 0xFE { break }
+                let result = CPU()
+                // Auch ein VBI-Tune darf in init einen eigenen CIA-Timer setzen.
+                // Lesen der vorbelegten Register allein aendert den Modus nicht.
+                if (storadd == 0xDC04 || storadd == 0xDC05) && (memory[1] & 3) != 0 {
+                    usesCIATimer = true
+                }
+                if result >= 0xFE { break }
             }
 
-            if timerModeForCurrentSubtune() != 0 || memory[0xDC05] != 0 {
-                if memory[0xDC05] == 0 {
-                    memory[0xDC04] = 0x24
-                    memory[0xDC05] = 0x40
-                }
-                frame_sampleperiod = Double(UInt16(memory[0xDC04]) | UInt16(memory[0xDC05]) << 8) / clk_ratio
+            if usesCIATimer {
+                updateCIAPeriod()
             } else {
-                frame_sampleperiod = samplerate / PAL_FRAMERATE
+                frame_sampleperiod = samplerate / clock.frameRate
             }
 
             if playaddf == 0 {
@@ -1101,6 +1108,10 @@ public final class ViciousProcessor: Sendable {
         filePreferredModel2 = Double(sidFile.prefModel2)
         filePreferredModel3 = Double(sidFile.prefModel3)
         applyCurrentModel()
+        clock = clockMode.resolve(sidFile.clockPreference)
+        clk_ratio = clock.cpuFrequency / samplerate
+        ADSRperiods[0] = max(clk_ratio, 9)
+        ADSRstep[0] = ceil(ADSRperiods[0] / 9)
 
         SID_address[1] = sidFile.secondSidAddress
         SID_address[2] = sidFile.thirdSidAddress
@@ -1190,8 +1201,8 @@ public final class ViciousProcessor: Sendable {
             return (true, false)
         }
         var timerWritten = false
-        if (addr == 0xDC05 || addr == 0xDC04) && (memory[1] & 3) != 0 && timerModeForCurrentSubtune() != 0 {
-            frame_sampleperiod = Double(UInt16(memory[0xDC04]) | UInt16(memory[0xDC05]) << 8) / clk_ratio
+        if (storadd == 0xDC05 || storadd == 0xDC04) && (memory[1] & 3) != 0 && usesCIATimer {
+            updateCIAPeriod()
             timerWritten = true
         }
         if storadd >= 0xD420 && storadd < 0xD800 && (memory[1] & 3) != 0 {
@@ -1214,6 +1225,12 @@ public final class ViciousProcessor: Sendable {
     }
 
     public var sampleRate: Double { samplerate }
+
+    private func updateCIAPeriod() {
+        // Der CIA zaehlt einschliesslich Null: ein Latch von N dauert N+1 Takte.
+        let latch = UInt16(memory[0xDC04]) | UInt16(memory[0xDC05]) << 8
+        frame_sampleperiod = (Double(latch) + 1) / clk_ratio
+    }
 
     public func seek(seconds: Double) {
         try? seekCancellable(seconds: seconds, cancellationCheck: {})

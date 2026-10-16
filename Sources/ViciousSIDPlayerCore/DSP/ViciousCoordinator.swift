@@ -128,6 +128,9 @@ public final class ViciousCoordinator: ObservableObject {
     @Published public var prefModel: Int = 8580
     // Nutzer-Override des SID-Modells: nil = Auto (Datei-Praeferenz), 6581 oder 8580.
     @Published public var modelOverride: Int? = nil
+    @Published public private(set) var clockMode: SidClockMode = .auto
+    @Published public private(set) var clockPreference: SidClockPreference = .unknown
+    public var effectiveClock: C64Clock { clockMode.resolve(clockPreference) }
     // Analyse-Features (nicht persistent — gelten pro Sitzung): Stimmen 1-3 einzeln
     // stumm und SID-Filter an/aus. Wirken live und ueberleben den Processor-
     // Neuaufbau in play() (werden dort erneut angewandt).
@@ -183,6 +186,7 @@ public final class ViciousCoordinator: ObservableObject {
         self.currentSubtune = 0
         self.elapsedSeconds = 0.0
         self.prefModel = fileData.prefModel
+        self.clockPreference = fileData.clockPreference
     }
 
     public func play() {
@@ -224,7 +228,7 @@ public final class ViciousCoordinator: ObservableObject {
         }
 
         // Initialize processor
-        let processor = ViciousProcessor(sampleRate: sampleRate)
+        let processor = ViciousProcessor(sampleRate: sampleRate, clockMode: clockMode)
         _ = processor.loadSID(sidFile: sid)
         processor.setModelOverride(modelOverride.map { Double($0) })
         for voice in 0..<3 { processor.setVoiceMuted(voice: voice, muted: voiceMuted[voice]) }
@@ -387,6 +391,14 @@ public final class ViciousCoordinator: ObservableObject {
         }
     }
 
+    public func setClockMode(_ mode: SidClockMode) {
+        guard mode != clockMode else { return }
+        clockMode = mode
+        // Ein anderer Takt veraendert CPU, Huellkurven und Oszillatoren. Der
+        // Zielstand wird deshalb wie beim Seek im Hintergrund neu aufgebaut.
+        if engineProcessor != nil { seek(seconds: elapsedSeconds) }
+    }
+
     // Stimme 1-3 stumm/laut schalten (Analyse; wirkt live auf den laufenden Song).
     public func toggleVoiceMuted(_ voice: Int) {
         guard voice >= 0 && voice < voiceMuted.count else { return }
@@ -417,10 +429,12 @@ public final class ViciousCoordinator: ObservableObject {
             let sub = currentSubtune
             let rate = processor.sampleRate
             let model = modelOverride
+            let clock = clockMode
             let muted = voiceMuted
             let worker = Task.detached(priority: .userInitiated) {
                 try Self.prepareSeekProcessor(sid: sid, subtune: sub, sampleRate: rate,
-                                              model: model, voiceMuted: muted, seconds: target)
+                                              model: model, voiceMuted: muted, seconds: target,
+                                              clockMode: clock)
             }
             seekTask = Task { [weak self] in
                 do {
@@ -455,8 +469,9 @@ public final class ViciousCoordinator: ObservableObject {
 
     nonisolated static func prepareSeekProcessor(sid: SidFileData, subtune: Int,
                                                 sampleRate: Double, model: Int?,
-                                                voiceMuted: [Bool], seconds: Double) throws -> ViciousProcessor {
-        let prepared = ViciousProcessor(sampleRate: sampleRate)
+                                                voiceMuted: [Bool], seconds: Double,
+                                                clockMode: SidClockMode = .auto) throws -> ViciousProcessor {
+        let prepared = ViciousProcessor(sampleRate: sampleRate, clockMode: clockMode)
         _ = prepared.loadSID(sidFile: sid)
         prepared.setModelOverride(model.map { Double($0) })
         prepared.initSubtune(sub: subtune)
