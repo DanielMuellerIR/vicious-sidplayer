@@ -26,6 +26,7 @@ struct LibraryView: View {
     @State private var trackIndex: [String: LibraryTrack] = [:]
     /// Dateiauswahl offen?
     @State private var showImporter = false
+    @State private var showCollectionTransfer = false
     @State private var page = ListeningPage.library
     @State private var showListeningName = false
     @State private var listeningName = ""
@@ -96,6 +97,9 @@ struct LibraryView: View {
                     _ = model.saveListeningList(name: listeningName, entries: entriesToSave)
                     showListeningName = false; page = .lists
                 }
+            }
+            .sheet(isPresented: $showCollectionTransfer, onDismiss: { model.collectionTransfer.reset() }) {
+                PersonalCollectionView(controller: model.collectionTransfer)
             }
             .fileImporter(
                 isPresented: $showImporter,
@@ -254,6 +258,12 @@ struct LibraryView: View {
                 } label: {
                     Label("Dateien importieren …", systemImage: "doc.badge.plus")
                 }
+
+                Divider()
+
+                Button { model.collectionTransfer.reset(); showCollectionTransfer = true } label: {
+                    Label("Persönliche Sammlungsdaten …", systemImage: "arrow.left.arrow.right")
+                }.accessibilityIdentifier("collection-open")
 
                 Divider()
 

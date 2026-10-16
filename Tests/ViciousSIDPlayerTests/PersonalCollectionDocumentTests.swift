@@ -92,4 +92,10 @@ final class PersonalCollectionDocumentTests: XCTestCase {
         let unknown = try PersonalCollectionResolver(tracks: [.init(path: "Tune.sid", md5: nil)])
         XCTAssertEqual(try unknown.resolve(.init(path: "Tune.sid", md5: fingerprint)), .unverified("Tune.sid"))
     }
+
+    func testUnverifiedPathCannotConfirmAMissingSubtune() throws {
+        let resolver = try PersonalCollectionResolver(tracks: [.init(path: "Tune.sid", md5: md5, subtuneCount: 3)])
+        XCTAssertEqual(try resolver.resolve(.init(path: "Tune.sid", subtune: 3)), .unavailableSubtune("Tune.sid", 3))
+        XCTAssertEqual(try resolver.resolve(.init(path: "Tune.sid", subtune: 2)), .unverified("Tune.sid"))
+    }
 }

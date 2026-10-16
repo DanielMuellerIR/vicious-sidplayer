@@ -71,6 +71,33 @@ final class ListeningHistoryControllerTests: XCTestCase, @unchecked Sendable {
         XCTAssertTrue(restored.isReadOnly)
         XCTAssertEqual(try Data(contentsOf: file), external)
     }
+
+    @MainActor
+    func testImportedContinuationRebasesTheRecorderWithoutCountingThePause() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("history.json"), controller = ListeningHistoryController(fileURL: file)
+        await controller.ready()
+        let ref = ListeningPersonalReference(libraryID: "target", trackID: "Tune.sid", md5: String(repeating: "a", count: 32), subtune: 0)
+        let start = Date(timeIntervalSince1970: 1_792_152_000.123456)
+        controller.observe(reference: ref, title: "Tune", position: 0, knownDuration: nil, isPlaying: true, force: true, uptime: 0, now: start)
+        controller.observe(reference: ref, title: "Tune", position: 10, knownDuration: nil, isPlaying: false, force: true, uptime: 10, now: start.addingTimeInterval(10))
+        try await controller.suspendForImport()
+        let current = try XCTUnwrap(controller.document.events.first)
+        let imported = ListeningHistoryEvent(id: current.id, reference: ref, title: "Tune",
+            startedAt: Date(timeIntervalSince1970: 1_792_152_000.123), lastHeardAt: start.addingTimeInterval(20), heardSeconds: 20, lastPosition: 200)
+        let document = try ListeningHistoryDocument(events: [imported], heardMD5s: [ref.md5], bookmarks: [], notes: [])
+        let store = ListeningHistoryStore(fileURL: file); _ = try await store.load(); try await store.save(document)
+        try await controller.verifyImportedDocument(document); controller.acceptImportedDocument(document); controller.resumeAfterImport()
+        controller.observe(reference: ref, title: "Tune", position: 10, knownDuration: nil, isPlaying: true, force: true, uptime: 11, now: start.addingTimeInterval(21))
+        controller.observe(reference: ref, title: "Tune", position: 11, knownDuration: nil, isPlaying: false, force: true, uptime: 12, now: start.addingTimeInterval(22))
+        XCTAssertFalse(controller.isReadOnly)
+        XCTAssertEqual(controller.document.events.count, 1)
+        XCTAssertEqual(controller.document.events.first?.heardSeconds, 21)
+        XCTAssertEqual(controller.document.events.first?.lastPosition, 11)
+        let saved = await controller.flush()
+        XCTAssertTrue(saved)
+    }
 }
 #endif
 

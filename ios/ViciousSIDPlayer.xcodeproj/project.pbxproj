@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA00000000000000000060 /* PersonalCollectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000000000000000061 /* PersonalCollectionView.swift */; };
 		AA00000000000000000042 /* ViciousSIDPlayerCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA00000000000000000041 /* ViciousSIDPlayerCore */; };
 		AA00000000000000000043 /* ViciousSIDPlayerCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA00000000000000000044 /* ViciousSIDPlayerCore */; };
 /* End PBXBuildFile section */
@@ -22,6 +23,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		AA00000000000000000061 /* PersonalCollectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PersonalCollectionView.swift; path = ../Sources/ViciousSIDPlayerApp/UI/PersonalCollectionView.swift; sourceTree = SOURCE_ROOT; };
 		AA00000000000000000011 /* ViciousSIDPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ViciousSIDPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA00000000000000000021 /* ViciousSIDPlayerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ViciousSIDPlayerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA00000000000000000050 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
@@ -77,6 +79,7 @@
 			isa = PBXGroup;
 			children = (
 				AA00000000000000000051 /* Config */,
+				AA00000000000000000061 /* PersonalCollectionView.swift */,
 				AA00000000000000000015 /* ViciousSIDPlayer */,
 				AA00000000000000000025 /* ViciousSIDPlayerTests */,
 				AA00000000000000000003 /* Products */,
@@ -215,6 +218,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA00000000000000000060 /* PersonalCollectionView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -251,7 +255,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.9.34;
+				MARKETING_VERSION = 1.9.35;
 				PRODUCT_BUNDLE_IDENTIFIER = com.viben.ViciousSIDPlayer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -274,7 +278,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.9.34;
+				MARKETING_VERSION = 1.9.35;
 				PRODUCT_BUNDLE_IDENTIFIER = com.viben.ViciousSIDPlayer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -289,7 +293,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.9.34;
+				MARKETING_VERSION = 1.9.35;
 				PRODUCT_BUNDLE_IDENTIFIER = com.viben.ViciousSIDPlayer.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -305,7 +309,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.9.34;
+				MARKETING_VERSION = 1.9.35;
 				PRODUCT_BUNDLE_IDENTIFIER = com.viben.ViciousSIDPlayer.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;

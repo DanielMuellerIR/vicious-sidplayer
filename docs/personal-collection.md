@@ -1,6 +1,14 @@
 # Persönliche Sammlungsdaten
 
-Stand: 2026-10-16. Speichergrundlage, Austauschformat und reine Zusammenführung sind im Core vorbereitet und geprüft. Die App-Einbindung und Import-/Exportoberflächen folgen; diese Grundlage stellt noch keinen nutzbaren Datenaustausch in den Apps bereit.
+Stand: 2026-10-16. Auf Mac und iPhone lassen sich persönliche Sammlungsdaten über eine lokale JSON-Datei austauschen. Die HTML5-Oberfläche behält ihre bisherigen lokalen Daten; ihr Sammlungsaustausch wird separat ergänzt.
+
+## Bedienung
+
+Auf dem Mac öffnet „Sammlungsdaten …“ in der Seitenleiste die gemeinsame Ansicht. Auf dem iPhone liegt „Persönliche Sammlungsdaten …“ im Menü „Bibliothek verwalten“. Export und Import haben dieselbe Bereichsauswahl; Verlauf bleibt zunächst ausgeschaltet. Ein vorbereiteter Export wird über den systemeigenen Dateidialog gesichert.
+
+Nach Auswahl einer Importdatei zeigt die Vorschau Herkunft, Bereichszahlen, konkrete vorhandene und importierte Konfliktwerte sowie nicht zugeordnete Dateien. Vorhandene Werte sind voreingestellt. Ein vorhandener Pfad ohne Inhaltsbeleg braucht ausdrückliches Vertrauen; das Auslassen nicht zugeordneter Favoriten-/Listeneinträge muss bestätigt werden. Die Importdatei bleibt vollständig erhalten. Abbrechen verändert keine persönlichen Daten.
+
+Während der Vorschau läuft die Wiedergabe weiter. „Zusammenführen“ pausiert sie kurz und erhält Titel, Subtune, Position, aktive Folge und Wiedergabeoptionen. Ein inzwischen abgelaufener Einschlaftimer wird nicht bestätigt; die App setzt dann nicht automatisch fort.
 
 ## Austauschformat
 
@@ -20,8 +28,8 @@ Die reine Vorschau verändert keine Ablage und startet keine Wiedergabe. Favorit
 
 Hörlisten und Wiedergabeoptionen vergleichen ihre Datei vor jedem Schreiben mit den zuletzt erfolgreich gelesenen beziehungsweise selbst geschriebenen Bytes. Eine vorhandene Datei muss vor ihrem ersten Austausch erfolgreich dekodiert und validiert sein. Externe Änderungen einschließlich Löschungen werden beim Speichern nicht überschrieben. Beschädigte, neuere oder zu große Dateien bleiben erhalten. Ein bewusstes erneutes Laden setzt die Vergleichsbasis neu. Vorübergehende Wiedergabeoptionen und Einschlaftimer bleiben auch bei schreibgeschützter Ablage bedienbar.
 
-`PersonalCollectionTransaction` begrenzt einen späteren Import auf die drei bekannten Dateien für Hörlisten, Wiedergabeoptionen und Verlauf. Musikdateien gehören nicht dazu. Vor dem Dateitausch liegen validierte Ersatzdaten, Originalbytes und ein begrenztes Journal im Support-Ordner. Prüfsummen erkennen beschädigte Sicherungen; sie sind keine Authentifizierung einer Importdatei.
+`PersonalCollectionTransaction` begrenzt den Import auf die drei bekannten Dateien für Hörlisten, Wiedergabeoptionen und Verlauf. Musikdateien gehören nicht dazu. Vor dem Dateitausch liegen validierte Ersatzdaten, Originalbytes und ein begrenztes Journal im Support-Ordner. Prüfsummen erkennen beschädigte Sicherungen; sie sind keine Authentifizierung einer Importdatei.
 
 Ein Fehler vor dem atomaren Commitmarker setzt bereits ausgetauschte Dateien zurück. Nach einem Prozessende kann dieselbe Wiederherstellung erneut ausgeführt werden. Fremde Änderungen verhindern ein blindes Zurückschreiben; Dateien und Sicherungen bleiben dann für die Klärung erhalten. Ein vollständiger Commit bleibt bis zur Übernahme der Favoriten wiederherstellbar. Die Favoritenübernahme ist idempotent, danach dürfen die Sicherungen entfernt werden.
 
-Der spätere Aufrufer muss vor dem Austausch alle beteiligten Writer abwarten und anhalten, beim Start vor dem Laden der Controller eine offene Transaktion behandeln und anschließend die bestätigten Dokumente übernehmen. Diese Einbindung ist zusammen mit der Oberfläche noch offen. Die vorhandenen Writer sind bereits geschützt; die Transaktion wird bisher ausschließlich durch ihre gezielten Core-Tests aufgerufen.
+Die nativen Apps behandeln offene Transaktionen gemeinsam vor dem ersten Laden der drei Controller. Vor einer Übernahme warten sie betroffene Writer ab und halten sie an; verzögerte alte Aufträge sind entwertet. Erst nach bestätigtem Dateitausch und Favoritenübernahme verwenden die Controller die neuen Dokumente. Bei einer blockierten Wiederherstellung bleiben Dateien und Sicherungen erhalten; weitere Änderungen warten auf einen Neustart beziehungsweise die Klärung der fremden Änderung.

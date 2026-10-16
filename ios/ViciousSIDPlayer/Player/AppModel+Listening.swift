@@ -40,6 +40,7 @@ extension AppModel {
     }
 
     func startListeningQueue(_ proposed: ListeningQueue) {
+        guard !collectionTransfer.isApplying else { return }
         playbackOptions.acknowledgeManualPlayback()
         guard !proposed.items.isEmpty else { errorMessage = String(localized: "Diese Auswahl enthält keine Titel."); return }
         var queue = proposed
@@ -60,12 +61,14 @@ extension AppModel {
     }
 
     func selectListeningEntry(_ id: UUID) {
+        guard !collectionTransfer.isApplying else { return }
         guard var queue = listening.queue, let entry = queue.items.first(where: { $0.id == id }) else { return }
         playbackOptions.acknowledgeManualPlayback()
         if loadListeningEntry(entry, autoplay: true) { queue.select(id); listening.setQueue(queue); saveSessionState() }
     }
 
     func advanceListeningQueue(forward: Bool, autoplay: Bool, repeatSequence: Bool = false) {
+        guard !collectionTransfer.isApplying else { return }
         guard var queue = listening.queue else { return }
         for _ in 0..<max(1, queue.items.count) {
             guard let entry = forward ? queue.next(allowCycle: repeatSequence) : queue.previous(allowCycle: repeatSequence) else {
@@ -83,6 +86,7 @@ extension AppModel {
     }
 
     func enqueueNext(trackID: String, subtune: Int? = nil) {
+        guard !collectionTransfer.isApplying else { return }
         ensureListeningQueue()
         if listening.queue == nil {
             let entry = ListeningEntry(trackID: trackID, subtune: subtune)

@@ -1,3 +1,9 @@
+Vicious SID Player 1.9.35 ergänzt den Sammlungsaustausch auf Mac und iPhone.
+
+- Ausgewählte Favoriten, geordnete Hörfolgen, Lieblings-Subtunes, Lesezeichen, Notizen und persönliche Endzeiten als lokale JSON-Datei exportieren. Verlauf ist optional und standardmäßig aus.
+- Vor der Zusammenführung Dateiidentität, konkrete Konflikte und ausgelassene Einträge prüfen. Vorhandene Werte bleiben erhalten, bis du die importierten Werte auswählst. Aktive Folge, Wiedergabeposition und Timer bleiben erhalten.
+- Unterbrochene Importe werden vor dem Laden persönlicher Daten behandelt; geänderte, beschädigte und neuere Dateien bleiben geschützt. Der HTML5-Austausch folgt separat. Siehe [Prüfstand](docs/validation-1.9.35.md).
+
 Vicious SID Player 1.9.34 bereitet das portable Sammlungsformat und die Zusammenführung mit Konfliktwahl im gemeinsamen Core vor.
 
 - Relative Pfade und MD5-Inhaltsfingerabdrücke unterscheiden verschobene, fehlende, geänderte und mehrdeutige Dateien. Wiederholter Import erhält Listenidentitäten und addiert Hörzeit nicht doppelt.

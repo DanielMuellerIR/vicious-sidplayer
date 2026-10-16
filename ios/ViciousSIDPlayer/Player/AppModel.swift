@@ -60,6 +60,42 @@ final class AppModel: ObservableObject {
     let metadataIndex = LibraryMetadataController()
     let savedSearches: SavedLibrarySearchController
     let playbackOptions: PlaybackOptionsController
+    let collectionFavorites: PersonalCollectionFavoritesStore
+    var collectionImportMayResume = false
+    var pendingCollectionAudioReset = false
+    lazy var collectionTransfer: PersonalCollectionController = {
+        let controller = PersonalCollectionController(listening: listening, history: history, playback: playbackOptions,
+            favorites: collectionFavorites, supportURL: listeningFileURL?.deletingLastPathComponent(), context: { [weak self] in
+                guard let self, let library = self.services.library, self.importTask == nil,
+                      self.services.resetTask == nil else { throw PersonalCollectionImportError.unavailable }
+                return .init(libraryID: Self.listeningCollectionID, name: String(localized: "iPhone-Sammlung"), library: library)
+            }, pause: { [weak self] in
+                guard let self else { return false }
+                let playing = self.coordinator.isPlaying
+                self.collectionImportMayResume = playing
+                self.observeHistory(force: true, playing: false)
+                if playing { self.coordinator.pause() }
+                self.updateNowPlaying(force: true)
+                return playing
+            }, resume: { [weak self] in
+                guard let self, self.collectionImportMayResume, !self.pendingCollectionAudioReset,
+                      self.coordinator.isPaused else { return }
+                self.collectionImportMayResume = false
+                self.applyPlaybackOptions(); self.coordinator.play(); self.observeHistory(force: true)
+                self.syncPlaybackLoop(); self.updateNowPlaying(force: true)
+            }, didApply: { [weak self] in self?.didImportCollection() })
+        controller.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &listeningSubscriptions)
+        controller.$isApplying.sink { [weak self] applying in
+            guard !applying else { return }
+            Task { @MainActor [weak self] in
+                guard let self, self.pendingCollectionAudioReset else { return }
+                self.pendingCollectionAudioReset = false
+                self.rebuildAfterMediaServicesReset()
+            }
+        }.store(in: &listeningSubscriptions)
+        return controller
+    }()
+    private let listeningFileURL: URL?
 
     /// Favoriten, als Menge relativer Pfade. Bewusst relativ und nicht absolut:
     /// der App-Container bekommt bei jeder Neuinstallation eine neue UUID, mit
@@ -230,10 +266,14 @@ final class AppModel: ObservableObject {
 
     init(defaults: UserDefaults = .standard, listeningFileURL: URL? = ListeningLibraryStore.defaultURL()) {
         self.defaults = defaults
-        self.listening = ListeningLibraryController(fileURL: listeningFileURL)
-        self.history = ListeningHistoryController(fileURL: listeningFileURL?.deletingLastPathComponent().appendingPathComponent(ListeningHistoryStore.fileName))
+        self.listeningFileURL = listeningFileURL
+        let favorites = PersonalCollectionFavoritesStore(defaults: defaults, key: Keys.favorites)
+        self.collectionFavorites = favorites
+        let startup = PersonalCollectionStartup(supportURL: listeningFileURL?.deletingLastPathComponent(), favorites: favorites)
+        self.listening = ListeningLibraryController(fileURL: listeningFileURL, startup: startup)
+        self.history = ListeningHistoryController(fileURL: listeningFileURL?.deletingLastPathComponent().appendingPathComponent(ListeningHistoryStore.fileName), startup: startup)
         self.savedSearches = SavedLibrarySearchController(fileURL: listeningFileURL?.deletingLastPathComponent().appendingPathComponent("saved-searches.json"))
-        self.playbackOptions = PlaybackOptionsController(fileURL: listeningFileURL?.deletingLastPathComponent().appendingPathComponent("playback-options.json"))
+        self.playbackOptions = PlaybackOptionsController(fileURL: listeningFileURL?.deletingLastPathComponent().appendingPathComponent(PlaybackSettingsStore.fileName), startup: startup)
         loadSettings()
         playbackOptions.onStopRequested = { [weak self] in self?.stopForPlaybackOptions() }
         playbackOptions.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &listeningSubscriptions)
@@ -265,6 +305,7 @@ final class AppModel: ObservableObject {
         listening.$isLoaded.filter { $0 }.sink { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                self.favorites = self.collectionFavorites.read()
                 self.activateListeningLibrary()
                 if self.pendingListeningRestore {
                     self.pendingListeningRestore = false
@@ -294,19 +335,20 @@ final class AppModel: ObservableObject {
 
     /// Setzt die sichtbare Titelliste und den Ordnerbaum. Wird vom
     /// Bibliotheks-Teil aufgerufen (`AppModel+Library.swift`).
-    func applyLibrary(tracks: [LibraryTrack], folderTree: MusicLibraryFolder) {
+    func applyLibrary(tracks: [LibraryTrack], folderTree: MusicLibraryFolder, preservingListeningQueue: Bool = false) {
+        guard !collectionTransfer.isApplying || preservingListeningQueue else { return }
         self.tracks = tracks
         self.folderTree = folderTree
         let root = services.library?.root ?? URL(fileURLWithPath: "/")
         listeningPlaylist = Playlist(tracks: tracks.map {
             PlaylistTrack(id: $0.id, name: $0.name, folderPath: $0.folderPath, url: $0.url(in: root))
         })
-        activateListeningLibrary(removeMissing: true)
+        if !preservingListeningQueue { activateListeningLibrary(removeMissing: true) }
         if let library = services.library { metadataIndex.refresh(library: library) }
         // Ist der laufende Titel verschwunden (z.B. per Finder geloescht),
         // gilt kein Titel mehr als aktuell — die Wiedergabe laeuft aber weiter,
         // bis der Nutzer etwas anderes waehlt.
-        if let id = currentTrackID, !tracks.contains(where: { $0.id == id }) {
+        if !preservingListeningQueue, let id = currentTrackID, !tracks.contains(where: { $0.id == id }) {
             currentTrackID = nil
         }
     }
@@ -328,8 +370,20 @@ final class AppModel: ObservableObject {
     }
 
     func setFavorites(_ value: Set<String>) {
+        guard !collectionTransfer.isApplying else { return }
         favorites = value
         defaults.set(Array(value).sorted(), forKey: Keys.favorites)
+    }
+
+    private func didImportCollection() {
+        favorites = collectionFavorites.read()
+        resolveComputedLengthIfNeeded(); applyPlaybackOptions(); updateNowPlaying(force: true)
+        if let library = services.library {
+            Task { [weak self] in
+                let snapshot = await Task.detached(priority: .utility) { LibrarySnapshot(entries: library.entries) }.value
+                self?.applyLibrary(tracks: snapshot.tracks, folderTree: snapshot.folderTree, preservingListeningQueue: true)
+            }
+        }
     }
 
     /// Favoritenstatus eines Titels umschalten.

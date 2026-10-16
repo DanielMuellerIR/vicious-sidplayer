@@ -7,6 +7,7 @@ public final class ListeningHistoryController: ObservableObject {
     @Published public private(set) var document = ListeningHistoryDocument()
     @Published public private(set) var isLoaded = false
     @Published public private(set) var isReadOnly = false
+    @Published public private(set) var isPersistenceSuspended = false
     @Published public private(set) var isSaving = false
     @Published public private(set) var storageError: String?
     private let store: ListeningHistoryStore?
@@ -17,9 +18,11 @@ public final class ListeningHistoryController: ObservableObject {
     private var revision = 0
     private var savedRevision = 0
     private var lastObservationUptime: Double?
+    private let startup: PersonalCollectionStartup?
 
-    public init(fileURL: URL? = MusicLibraryLocation.support()?.appendingPathComponent(ListeningHistoryStore.fileName)) {
+    public init(fileURL: URL? = MusicLibraryLocation.support()?.appendingPathComponent(ListeningHistoryStore.fileName), startup: PersonalCollectionStartup? = nil) {
         store = fileURL.map { ListeningHistoryStore(fileURL: $0) }
+        self.startup = startup
         loadTask = Task { [weak self] in await self?.load() }
     }
 
@@ -27,6 +30,7 @@ public final class ListeningHistoryController: ObservableObject {
         defer { isLoaded = true }
         guard let store else { fail(ListeningHistoryError.readOnly); return }
         do {
+            try await startup?.ready()
             var loaded = try await store.load()
             let previous = loaded
             try loaded.prune()
@@ -47,7 +51,7 @@ public final class ListeningHistoryController: ObservableObject {
     public func observe(reference: ListeningPersonalReference?, title: String, position: Double,
                         knownDuration: Double?, isPlaying: Bool, force: Bool = false,
                         uptime: Double = ProcessInfo.processInfo.systemUptime, now: Date = Date()) {
-        guard isLoaded, !isReadOnly else { return }
+        guard isLoaded, !isReadOnly, !isPersistenceSuspended else { return }
         if !force, let lastObservationUptime, uptime >= lastObservationUptime, uptime - lastObservationUptime < 1 { return }
         lastObservationUptime = uptime
         guard let event = recorder.observe(reference: reference, title: title, position: position,
@@ -67,13 +71,13 @@ public final class ListeningHistoryController: ObservableObject {
         edit { try $0.setNote(text, for: reference) }
     }
     public func clearHistory() {
-        guard isLoaded, !isReadOnly else { return }
+        guard isLoaded, !isReadOnly, !isPersistenceSuspended else { return }
         recorder.reset(); lastObservationUptime = nil
         edit { $0.clearHistory() }
     }
 
     private func edit(_ change: (inout ListeningHistoryDocument) throws -> Void) {
-        guard isLoaded, !isReadOnly else { return }
+        guard isLoaded, !isReadOnly, !isPersistenceSuspended else { return }
         do {
             var updated = document
             try change(&updated)
@@ -96,6 +100,10 @@ public final class ListeningHistoryController: ObservableObject {
     /// Die Task-Kette verhindert, dass ein alter Snapshot einen neueren ersetzt.
     @discardableResult
     public func flush() async -> Bool {
+        guard !isPersistenceSuspended else { return !hasUnsavedChanges }
+        return await flushPending()
+    }
+    private func flushPending() async -> Bool {
         pendingSave?.cancel(); pendingSave = nil
         await ready()
         guard let store, !isReadOnly else { return false }
@@ -115,6 +123,32 @@ public final class ListeningHistoryController: ObservableObject {
         if savedRevision == revision || isReadOnly { isSaving = false }
         return !isReadOnly && savedRevision == revision
     }
+
+    public func suspendForImport() async throws {
+        await ready()
+        guard !isReadOnly, !isPersistenceSuspended else { throw ListeningHistoryError.readOnly }
+        isPersistenceSuspended = true
+        guard await flushPending() else {
+            isPersistenceSuspended = false
+            throw ListeningHistoryError.readOnly
+        }
+    }
+    public func verifyImportedDocument(_ expected: ListeningHistoryDocument) async throws {
+        guard isPersistenceSuspended, let store else { throw ListeningHistoryError.readOnly }
+        guard try await store.load() == expected else { throw ListeningHistoryError.externalChange }
+    }
+    public func importSnapshotBytes() async throws -> Data? {
+        guard isPersistenceSuspended, let store else { throw ListeningHistoryError.readOnly }
+        return try await store.snapshotBytes()
+    }
+    public func acceptImportedDocument(_ value: ListeningHistoryDocument) {
+        guard isPersistenceSuspended else { return }
+        document = value; revision += 1; savedRevision = revision; storageError = nil; isSaving = false
+        recorder.reconcile(afterImport: value)
+        // Die Pause bleibt Teil derselben Hör-Episode. Ihr letzter Snapshot
+        // enthält den inzwischen gehörten Abschnitt bereits im Importergebnis.
+    }
+    public func resumeAfterImport() { isPersistenceSuspended = false }
 
     private func fail(_ error: Error) {
         isReadOnly = true; isSaving = false

@@ -11,6 +11,30 @@ public enum PersonalCollectionError: Error, LocalizedError {
     }
 }
 
+public enum PersonalCollectionArea: String, CaseIterable, Identifiable, Sendable {
+    case favorites, lists, bookmarks, notes, endTimes, history
+    public var id: String { rawValue }
+    public static let standard: Set<Self> = [.favorites, .lists, .bookmarks, .notes, .endTimes]
+    public var title: String {
+        switch self {
+        case .favorites: return NSLocalizedString("Dateifavoriten", comment: "")
+        case .lists: return NSLocalizedString("Hörlisten und Lieblings-Subtunes", comment: "")
+        case .bookmarks: return NSLocalizedString("Lesezeichen", comment: "")
+        case .notes: return NSLocalizedString("Datei- und Subtunenotizen", comment: "")
+        case .endTimes: return NSLocalizedString("Persönliche Endzeiten", comment: "")
+        case .history: return NSLocalizedString("Hörverlauf und Gehört-Kennzeichnung", comment: "")
+        }
+    }
+    public var file: PersonalCollectionFile? {
+        switch self {
+        case .favorites: return nil
+        case .lists: return .listeningLibrary
+        case .bookmarks, .notes, .history: return .listeningHistory
+        case .endTimes: return .playbackSettings
+        }
+    }
+}
+
 public struct PersonalCollectionReference: Codable, Equatable, Hashable, Sendable {
     public let path: String
     public let md5: String?
@@ -145,6 +169,35 @@ public struct PersonalCollectionDocument: Codable, Equatable, Sendable {
     public var endTimes: [PersonalCollectionEndTime] = []
     public var history: PersonalCollectionHistory?
     public init(name: String, createdAt: Date = Date()) { self.name = name; self.createdAt = createdAt }
+
+    public func selecting(_ areas: Set<PersonalCollectionArea>) -> Self {
+        var result = self
+        if !areas.contains(.favorites) { result.favorites = [] }
+        if !areas.contains(.lists) { result.lists = [] }
+        if !areas.contains(.bookmarks) { result.bookmarks = [] }
+        if !areas.contains(.notes) { result.notes = [] }
+        if !areas.contains(.endTimes) { result.endTimes = [] }
+        if !areas.contains(.history) { result.history = nil }
+        return result
+    }
+    public func count(in area: PersonalCollectionArea) -> Int {
+        switch area {
+        case .favorites: return favorites.count
+        case .lists: return lists.count
+        case .bookmarks: return bookmarks.count
+        case .notes: return notes.count
+        case .endTimes: return endTimes.count
+        case .history: return (history?.events.count ?? 0) + (history?.heardMD5s.count ?? 0)
+        }
+    }
+    public var references: Set<PersonalCollectionReference> {
+        var result = Set(favorites)
+        result.formUnion(lists.flatMap { $0.entries.map(\.reference) })
+        result.formUnion(bookmarks.map(\.reference))
+        result.formUnion(notes.map(\.reference))
+        result.formUnion(history?.events.map(\.reference) ?? [])
+        return result
+    }
 
     public func validate() throws {
         guard format == "vicioussid.personal-collection", version == 1 else { throw PersonalCollectionError.unsupportedVersion }

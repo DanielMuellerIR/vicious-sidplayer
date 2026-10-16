@@ -14,6 +14,7 @@ public final class PlaybackOptionsController: ObservableObject {
     @Published public private(set) var document = PlaybackSettingsDocument()
     @Published public private(set) var isLoaded = false
     @Published public private(set) var isReadOnly = false
+    @Published public private(set) var isPersistenceSuspended = false
     @Published public private(set) var storageError: String?
     @Published public private(set) var remainingSleepSeconds = 0.0
     @Published public private(set) var stopAfterSubtune = false
@@ -24,17 +25,20 @@ public final class PlaybackOptionsController: ObservableObject {
     private let writer = DispatchQueue(label: "ViciousSIDPlayer.playback-options", qos: .utility)
     private var pending: DispatchWorkItem?
     private var revision = 0
+    private var loadTask: Task<Void, Never>?
+    private let writeGeneration = PersonalPersistenceGeneration()
     private var sleepInstant: ContinuousClock.Instant?
     private var timerTask: Task<Void, Never>?
     private let clock = ContinuousClock()
 
-    public init(fileURL: URL? = MusicLibraryLocation.support()?.appendingPathComponent(PlaybackSettingsStore.fileName)) {
+    public init(fileURL: URL? = MusicLibraryLocation.support()?.appendingPathComponent(PlaybackSettingsStore.fileName), startup: PersonalCollectionStartup? = nil) {
         self.store = fileURL.map { PlaybackSettingsStore(fileURL: $0) }
-        Task { [weak self] in
+        loadTask = Task { [weak self] in
             guard let self else { return }
             guard let store = self.store else { isReadOnly = true; isLoaded = true; return }
-            let result = await Task.detached(priority: .utility) {
-                Result { try store.load() }
+            let result: Result<PlaybackSettingsDocument, Error> = await Task.detached(priority: .utility) {
+                do { try await startup?.ready(); return Result.success(try store.load()) }
+                catch { return Result<PlaybackSettingsDocument, Error>.failure(error) }
             }.value
             switch result {
             case .success(let document): self.document = document
@@ -43,18 +47,19 @@ public final class PlaybackOptionsController: ObservableObject {
             isLoaded = true
         }
     }
+    public func ready() async { await loadTask?.value }
 
-    public func setRepeatMode(_ mode: PlaybackRepeatMode) { guard isLoaded else { return }; document.repeatMode = mode; saveSoon() }
+    public func setRepeatMode(_ mode: PlaybackRepeatMode) { guard isLoaded, !isPersistenceSuspended else { return }; document.repeatMode = mode; saveSoon() }
     public func setFadeOutSeconds(_ value: Double) {
-        guard isLoaded, value.isFinite, (0...30).contains(value) else { return }
+        guard isLoaded, !isPersistenceSuspended, value.isFinite, (0...30).contains(value) else { return }
         document.fadeOutSeconds = value; saveSoon()
     }
     public func setSleepMinutes(_ value: Int) {
-        guard isLoaded, (1...180).contains(value) else { return }
+        guard isLoaded, !isPersistenceSuspended, (1...180).contains(value) else { return }
         document.sleepMinutes = value; saveSoon()
     }
     public func setEndTime(_ text: String, target: PlaybackEndTimeTarget) throws {
-        guard isLoaded else { return }
+        guard isLoaded, !isPersistenceSuspended else { return }
         let seconds = try PlaybackDurationInput.seconds(text, maximum: WavRenderer.maximumDurationSeconds)
         try document.setEndTime(seconds, md5: target.md5, subtune: target.subtune); saveSoon()
     }
@@ -101,17 +106,24 @@ public final class PlaybackOptionsController: ObservableObject {
 
     public func retrySave() { saveSoon() }
     public func flush() {
+        guard !isPersistenceSuspended else { return }
+        flushPending()
+    }
+    private func flushPending() {
         guard isLoaded, !isReadOnly, let store else { return }
         pending?.cancel(); pending = nil; revision += 1
+        _ = writeGeneration.advance()
         let snapshot = document
         let save: @Sendable () -> Result<Void, Error> = { Result { try store.save(snapshot) } }
         receive(writer.sync(execute: save))
     }
     private func saveSoon() {
-        guard isLoaded, !isReadOnly, let store else { return }
+        guard isLoaded, !isReadOnly, !isPersistenceSuspended, let store else { return }
         revision += 1; let current = revision, snapshot = document
         pending?.cancel()
+        let generation = writeGeneration, ticket = generation.advance()
         let write: @Sendable () -> Void = { [weak self] in
+            guard generation.matches(ticket) else { return }
             let result = Result { try store.save(snapshot) }
             Task { @MainActor in
                 guard let self, self.revision == current else { return }
@@ -129,5 +141,29 @@ public final class PlaybackOptionsController: ObservableObject {
             storageError = String(format: NSLocalizedString("Wiedergabeeinstellungen konnten nicht gesichert werden: %@", comment: ""), error.localizedDescription)
         }
     }
+
+    public func suspendForImport() async throws {
+        await ready()
+        guard !isReadOnly, !isPersistenceSuspended else { throw PersonalDataFileError.readOnly }
+        isPersistenceSuspended = true; flushPending()
+        guard storageError == nil, !isReadOnly else {
+            isPersistenceSuspended = false
+            throw PersonalDataFileError.readOnly
+        }
+    }
+    public func verifyImportedDocument(_ expected: PlaybackSettingsDocument) async throws {
+        guard isPersistenceSuspended, let store else { throw PersonalDataFileError.readOnly }
+        let loaded = try await Task.detached(priority: .utility) { try store.load() }.value
+        guard loaded == expected else { throw PersonalDataFileError.externalChange }
+    }
+    public func importSnapshotBytes() async throws -> Data? {
+        guard isPersistenceSuspended, let store else { throw PersonalDataFileError.readOnly }
+        return try await Task.detached(priority: .utility) { try store.snapshotBytes() }.value
+    }
+    public func acceptImportedDocument(_ value: PlaybackSettingsDocument) {
+        guard isPersistenceSuspended else { return }
+        document = value; revision += 1; storageError = nil
+    }
+    public func resumeAfterImport() { isPersistenceSuspended = false }
 }
 #endif

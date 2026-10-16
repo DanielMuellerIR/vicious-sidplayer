@@ -29,6 +29,7 @@ extension AppModel {
     /// neue Name dransteht.
     @discardableResult
     func loadTrack(id: String, autoplay: Bool, subtune: Int = 0, updateListeningQueue: Bool = true) -> Bool {
+        guard !collectionTransfer.isApplying else { return false }
         guard let fileURL = trackURL(for: id) else {
             errorMessage = "Der Titel ist nicht mehr vorhanden."
             return false
@@ -93,6 +94,7 @@ extension AppModel {
     // MARK: - Transport
 
     func togglePlayPause() {
+        guard !collectionTransfer.isApplying else { collectionImportMayResume = false; return }
         if coordinator.isPlaying {
             observeHistory(force: true, playing: false)
             coordinator.pause()
@@ -113,11 +115,13 @@ extension AppModel {
 
     /// Die laufende Hoerfolge bleibt von der sichtbaren Suche unabhaengig.
     func playNext() {
+        guard !collectionTransfer.isApplying else { return }
         ensureListeningQueue()
         advanceListeningQueue(forward: true, autoplay: coordinator.isPlaying)
     }
 
     func playPrevious() {
+        guard !collectionTransfer.isApplying else { return }
         ensureListeningQueue()
         advanceListeningQueue(forward: false, autoplay: coordinator.isPlaying)
     }
@@ -130,6 +134,7 @@ extension AppModel {
     /// geladenen Titels bleibt dagegen erhalten und wird gepuffert — das ist
     /// der Architekturvertrag.)
     func seek(to seconds: Double) {
+        guard !collectionTransfer.isApplying else { return }
         guard currentTrackID != nil else { return }
         let target = min(max(0, seconds), currentDuration)
         observeHistory(force: true, playing: false)
@@ -150,6 +155,7 @@ extension AppModel {
 
     /// Waehlt einen Subtune derselben Datei.
     func setSubtune(_ index: Int, updateListeningQueue: Bool = true) {
+        guard !collectionTransfer.isApplying else { return }
         guard index >= 0, index < coordinator.subtunesCount else { return }
         observeHistory(force: true, playing: false)
         coordinator.setSubtune(sub: index)
@@ -189,6 +195,7 @@ extension AppModel {
     /// er die Engine komplett neu aufbaut — beim Fortsetzen aus der Pause tut er
     /// es nicht, und der Start der Engine wuerde dann still scheitern.
     private func startPlayback(manual: Bool = false) {
+        guard !collectionTransfer.isApplying else { return }
         playbackOptions.refreshSleepTimer()
         if manual { playbackOptions.acknowledgeManualPlayback() }
         guard !playbackOptions.didExpire else { return }
@@ -263,7 +270,9 @@ extension AppModel {
             self?.coordinator.isPlaying ?? false
         }
         session.pauseHandler = { [weak self] in
-            guard let self, self.coordinator.isPlaying else { return }
+            guard let self else { return }
+            if self.collectionTransfer.isApplying { self.collectionImportMayResume = false }
+            guard self.coordinator.isPlaying else { return }
             self.observeHistory(force: true, playing: false)
             self.coordinator.pause()
             self.syncPlaybackLoop()
@@ -279,7 +288,11 @@ extension AppModel {
             self.updateNowPlaying(force: true)
         }
         session.mediaServicesResetHandler = { [weak self] in
-            self?.rebuildAfterMediaServicesReset()
+            guard let self else { return }
+            if self.collectionTransfer.isApplying {
+                self.pendingCollectionAudioReset = true
+                self.collectionImportMayResume = false
+            } else { self.rebuildAfterMediaServicesReset() }
         }
         session.configure()
 
@@ -289,7 +302,9 @@ extension AppModel {
             self.togglePlayPause()
         }
         nowPlaying.pauseHandler = { [weak self] in
-            guard let self, self.coordinator.isPlaying else { return }
+            guard let self else { return }
+            if self.collectionTransfer.isApplying { self.collectionImportMayResume = false; return }
+            guard self.coordinator.isPlaying else { return }
             self.togglePlayPause()
         }
         nowPlaying.toggleHandler = { [weak self] in self?.togglePlayPause() }
@@ -302,7 +317,7 @@ extension AppModel {
     /// Der Audio-Dienst des Systems ist neu gestartet: Engine und Emulator sind
     /// weg. Denselben Titel an derselben Stelle neu aufbauen, damit der Nutzer
     /// hoechstens eine Luecke hoert statt dauerhafter Stille.
-    private func rebuildAfterMediaServicesReset() {
+    func rebuildAfterMediaServicesReset() {
         guard let id = currentTrackID else { return }
         let subtune = coordinator.currentSubtune
         let position = coordinator.elapsedSeconds
@@ -314,7 +329,7 @@ extension AppModel {
         // aussehen.
         observeHistory(force: true, playing: false)
         coordinator.rebuildAudioEngine()
-        guard loadTrack(id: id, autoplay: false) else { return }
+        guard loadTrack(id: id, autoplay: false, updateListeningQueue: false) else { return }
         if subtune > 0 { coordinator.setSubtune(sub: subtune) }
         coordinator.seek(seconds: position)
         // `loadTrack` hat die Laenge fuer Subtune 0 aufgeloest; nach dem

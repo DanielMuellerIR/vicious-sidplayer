@@ -11,6 +11,7 @@ public final class ListeningLibraryController: ObservableObject {
     @Published public private(set) var isSaving = false
     @Published public private(set) var storageError: String?
     @Published public private(set) var isReadOnly = false
+    @Published public private(set) var isPersistenceSuspended = false
     @Published public private(set) var activeLibraryID = "opened-files"
     @Published public private(set) var availableTrackIDs: Set<String> = []
 
@@ -19,14 +20,18 @@ public final class ListeningLibraryController: ObservableObject {
     private var pendingSave: DispatchWorkItem?
     private var revision = 0
     private var queueChangedBeforeLoad = false
+    private var loadTask: Task<Void, Never>?
+    private let writeGeneration = PersonalPersistenceGeneration()
+    private let startup: PersonalCollectionStartup?
 
     public var queue: ListeningQueue? { document.queue }
     public var lists: [SavedListeningList] { document.lists }
     public var activeLists: [SavedListeningList] { lists.filter { $0.libraryID == activeLibraryID } }
 
-    public init(fileURL: URL? = ListeningLibraryStore.defaultURL()) {
+    public init(fileURL: URL? = ListeningLibraryStore.defaultURL(), startup: PersonalCollectionStartup? = nil) {
         self.store = fileURL.map { ListeningLibraryStore(fileURL: $0) }
-        Task { await load() }
+        self.startup = startup
+        loadTask = Task { await load() }
     }
 
     private func load() async {
@@ -36,8 +41,9 @@ public final class ListeningLibraryController: ObservableObject {
             isLoaded = true
             return
         }
-        let result = await Task.detached(priority: .userInitiated) {
-            Result { try store.load() }
+        let result: Result<ListeningLibraryDocument, Error> = await Task.detached(priority: .userInitiated) {
+            do { try await self.startup?.ready(); return Result.success(try store.load()) }
+            catch { return Result<ListeningLibraryDocument, Error>.failure(error) }
         }.value
         switch result {
         case .success(var document):
@@ -50,8 +56,10 @@ public final class ListeningLibraryController: ObservableObject {
         isLoaded = true
         if queueChangedBeforeLoad { saveSoon() }
     }
+    public func ready() async { await loadTask?.value }
 
     public func activateLibrary(_ id: String, tracks: [ListeningEntry], removeMissing: Bool = false) {
+        guard !isPersistenceSuspended else { return }
         activeLibraryID = id
         let available = Set(tracks.map(\.trackID))
         if available != availableTrackIDs { availableTrackIDs = available }
@@ -68,6 +76,7 @@ public final class ListeningLibraryController: ObservableObject {
     }
 
     public func setQueue(_ queue: ListeningQueue?) {
+        guard !isPersistenceSuspended else { return }
         if !isLoaded { queueChangedBeforeLoad = true }
         guard queue != document.queue else { return }
         document.queue = queue
@@ -107,7 +116,7 @@ public final class ListeningLibraryController: ObservableObject {
     @discardableResult
     public func createList(name: String, entries: [ListeningEntry]) -> UUID? {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isLoaded, !isReadOnly, !name.isEmpty else { return nil }
+        guard isLoaded, !isReadOnly, !isPersistenceSuspended, !name.isEmpty else { return nil }
         let list = SavedListeningList(libraryID: activeLibraryID, name: name, entries: entries)
         document.lists.append(list)
         saveSoon()
@@ -116,20 +125,20 @@ public final class ListeningLibraryController: ObservableObject {
 
     public func renameList(_ id: UUID, to name: String) {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isLoaded, !isReadOnly, !name.isEmpty,
+        guard isLoaded, !isReadOnly, !isPersistenceSuspended, !name.isEmpty,
               let index = document.lists.firstIndex(where: { $0.id == id && $0.kind == .regular }) else { return }
         document.lists[index].name = name
         saveSoon()
     }
 
     public func deleteList(_ id: UUID) {
-        guard isLoaded, !isReadOnly else { return }
+        guard isLoaded, !isReadOnly, !isPersistenceSuspended else { return }
         document.lists.removeAll { $0.id == id }
         saveSoon()
     }
 
     public func append(_ entry: ListeningEntry, to listID: UUID) {
-        guard isLoaded, !isReadOnly, let index = document.lists.firstIndex(where: { $0.id == listID && $0.libraryID == activeLibraryID }) else { return }
+        guard isLoaded, !isReadOnly, !isPersistenceSuspended, let index = document.lists.firstIndex(where: { $0.id == listID && $0.libraryID == activeLibraryID }) else { return }
         guard document.lists[index].kind != .subtuneFavorites || entry.subtune != nil else { return }
         if document.lists[index].kind == .subtuneFavorites,
            document.lists[index].entries.contains(where: { $0.trackID == entry.trackID && $0.subtune == entry.subtune }) { return }
@@ -138,7 +147,7 @@ public final class ListeningLibraryController: ObservableObject {
     }
 
     public func moveListEntry(_ id: UUID, in listID: UUID, by offset: Int) {
-        guard isLoaded, !isReadOnly, let index = document.lists.firstIndex(where: { $0.id == listID }),
+        guard isLoaded, !isReadOnly, !isPersistenceSuspended, let index = document.lists.firstIndex(where: { $0.id == listID }),
               let position = document.lists[index].entries.firstIndex(where: { $0.id == id }) else { return }
         let target = max(0, min(document.lists[index].entries.count - 1, position + offset))
         guard target != position else { return }
@@ -148,19 +157,19 @@ public final class ListeningLibraryController: ObservableObject {
     }
 
     public func moveListEntries(in listID: UUID, fromOffsets offsets: IndexSet, toOffset destination: Int) {
-        guard isLoaded, !isReadOnly, let index = document.lists.firstIndex(where: { $0.id == listID }) else { return }
+        guard isLoaded, !isReadOnly, !isPersistenceSuspended, let index = document.lists.firstIndex(where: { $0.id == listID }) else { return }
         moveListeningEntries(&document.lists[index].entries, fromOffsets: offsets, toOffset: destination)
         saveSoon()
     }
 
     public func removeListEntry(_ id: UUID, from listID: UUID) {
-        guard isLoaded, !isReadOnly, let index = document.lists.firstIndex(where: { $0.id == listID }) else { return }
+        guard isLoaded, !isReadOnly, !isPersistenceSuspended, let index = document.lists.firstIndex(where: { $0.id == listID }) else { return }
         document.lists[index].entries.removeAll { $0.id == id }
         saveSoon()
     }
 
     public func setSubtune(_ subtune: Int?, entryID: UUID, listID: UUID) {
-        guard isLoaded, !isReadOnly, subtune.map({ (0..<256).contains($0) }) ?? true,
+        guard isLoaded, !isReadOnly, !isPersistenceSuspended, subtune.map({ (0..<256).contains($0) }) ?? true,
               let list = document.lists.firstIndex(where: { $0.id == listID && $0.kind == .regular }),
               let entry = document.lists[list].entries.firstIndex(where: { $0.id == entryID }) else { return }
         document.lists[list].entries[entry].subtune = subtune
@@ -172,7 +181,7 @@ public final class ListeningLibraryController: ObservableObject {
     }
 
     public func toggleSubtuneFavorite(trackID: String, subtune: Int) {
-        guard isLoaded, !isReadOnly else { return }
+        guard isLoaded, !isReadOnly, !isPersistenceSuspended else { return }
         if let index = document.lists.firstIndex(where: { $0.libraryID == activeLibraryID && $0.kind == .subtuneFavorites }) {
             if let entry = document.lists[index].entries.firstIndex(where: { $0.trackID == trackID && $0.subtune == subtune }) {
                 document.lists[index].entries.remove(at: entry)
@@ -189,12 +198,14 @@ public final class ListeningLibraryController: ObservableObject {
     public func retrySave() { saveSoon() }
 
     private func saveSoon() {
-        guard isLoaded, !isReadOnly, let store else { return }
+        guard isLoaded, !isReadOnly, !isPersistenceSuspended, let store else { return }
         revision += 1
         let revision = revision, snapshot = document
+        let generation = writeGeneration, ticket = generation.advance()
         isSaving = true
         pendingSave?.cancel()
         let write: @Sendable () -> Void = { [weak self] in
+            guard generation.matches(ticket) else { return }
             let result = Result { try store.save(snapshot) }
             Task { @MainActor in
                 guard let self, self.revision == revision else { return }
@@ -215,9 +226,14 @@ public final class ListeningLibraryController: ObservableObject {
     /// Beim normalen Beenden darf der letzte gebuendelte Schreibauftrag nicht
     /// verloren gehen. Nur hier wartet die Oberflaeche auf ihren eigenen Writer.
     public func flush() {
+        guard !isPersistenceSuspended else { return }
+        flushPending()
+    }
+    private func flushPending() {
         guard isLoaded, !isReadOnly, let store else { return }
         defer { isSaving = false }
         pendingSave?.cancel()
+        _ = writeGeneration.advance()
         revision += 1
         let snapshot = document
         do {
@@ -230,5 +246,30 @@ public final class ListeningLibraryController: ObservableObject {
             storageError = String(format: NSLocalizedString("Hörfolgen konnten nicht gesichert werden: %@", comment: ""), error.localizedDescription)
         }
     }
+
+    public func suspendForImport() async throws {
+        await ready()
+        guard !isReadOnly, !isPersistenceSuspended else { throw PersonalDataFileError.readOnly }
+        isPersistenceSuspended = true
+        flushPending()
+        guard storageError == nil, !isReadOnly else {
+            isPersistenceSuspended = false
+            throw PersonalDataFileError.readOnly
+        }
+    }
+    public func verifyImportedDocument(_ expected: ListeningLibraryDocument) async throws {
+        guard isPersistenceSuspended, let store else { throw PersonalDataFileError.readOnly }
+        let loaded = try await Task.detached(priority: .utility) { try store.load() }.value
+        guard loaded == expected else { throw PersonalDataFileError.externalChange }
+    }
+    public func importSnapshotBytes() async throws -> Data? {
+        guard isPersistenceSuspended, let store else { throw PersonalDataFileError.readOnly }
+        return try await Task.detached(priority: .utility) { try store.snapshotBytes() }.value
+    }
+    public func acceptImportedDocument(_ value: ListeningLibraryDocument) {
+        guard isPersistenceSuspended else { return }
+        document = value; revision += 1; storageError = nil; isSaving = false
+    }
+    public func resumeAfterImport() { isPersistenceSuspended = false }
 }
 #endif

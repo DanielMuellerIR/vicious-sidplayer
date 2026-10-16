@@ -1,3 +1,9 @@
+Vicious SID Player 1.9.35 adds collection transfer to macOS and iPhone.
+
+- Export selected favorites, ordered listening lists, favorite subtunes, bookmarks, notes and custom end times as local JSON. History is optional and disabled by default.
+- Preview file identity, concrete conflicts and skipped entries before merging. Existing values are kept unless you choose the imported values. The active queue, playback position and timer are retained.
+- Interrupted imports recover before personal data loads; changed, damaged or newer files remain protected. HTML5 transfer follows in a separate step. See [validation](docs/validation-1.9.35.md).
+
 Vicious SID Player 1.9.34 prepares the portable collection format and conflict-aware merge in the shared core.
 
 - Relative paths and MD5 content fingerprints distinguish moved, missing, changed and ambiguous files. Repeated import preserves list identities and does not add listening time twice.

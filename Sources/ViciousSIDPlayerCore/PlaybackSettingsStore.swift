@@ -20,4 +20,5 @@ public final class PlaybackSettingsStore: @unchecked Sendable {
     public func save(_ document: PlaybackSettingsDocument) throws {
         try file.write(JSONEncoder().encode(document.validated()))
     }
+    public func snapshotBytes() throws -> Data? { try file.snapshot() }
 }

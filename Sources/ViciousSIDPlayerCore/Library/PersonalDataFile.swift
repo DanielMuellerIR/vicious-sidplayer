@@ -53,6 +53,16 @@ final class PersonalDataFile: @unchecked Sendable {
         previousData = data
     }
 
+    func snapshot() throws -> Data? {
+        lock.lock(); defer { lock.unlock() }
+        guard loaded, writable else { throw PersonalDataFileError.readOnly }
+        guard try readData() == previousData else {
+            writable = false
+            throw PersonalDataFileError.externalChange
+        }
+        return previousData
+    }
+
     private func readData() throws -> Data? {
         let attributes: [FileAttributeKey: Any]
         do { attributes = try FileManager.default.attributesOfItem(atPath: url.path) }

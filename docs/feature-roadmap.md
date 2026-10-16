@@ -12,7 +12,8 @@ Dieser Plan setzt die [Erweiterungsanalyse](feature-opportunities.md) um. Jede S
 | 03 | Metadatensuche und gespeicherte Filter | 6–10 h | Abgeschlossen in v1.9.30 |
 | 04 | Repeat, Fadeout, Endzeiten und Einschlaftimer | 6–10 h | Abgeschlossen in v1.9.31; kontrollierte Mac-Nachprobe bestanden |
 | 05 | Verlauf, Lesezeichen und Notizen | 6–10 h | Abgeschlossen in v1.9.32; native und HTML5-Abnahme bestanden |
-| 06 | Austausch persönlicher Sammlungsdaten | 6–10 h | Core-Format, Zusammenführung und Speichergrundlage geprüft; App-Einbindung in Arbeit |
+| 06 | Nativer Austausch persönlicher Sammlungsdaten | 6–10 h | Auf Mac und iPhone in v1.9.35 abgenommen |
+| 06b | Sammlungsaustausch in HTML5 | 4–6 h | Detailentwurf vorbereitet; native MD5- und bisherige Browser-FNV-Identitäten getrennt behandeln |
 | 07 | Solo und getrennte Multi-SID-Steuerung | 4–6 h | Geplant |
 | 08 | Piano-, Registeransicht und A/B-Schleifen | 8–12 h | Geplant |
 | 09 | Batch-WAV-Export und Mixwahl | 6–10 h | Geplant |
@@ -24,7 +25,7 @@ Dieser Plan setzt die [Erweiterungsanalyse](feature-opportunities.md) um. Jede S
 | 15 | Gezieltes 6581-Filter-Tuning | 6–10 h | Geplant |
 | 16 | Reale iPhone-Geräteabnahme und Abschluss | 4–8 h | Geplant |
 
-17 Pakete, insgesamt 96–164 Stunden geschätzter Aufwand. Der Verlauf erhält einen weiteren Tab an derselben Stelle wie Bibliothek/Playlist. Die App bleibt ein Player mit einem Koordinator. Gemeinsame Wiedergabe- und Sammlungsregeln liegen im Core; HTML5 bleibt als lokale Einzeldatei ohne Server nutzbar.
+18 Pakete, insgesamt 100–170 Stunden geschätzter Aufwand. Der Verlauf erhält einen weiteren Tab an derselben Stelle wie Bibliothek/Playlist. Die App bleibt ein Player mit einem Koordinator. Gemeinsame Wiedergabe- und Sammlungsregeln liegen im Core; HTML5 bleibt als lokale Einzeldatei ohne Server nutzbar.
 
 Wiedergabekorrektheit, reaktionsfähige große Sammlungen, übertragbare persönliche Daten und Zugänglichkeit sind durchgehende Abnahmekriterien. Geräteabhängiges iOS-Verhalten braucht echte Hardware.
 
@@ -36,6 +37,7 @@ Wiedergabekorrektheit, reaktionsfähige große Sammlungen, übertragbare persön
 - **04:** Repeat für Subtune/Datei/Folge, Fadeout, persönliche Endzeiten und Einschlaftimer. Eine gemeinsame Dauerregel für Scrubber, Auto-Next, Export und Now Playing.
 - **05:** Verlauf im gemeinsamen Seitenleistenbereich, Positionslesezeichen und persönliche Notizen. Leere/gefüllte Zustände, fehlende Dateien, Neustart und bewusstes Leeren prüfen.
 - **06:** Versioniertes lokales Austauschformat mit relativen Pfaden, Wiederfinden per Fingerabdruck, Konfliktvorschau und Zusammenführen. Musikdateien bleiben unverändert.
+- **06b:** Dasselbe lokale Austauschformat in HTML5 anbinden; bisherige FNV-Referenzen erhalten, MD5 nur aus tatsächlich freigegebenen Musikbytes belegen. Konflikte, fehlende Dateien, optionalen Verlauf und tatsächlichen nativen Rundlauf unter `file://` prüfen.
 - **07:** Solo und getrennte Chip-/Stimmengruppen. Muten entfernt nur den Mixbeitrag und erhält den Emulationszustand.
 - **08:** Piano-/Frequenz- und Registeransicht sowie A/B-Schleifen. Aussagegrenzen bei Noise/Samples anzeigen und Rekonstruktionskosten prüfen.
 - **09:** Mehrere Titel/Subtunes als WAV mit Dauer, eindeutigen Namen, Fortschritt, Abbruch und bewusster Mixwahl exportieren. Filterverhalten getrennter Stimmen festlegen.

@@ -76,6 +76,9 @@ public struct PersonalCollectionConflict: Equatable, Identifiable, Sendable {
     public let id: String
     public let label: String
     public let canUseImported: Bool
+    public let existingValue: String
+    public let importedValue: String
+    public let explanation: String?
 }
 public struct PersonalCollectionUnresolved: Equatable, Hashable, Sendable {
     public let reference: PersonalCollectionReference
@@ -105,16 +108,17 @@ public enum PersonalCollectionMerge {
         var knownUnresolved: Set<PersonalCollectionUnresolved> = []
         var listIndices = Dictionary(uniqueKeysWithValues: result.listening.lists.enumerated().map { ($0.element.id, $0.offset) })
         var additions = 0, duplicates = 0, updates = 0, skippedPathEntries = 0
-        func useImport(_ id: String, _ label: String, allowed: Bool = true) -> Bool {
-            conflicts.append(.init(id: id, label: label, canUseImported: allowed))
+        func useImport(_ id: String, _ label: String, existing: String, imported: String, allowed: Bool = true) -> Bool {
+            conflicts.append(.init(id: id, label: label, canUseImported: allowed, existingValue: existing, importedValue: imported,
+                explanation: allowed ? nil : NSLocalizedString("Eine andere Sammlung oder Listenart verwendet dieselbe Kennung. Der vorhandene Eintrag bleibt erhalten.", comment: "")))
             return allowed && choices[id] == .useImported
         }
         func resolvedPath(_ ref: PersonalCollectionReference, required: Bool) throws -> String? {
             let resolution = try resolver.resolve(ref)
             if let path = resolution.confirmedPath { return path }
-            if case .unverified(let path) = resolution, acceptedPaths.contains(ref) { return path }
             let issue = PersonalCollectionUnresolved(reference: ref, resolution: resolution)
             if knownUnresolved.insert(issue).inserted { unresolved.append(issue) }
+            if case .unverified(let path) = resolution, acceptedPaths.contains(ref) { return path }
             if required { skippedPathEntries += 1; return nil }
             return ref.path
         }
@@ -149,6 +153,8 @@ public enum PersonalCollectionMerge {
             if let index = listIndices[list.id] {
                 if result.listening.lists[index] == mapped { duplicates += 1 }
                 else if useImport("list:\(list.id)", list.name,
+                                  existing: "\(result.listening.lists[index].name) · \(result.listening.lists[index].entries.count) Einträge",
+                                  imported: "\(mapped.name) · \(mapped.entries.count) Einträge",
                                   allowed: result.listening.lists[index].libraryID == libraryID && result.listening.lists[index].kind == list.kind) {
                     result.listening.lists[index] = mapped
                     updates += 1
@@ -170,19 +176,23 @@ public enum PersonalCollectionMerge {
             if let index = bookmarkIndices[mapped.id] {
                 let old = bookmarks[index]
                 if old.reference.contentKey == mapped.reference.contentKey && old.name == mapped.name && old.position == mapped.position { duplicates += 1 }
-                else if useImport("bookmark:\(mapped.id)", mapped.name) { bookmarks[index] = mapped; updates += 1 }
+                else if useImport("bookmark:\(mapped.id)", mapped.name,
+                    existing: "\(old.name) · \(PlaytimeFormat.string(old.position)) · \(old.reference.trackID)",
+                    imported: "\(mapped.name) · \(PlaytimeFormat.string(mapped.position)) · \(mapped.reference.trackID)") { bookmarks[index] = mapped; updates += 1 }
             } else { bookmarkIndices[mapped.id] = bookmarks.count; bookmarks.append(mapped); additions += 1 }
         }
         for note in document.notes {
             let ref = try personal(note.reference)
             if let index = noteIndices[ref.contentKey] {
                 if notes[index].text == note.text { duplicates += 1 }
-                else if useImport("note:\(ref.contentKey)", "\(ref.trackID) · \(ref.subtune.map { "Subtune \($0 + 1)" } ?? "ganze Datei")") {
+                else if useImport("note:\(ref.contentKey)", "\(ref.trackID) · \(ref.subtune.map { "Subtune \($0 + 1)" } ?? "ganze Datei")",
+                    existing: notes[index].text, imported: note.text) {
                     notes[index] = .init(id: notes[index].id, reference: ref, text: note.text, updatedAt: note.updatedAt)
                     updates += 1
                 }
             } else if noteIDs.contains(note.id) {
-                if useImport("note-id:\(note.id)", ref.trackID) {
+                if useImport("note-id:\(note.id)", ref.trackID,
+                    existing: NSLocalizedString("Die Kennung gehört bereits zu einer anderen Notiz; diese bleibt erhalten.", comment: ""), imported: note.text) {
                     let added = ListeningNote(id: reassignedID(note.id, key: ref.contentKey, occupied: noteIDs),
                                               reference: ref, text: note.text, updatedAt: note.updatedAt)
                     noteIndices[ref.contentKey] = notes.count; noteIDs.insert(added.id)
@@ -196,7 +206,8 @@ public enum PersonalCollectionMerge {
         for end in document.endTimes {
             if let old = result.playback.endTimes[end.key] {
                 if old == end.seconds { duplicates += 1 }
-                else if useImport("end:\(end.key)", "\(end.md5) · Subtune \(end.subtune + 1)") { result.playback.endTimes[end.key] = end.seconds; updates += 1 }
+                else if useImport("end:\(end.key)", "\(resolver.label(forMD5: end.md5)) · Subtune \(end.subtune + 1)",
+                    existing: PlaybackDurationInput.text(old), imported: PlaybackDurationInput.text(end.seconds)) { result.playback.endTimes[end.key] = end.seconds; updates += 1 }
             } else { result.playback.endTimes[end.key] = end.seconds; additions += 1 }
         }
         if let history = document.history {
@@ -210,7 +221,9 @@ public enum PersonalCollectionMerge {
                     let sameEpisode = old.reference.contentKey == mapped.reference.contentKey && milliseconds(old.startedAt) == milliseconds(mapped.startedAt)
                     if sameEpisode && old.heardSeconds >= mapped.heardSeconds && milliseconds(old.lastHeardAt) >= milliseconds(mapped.lastHeardAt) { duplicates += 1 }
                     else if sameEpisode && mapped.heardSeconds >= old.heardSeconds && milliseconds(mapped.lastHeardAt) >= milliseconds(old.lastHeardAt) { events[index] = mapped; updates += 1 }
-                    else if useImport("event:\(mapped.id)", mapped.title) { events[index] = mapped; updates += 1 }
+                    else if useImport("event:\(mapped.id)", mapped.title,
+                        existing: "\(old.reference.trackID) · \(PlaytimeFormat.string(old.heardSeconds)) gehört",
+                        imported: "\(mapped.reference.trackID) · \(PlaytimeFormat.string(mapped.heardSeconds)) gehört") { events[index] = mapped; updates += 1 }
                 } else { eventIndices[mapped.id] = events.count; events.append(mapped); additions += 1 }
             }
             let cutoff = now.addingTimeInterval(-180 * 86400)

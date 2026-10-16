@@ -3,6 +3,7 @@ import ViciousSIDPlayerCore
 import UniformTypeIdentifiers
 import os
 import MediaPlayer
+import Combine
 #if canImport(AppKit)
 import AppKit
 #endif
@@ -30,6 +31,23 @@ public struct MainView: View {
     @StateObject private var savedSearches = SavedLibrarySearchController()
     @StateObject private var playbackOptions = PlaybackOptionsController()
     @StateObject private var history = ListeningHistoryController()
+    @State private var collectionStartup: PersonalCollectionStartup
+    @State private var didFinishCollectionStartup = false
+    @State private var collectionTransfer: PersonalCollectionController?
+    @State private var collectionSubscription: AnyCancellable?
+    @State private var showCollectionTransfer = false
+    @State private var isImportApplying = false
+    @State private var importMayResume = false
+
+    public init() {
+        let support = MusicLibraryLocation.support()
+        let favorites = PersonalCollectionFavoritesStore(defaults: .standard, key: PlaylistFavorites.userDefaultsKey)
+        let startup = PersonalCollectionStartup(supportURL: support, favorites: favorites)
+        _collectionStartup = State(initialValue: startup)
+        _listening = StateObject(wrappedValue: ListeningLibraryController(fileURL: support?.appendingPathComponent(ListeningLibraryStore.fileName), startup: startup))
+        _history = StateObject(wrappedValue: ListeningHistoryController(fileURL: support?.appendingPathComponent(ListeningHistoryStore.fileName), startup: startup))
+        _playbackOptions = StateObject(wrappedValue: PlaybackOptionsController(fileURL: support?.appendingPathComponent(PlaybackSettingsStore.fileName), startup: startup))
+    }
     @State private var playbackOptionsPresentation: PlaybackOptionsPresentation?
     @State private var sidebarPage = LibrarySidebarPage.library
     @State private var selectedListeningListID: UUID?
@@ -287,8 +305,6 @@ public struct MainView: View {
         return Array(Set(types)) + [.folder]
     }()
 
-    public init() {}
-
     public var body: some View {
         let isLight = theme == .light
         let bgSecondary = isLight ? Color.macLightSidebar : Color.macDarkSidebar
@@ -338,6 +354,15 @@ public struct MainView: View {
                     .accessibilityIdentifier("library-sidebar-tabs")
                     .padding(.horizontal, 10)
                     .padding(.top, 10)
+
+                    Button(action: openPersonalCollection) {
+                        Label("Sammlungsdaten …", systemImage: "arrow.left.arrow.right")
+                    }
+                    .buttonStyle(.borderless).font(.caption)
+                    .accessibilityLabel("Persönliche Sammlungsdaten")
+                    .accessibilityIdentifier("collection-open")
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .disabled(library == nil)
 
                     if sidebarPage == .library {
                         librarySidebarContent
@@ -744,6 +769,16 @@ public struct MainView: View {
                 self.errorMessage = "Importfehler: \(error.localizedDescription)"
             }
         }
+        .disabled(isImportApplying || !didFinishCollectionStartup)
+        .sheet(isPresented: $showCollectionTransfer) {
+            if let collectionTransfer { PersonalCollectionView(controller: collectionTransfer) }
+        }
+        .onChange(of: showCollectionTransfer) { shown in
+            if !shown, collectionTransfer?.requiresRestart != true { collectionTransfer = nil; collectionSubscription = nil }
+        }
+        .onChange(of: isImportApplying) { applying in
+            if !applying { drainPendingOpenURLs(); drainPendingRemoteCommands() }
+        }
         .sheet(isPresented: $showListeningNameSheet) {
             ListeningNameSheet(name: $listeningName, renaming: renamingListeningListID != nil,
                 onSave: saveListeningListName, onCancel: { showListeningNameSheet = false })
@@ -760,11 +795,9 @@ public struct MainView: View {
         }
         .onChange(of: listening.isLoaded) { ready in
             guard ready else { return }
+            favorites = PlaylistFavorites(storedValues: UserDefaults.standard.stringArray(forKey: PlaylistFavorites.userDefaultsKey) ?? [], root: library?.root)
             syncListeningLibrary()
-            if let restore = pendingInitialRestore, !suppressInitialPlayback {
-                pendingInitialRestore = nil
-                startInitialPlayback(restoreSession: restore)
-            }
+            resumePendingInitialPlayback()
         }
         .modifier(PlaybackOptionsObserver(controller: playbackOptions, coordinator: coordinator,
             onConfigurationChange: { resolveComputedLengthIfNeeded(); applyPlaybackOptions(); updateNowPlayingInfo() },
@@ -772,6 +805,7 @@ public struct MainView: View {
         .onChange(of: autoNext) { _ in applyPlaybackOptions() }
         .onChange(of: shuffle) { listening.setShuffle($0) }
         .onDrop(of: ["public.file-url"], isTargeted: $dragOver) { providers in
+            guard !isImportApplying, didFinishCollectionStartup else { return false }
             loadLog.info("onDrop: \(providers.count, privacy: .public) provider(s)")
             let container = DropURLsContainer()
             let dispatchGroup = DispatchGroup()
@@ -803,30 +837,36 @@ public struct MainView: View {
             // doppelte Observer und ein erneutes (storendes) Laden des audio/-Ordners.
             if !didInitialize {
                 didInitialize = true
-                AppDelegate.prepareTermination = {
-                    observeHistory(force: true, playing: false)
-                    listening.flush(); savedSearches.flush(); playbackOptions.flush()
-                    let saved = await history.flush()
-                    return saved || !history.hasUnsavedChanges
+                Task { @MainActor in
+                    do { try await collectionStartup.ready() }
+                    catch { errorMessage = error.localizedDescription; return }
+                    didFinishCollectionStartup = true
+                    AppDelegate.prepareTermination = {
+                        observeHistory(force: true, playing: false)
+                        listening.flush(); savedSearches.flush(); playbackOptions.flush()
+                        let saved = await history.flush()
+                        return saved || !history.hasUnsavedChanges
+                    }
+                    // Favoriten aus den Einstellungen. Die Umrechnung alter absoluter
+                    // Pfade auf relative Titel-IDs passiert erst, wenn die
+                    // Bibliothekswurzel feststeht (`migrateStoredIDs`).
+                    favorites = PlaylistFavorites(
+                        storedValues: UserDefaults.standard.stringArray(forKey: PlaylistFavorites.userDefaultsKey) ?? [],
+                        root: nil
+                    )
+                    coordinator.setVolume(volume)
+                    setupMenuNotificationHandlers()
+                    setupMediaRemoteCommands()
+                    // Songlengths-DB (HVSC) im Hintergrund laden — VOR der Playlist,
+                    // damit der erste Track seine Laenge moeglichst schon findet.
+                    loadSonglengthDB()
+                    // Die Titel-Anmerkungen der HVSC ebenfalls im Hintergrund.
+                    loadSTIL()
+                    // Start-Playlist aus dem Autoplay-Ordner laden (siehe Einstellungen)
+                    // und die letzte Sitzung fortsetzen.
+                    loadLocalAudioFolder(restoreSession: true)
+                    drainPendingOpenURLs(); drainPendingRemoteCommands(); applyAppearance()
                 }
-                // Favoriten aus den Einstellungen. Die Umrechnung alter absoluter
-                // Pfade auf relative Titel-IDs passiert erst, wenn die
-                // Bibliothekswurzel feststeht (`migrateStoredIDs`).
-                favorites = PlaylistFavorites(
-                    storedValues: UserDefaults.standard.stringArray(forKey: PlaylistFavorites.userDefaultsKey) ?? [],
-                    root: nil
-                )
-                coordinator.setVolume(volume)
-                setupMenuNotificationHandlers()
-                setupMediaRemoteCommands()
-                // Songlengths-DB (HVSC) im Hintergrund laden — VOR der Playlist,
-                // damit der erste Track seine Laenge moeglichst schon findet.
-                loadSonglengthDB()
-                // Die Titel-Anmerkungen der HVSC ebenfalls im Hintergrund.
-                loadSTIL()
-                // Start-Playlist aus dem Autoplay-Ordner laden (siehe Einstellungen)
-                // und die letzte Sitzung fortsetzen.
-                loadLocalAudioFolder(restoreSession: true)
             }
             // Dateien, die per Doppelklick/"Oeffnen mit" die App gestartet haben,
             // liegen schon im Puffer des AppDelegate -> jetzt nachziehen (Kaltstart;
@@ -847,6 +887,7 @@ public struct MainView: View {
         // Autoplay-Ordner in den Einstellungen geaendert -> Playlist sofort aus
         // dem neuen Ordner aufbauen (statt erst beim naechsten App-Start).
         .onChange(of: autoplayFolderPath) { _ in
+            guard didFinishCollectionStartup, !isImportApplying else { return }
             clearPlaylist()
             loadLocalAudioFolder()
             // Auto-Fund der Songlengths-DB haengt am Autoplay-Ordner -> neu suchen.
@@ -1211,6 +1252,7 @@ public struct MainView: View {
     // Play/Pause umschalten: pause() haelt an und behaelt die Position, play() setzt
     // dort fort (bzw. baut beim ersten Mal die Wiedergabe auf).
     private func togglePlayPause() {
+        guard !isImportApplying else { importMayResume = false; return }
         if coordinator.isPlaying { pausePlayback() } else { startPlayback() }
     }
 
@@ -1223,6 +1265,7 @@ public struct MainView: View {
         pendingInitialRestore = nil; startInitialPlayback(restoreSession: restore)
     }
     private func setPlaybackSubtune(_ sub: Int, updateQueue: Bool) {
+        guard !isImportApplying else { return }
         observeHistory(force: true, playing: false)
         coordinator.setSubtune(sub: sub)
         if updateQueue, let track = playlist.track(at: currentTrackIdx), var queue = listening.queue {
@@ -1245,6 +1288,7 @@ public struct MainView: View {
     }
 
     private func startPlayback() {
+        guard !isImportApplying, didFinishCollectionStartup else { return }
         guard playlist.track(at: currentTrackIdx) != nil else { return }
         suppressInitialPlayback = false
         playbackOptions.acknowledgeManualPlayback()
@@ -1255,6 +1299,7 @@ public struct MainView: View {
     }
 
     private func pausePlayback() {
+        if isImportApplying { importMayResume = false; return }
         suppressInitialPlayback = true
         pendingTrackCommandID = nil
         observeHistory(force: true, playing: false)
@@ -1262,6 +1307,7 @@ public struct MainView: View {
     }
 
     private func stopPlayback() {
+        if isImportApplying { importMayResume = false }
         suppressInitialPlayback = true
         pendingTrackCommandID = nil
         observeHistory(force: true, playing: false)
@@ -1276,6 +1322,7 @@ public struct MainView: View {
     }
 
     private func seek(to seconds: Double) {
+        guard !isImportApplying else { return }
         observeHistory(force: true, playing: false)
         coordinator.seek(seconds: seconds)
         playbackOptions.refreshSleepTimer(); applyPlaybackOptions()
@@ -1371,6 +1418,7 @@ public struct MainView: View {
     }
 
     private func startListeningQueue(_ proposed: ListeningQueue) {
+        guard !isImportApplying else { return }
         playbackOptions.acknowledgeManualPlayback()
         guard !proposed.items.isEmpty else { errorMessage = "Diese Auswahl enthält keine Titel."; return }
         var queue = proposed
@@ -1390,6 +1438,7 @@ public struct MainView: View {
 
     @discardableResult
     private func loadListeningEntry(_ entry: ListeningEntry, autoplay: Bool) -> Bool {
+        guard !isImportApplying else { return false }
         var index = playlist.index(forID: entry.trackID)
         if index == nil, let url = entry.url(relativeTo: library?.root, allowExternal: true),
            FileManager.default.fileExists(atPath: url.path) {
@@ -1402,6 +1451,7 @@ public struct MainView: View {
     }
 
     private func advanceListeningQueue(forward: Bool, autoplay: Bool, repeatSequence: Bool = false) {
+        guard !isImportApplying else { return }
         guard var queue = listening.queue else { return }
         var skipped = 0
         for _ in 0..<max(1, queue.items.count) {
@@ -1424,12 +1474,14 @@ public struct MainView: View {
     }
 
     private func selectListeningQueueEntry(_ id: UUID) {
+        guard !isImportApplying else { return }
         playbackOptions.acknowledgeManualPlayback()
         guard var queue = listening.queue, let entry = queue.items.first(where: { $0.id == id }) else { return }
         if loadListeningEntry(entry, autoplay: true) { queue.select(id); listening.setQueue(queue) }
     }
 
     private func enqueueLibraryTrack(_ index: Int) {
+        guard !isImportApplying else { return }
         guard let track = playlist.track(at: index) else { return }
         ensureListeningQueue()
         if listening.queue == nil {
@@ -1511,6 +1563,7 @@ public struct MainView: View {
     @discardableResult
     private func loadTrack(index: Int, autoplay: Bool, subtune: Int = 0,
                            updateListeningQueue: Bool = true) -> Bool {
+        guard !isImportApplying, didFinishCollectionStartup else { return false }
         guard !isTransitioning else { return false }
         guard let track = playlist.track(at: index) else { return false }
 
@@ -2388,6 +2441,7 @@ public struct MainView: View {
     /// Geprueft sind sie schon (`RemoteCommand.parse` im Core) — hier bleibt nur
     /// das Ausfuehren. Was das Schema kann und was bewusst nicht, steht dort.
     private func drainPendingRemoteCommands() {
+        guard didFinishCollectionStartup, !isImportApplying else { return }
         let commands = AppDelegate.pendingCommands
         AppDelegate.pendingCommands = []
         guard !commands.isEmpty else { return }
@@ -2438,6 +2492,7 @@ public struct MainView: View {
     }
 
     private func drainPendingOpenURLs() {
+        guard didFinishCollectionStartup, !isImportApplying else { return }
         let urls = AppDelegate.pendingURLs
         AppDelegate.pendingURLs = []
         loadLog.info("drainPendingOpenURLs: \(urls.count, privacy: .public) URL(s)")
@@ -2449,6 +2504,39 @@ public struct MainView: View {
             isTransitioning = false
             handleDroppedURLs(urls)
         }
+    }
+
+    private func openPersonalCollection() {
+        guard !isImportApplying else { return }
+        let store = PersonalCollectionFavoritesStore(defaults: .standard, key: PlaylistFavorites.userDefaultsKey)
+        let transfer = PersonalCollectionController(listening: listening, history: history, playback: playbackOptions,
+            favorites: store, supportURL: MusicLibraryLocation.support(), context: {
+                guard let library else { throw PersonalCollectionImportError.unavailable }
+                return .init(libraryID: listening.activeLibraryID, name: library.root.lastPathComponent,
+                    library: library, openedFiles: playlist.externalIndices.map { playlist.tracks[$0] })
+            }, pause: {
+                let playing = coordinator.isPlaying
+                importMayResume = playing
+                observeHistory(force: true, playing: false)
+                if playing { coordinator.pause() }
+                return playing
+            }, resume: {
+                guard importMayResume, coordinator.isPaused else { return }
+                importMayResume = false
+                applyPlaybackOptions(); coordinator.play(); observeHistory(force: true)
+            }, didApply: {
+                favorites = PlaylistFavorites(ids: store.read())
+                if let library {
+                    let entries = library.entries
+                    currentTrackIdx = playlist.setLibrary(entries, root: library.root, keepingTrackAt: currentTrackIdx)
+                    listeningLibraryEntries = playlist.tracks.map { ListeningEntry(trackID: $0.id) }
+                    metadataIndex.refresh(library: library); rebuildFolderTree(from: entries)
+                }
+                resolveComputedLengthIfNeeded(); applyPlaybackOptions(); updateNowPlayingInfo()
+            })
+        collectionTransfer = transfer
+        collectionSubscription = transfer.$isApplying.sink { isImportApplying = $0 }
+        showCollectionTransfer = true
     }
 }
 

@@ -56,6 +56,7 @@ extension AppModel {
     /// - Parameter restoreSession: nur beim allerersten Laden `true`. Danach
     ///   waere ein Wiederherstellen falsch — der Nutzer hoert ja gerade etwas.
     func reloadLibrary(restoreSession: Bool) {
+        guard !collectionTransfer.isApplying else { return }
         guard let library = services.library else {
             errorMessage = "Der Musikordner der App ist nicht erreichbar."
             return
@@ -186,6 +187,7 @@ extension AppModel {
     ///   steht; `false`, wenn er abgelehnt wurde.
     @discardableResult
     private func startImport(_ job: PendingImportJob) -> Bool {
+        guard !collectionTransfer.isApplying else { return false }
         guard let library = services.library else {
             errorMessage = "Der Musikordner der App ist nicht erreichbar."
             return false
@@ -332,6 +334,7 @@ extension AppModel {
     /// bleibt bestehen — ohne ihn funktionierte weder die Finder-Dateifreigabe
     /// noch der naechste Import.
     func resetLibrary(keepFavorites: Bool) {
+        guard !collectionTransfer.isApplying else { return }
         guard let library = services.library else {
             errorMessage = "Der Musikordner der App ist nicht erreichbar."
             return

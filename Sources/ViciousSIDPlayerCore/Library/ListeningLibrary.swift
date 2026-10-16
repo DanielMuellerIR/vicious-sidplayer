@@ -313,6 +313,7 @@ public final class ListeningLibraryStore: @unchecked Sendable {
         try document.validate()
         try file.write(JSONEncoder().encode(document))
     }
+    public func snapshotBytes() throws -> Data? { try file.snapshot() }
 }
 
 func moveListeningEntries(_ entries: inout [ListeningEntry], fromOffsets offsets: IndexSet, toOffset destination: Int) {

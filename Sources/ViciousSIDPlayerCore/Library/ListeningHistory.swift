@@ -197,6 +197,16 @@ public struct ListeningHistoryRecorder: Sendable {
     public init() {}
     public mutating func reset() { episode = nil; previous = nil; lastPlayingUptime = nil; threshold = 10 }
 
+    public mutating func reconcile(afterImport document: ListeningHistoryDocument) {
+        guard let episode, let stored = document.events.first(where: { $0.id == episode.id }) else { return }
+        let sameStart = (episode.startedAt.timeIntervalSince1970 * 1000).rounded()
+            == (stored.startedAt.timeIntervalSince1970 * 1000).rounded()
+        guard stored.reference == episode.reference, sameStart else { reset(); return }
+        self.episode = ListeningHistoryEvent(id: stored.id, reference: stored.reference, title: episode.title,
+            startedAt: stored.startedAt, lastHeardAt: max(stored.lastHeardAt, episode.lastHeardAt),
+            heardSeconds: max(stored.heardSeconds, episode.heardSeconds), lastPosition: episode.lastPosition)
+    }
+
     public mutating func observe(reference: ListeningPersonalReference?, title: String, position: Double,
                                  knownDuration: Double?, isPlaying: Bool, uptime: Double,
                                  now: Date = Date()) -> ListeningHistoryEvent? {
@@ -271,6 +281,11 @@ public actor ListeningHistoryStore {
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try data.write(to: fileURL, options: .atomic)
         previousData = data
+    }
+    public func snapshotBytes() throws -> Data? {
+        guard loaded, writable else { throw ListeningHistoryError.readOnly }
+        guard try readData() == previousData else { writable = false; throw ListeningHistoryError.externalChange }
+        return previousData
     }
 
     private func readData() throws -> Data? {
