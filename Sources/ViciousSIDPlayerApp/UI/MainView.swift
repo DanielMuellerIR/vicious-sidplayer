@@ -25,6 +25,21 @@ final class DropURLsContainer: @unchecked Sendable {
 
 public struct MainView: View {
     @StateObject private var coordinator = ViciousCoordinator()
+    @StateObject private var listening = ListeningLibraryController()
+    @State private var sidebarPage = LibrarySidebarPage.library
+    @State private var selectedListeningListID: UUID?
+    @State private var listeningLibraryEntries: [ListeningEntry] = []
+    @State private var pendingInitialRestore: Bool?
+    @State private var showListeningNameSheet = false
+    @State private var listeningName = ""
+    @State private var creatingListeningEntries: [ListeningEntry] = []
+    @State private var renamingListeningListID: UUID?
+    @State private var showListeningSubtuneSheet = false
+    @State private var editingListeningListID: UUID?
+    @State private var editingListeningEntryID: UUID?
+    @State private var editingListeningTitle = ""
+    @State private var editingListeningSubtune = 1
+    @State private var editingListeningSubtuneCount = 1
     // Erscheinungsbild-Modus aus den Einstellungen (Auto/Hell/Dunkel). Gleicher
     // UserDefaults-Key wie in SettingsView — Aenderungen dort wirken sofort.
     // "auto" (Default) folgt dem Hell/Dunkel-Modus von macOS.
@@ -129,12 +144,16 @@ public struct MainView: View {
     @State private var pendingTrackCommandID: String? = nil
 
     // Playlist-Filter: Live-Suche nach Titel + Ordner sowie "nur Favoriten".
-    // Beide filtern NUR die Anzeige (sichtbare Indizes) — Auswahl, Auto-Next
-    // und Shuffle arbeiten weiter auf der vollen Liste mit globalen Indizes.
+    // Beide filtern nur die Anzeige. Eine Hoerfolge aus diesen Treffern startet
+    // der Nutzer ausdruecklich ueber „Auswahl“; danach bleibt sie unabhaengig.
     @State private var searchText = ""
     @State private var favoritesOnly = false
     // Favoriten als stabile Titel-IDs, persistent in UserDefaults.
     @State private var favorites = PlaylistFavorites()
+
+    private var canNavigateListeningEntries: Bool {
+        (listening.queue?.items.count ?? playlist.count) > 1
+    }
 
     // Der Ausschnitt der Playlist, den das Titelmenue oben zeigt. Die Rechnung
     // steht im Core (`PlaylistMenuWindow`) und ist dort getestet.
@@ -300,120 +319,34 @@ public struct MainView: View {
                     Divider()
                         .background(borderCol)
 
-                    HStack {
-                        Text("PLAYLIST")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(textSecCol)
-                        // Solange die Bibliothek gegen das Dateisystem
-                        // abgeglichen wird, ist die Liste schon benutzbar (sie
-                        // steht aus dem gespeicherten Index) — aber eben noch
-                        // nicht vollstaendig. Das sagt dieser Ring.
-                        if isScanningLibrary {
-                            ProgressView()
-                                .progressViewStyle(.circular)
-                                .controlSize(.small)
-                                .scaleEffect(0.6)
-                                .frame(width: 12, height: 12)
-                                .help("Bibliothek wird abgeglichen …")
-                        }
-                        Spacer()
-                        // Umschalter zwischen flacher Titelliste und
-                        // Ordneransicht. Bei einer HVSC-Sammlung ist die flache
-                        // Liste mit 50.000 Zeilen kaum zu ueberblicken; die
-                        // Ordner sind dort die eigentliche Gliederung
-                        // (Komponist, Spiel, Sammlung).
-                        if !playlist.isEmpty {
-                            Button(action: { showFolderTree.toggle() }) {
-                                Image(systemName: showFolderTree
-                                      ? "list.bullet.indent"
-                                      : "list.bullet")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(showFolderTree ? accentCol : textSecCol)
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .help(showFolderTree ? "Als flache Liste zeigen" : "Nach Ordnern gliedern")
-                        }
-                        // Alles auf- oder zuklappen — nur in der Ordneransicht
-                        // und nur, wenn es ueberhaupt Ordner gibt.
-                        if showFolderTree, !folderTree.subfolders.isEmpty {
-                            Button(action: expandAllFolders) {
-                                Image(systemName: "chevron.down.2")
-                                    .font(.system(size: 9))
-                                    .foregroundColor(textSecCol)
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .help("Alle Ordner aufklappen")
-
-                            Button(action: collapseAllFolders) {
-                                Image(systemName: "chevron.up.2")
-                                    .font(.system(size: 9))
-                                    .foregroundColor(textSecCol)
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .help("Alle Ordner zuklappen")
-                        }
-                        // Filter "nur Favoriten" (Stern) neben dem Papierkorb.
-                        if !playlist.isEmpty {
-                            Button(action: { favoritesOnly.toggle() }) {
-                                Image(systemName: favoritesOnly ? "star.fill" : "star")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(favoritesOnly ? .yellow : textSecCol)
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .help(favoritesOnly ? "Alle Titel zeigen" : "Nur Favoriten zeigen")
-
-                            Button(action: clearPlaylist) {
-                                Image(systemName: "trash")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(textSecCol)
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .help("Playlist leeren")
-                        }
+                    Picker("Sammlungsansicht", selection: $sidebarPage) {
+                        Text("Musik").tag(LibrarySidebarPage.library)
+                        Text("Listen").tag(LibrarySidebarPage.lists)
+                        Text("Folge").tag(LibrarySidebarPage.queue)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .padding(.bottom, 6)
+                    .pickerStyle(.segmented)
+                    .controlSize(.small)
+                    .labelsHidden()
+                    .accessibilityIdentifier("library-sidebar-tabs")
+                    .padding(.horizontal, 10)
+                    .padding(.top, 10)
 
-                    // Live-Suche: filtert die Playlist waehrend des Tippens.
-                    HStack(spacing: 6) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 10))
-                            .foregroundColor(textSecCol)
-                        TextField("Suchen", text: $searchText)
-                            .textFieldStyle(PlainTextFieldStyle())
-                            .font(.system(size: 12))
-                            .foregroundColor(textCol)
-                        if !searchText.isEmpty {
-                            Button(action: { searchText = "" }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(textSecCol)
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .help("Suche löschen")
-                        }
+                    if sidebarPage == .library {
+                        librarySidebarContent
+                    } else {
+                        ListeningSidebarView(controller: listening,
+                            selectedListID: $selectedListeningListID, page: sidebarPage,
+                            isLight: isLight, hasCurrentTrack: playlist.track(at: currentTrackIdx) != nil,
+                            onNewList: { prepareListeningList(entries: [], name: "") },
+                            onRenameList: prepareListeningRename,
+                            onPlayList: startSavedListeningList,
+                            onAppendCurrent: appendCurrentListeningSubtune,
+                            onEditSubtune: prepareListeningSubtune,
+                            onPlayQueueEntry: selectListeningQueueEntry,
+                            onSaveQueue: { prepareListeningList(entries: listening.queue?.items ?? [], name: listening.queue?.name ?? "Hörfolge") },
+                            onEndQueue: { stopPlayback(); listening.setQueue(nil) })
+                            .disabled(!listening.isLoaded)
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(isLight ? Color.macLightSurface : Color.macDarkSurface)
-                    .cornerRadius(6)
-                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(borderCol, lineWidth: 1))
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 6)
-
-                    TrackListView(playlist: playlist,
-                                  currentTrackIdx: currentTrackIdx,
-                                  searchText: searchText,
-                                  favoritesOnly: favoritesOnly,
-                                  favorites: favorites,
-                                  isLight: isLight,
-                                  showTree: showFolderTree && folderTreeReady,
-                                  folderTree: folderTree,
-                                  expandedFolders: expandedFolders,
-                                  onSelect: selectTrack,
-                                  onToggleFavorite: toggleFavorite,
-                                  onToggleFolder: toggleFolder)
 
                     Divider()
                         .background(borderCol)
@@ -424,6 +357,21 @@ public struct MainView: View {
                         MetaLine(label: "TITLE", value: coordinator.trackName, theme: theme)
                         MetaLine(label: "COMPOSER", value: coordinator.composer, theme: theme)
                         MetaLine(label: "INFO", value: coordinator.info, theme: theme)
+                        if let track = playlist.track(at: currentTrackIdx) {
+                            let remembered = listening.isSubtuneFavorite(trackID: track.id, subtune: coordinator.currentSubtune)
+                            Button {
+                                listening.toggleSubtuneFavorite(trackID: track.id, subtune: coordinator.currentSubtune)
+                            } label: {
+                                Label("Subtune \(coordinator.currentSubtune + 1) \(remembered ? "gemerkt" : "merken")",
+                                      systemImage: remembered ? "star.fill" : "star")
+                            }
+                            .buttonStyle(.plain)
+                            .font(.caption)
+                            .foregroundColor(remembered ? (isLight ? .macLightWarning : .yellow) : textSecCol)
+                            .help(remembered ? "Diesen Subtune aus den Favoriten entfernen" : "Diesen Subtune in Lieblings-Subtunes aufnehmen")
+                            .accessibilityIdentifier("favorite-current-subtune")
+                            .disabled(listening.isReadOnly || !listening.isLoaded)
+                        }
 
                         // Anmerkungen der HVSC-Kuratoren zum laufenden Titel
                         // (STIL). Sie erscheinen nur, wenn es welche gibt —
@@ -531,7 +479,7 @@ public struct MainView: View {
                             .font(.system(size: 11, weight: .medium))
                             .foregroundColor(textCol)
                             .fixedSize()   // "AUTO NEXT" einzeilig, kein haesslicher Umbruch
-                            .help("Am Songende automatisch weiter — erst die Subtunes der Datei, dann der nächste Titel")
+                            .help("Am Ende zum nächsten Eintrag der Hörfolge. Dateieinträge spielen vorher ihre weiteren Subtunes.")
 
                         // SID-Chip-Modell: Auto folgt der Datei-Praeferenz, 6581/8580
                         // erzwingen das jeweilige Modell (viele Tunes klingen nur auf
@@ -607,14 +555,18 @@ public struct MainView: View {
                             .buttonStyle(BorderlessButtonStyle())
                             .foregroundColor(shuffle ? accentCol : textSecCol)
                             .help(shuffle ? "Zufallswiedergabe: an" : "Zufallswiedergabe: aus")
+                            .accessibilityIdentifier("listening-shuffle")
+                            .accessibilityLabel("Zufallswiedergabe")
+                            .accessibilityValue(shuffle ? "An" : "Aus")
 
                             Button(action: { playPreviousTrack() }) {
                                 Image(systemName: "backward.end.fill").font(.system(size: 14))
                             }
                             .buttonStyle(BorderlessButtonStyle())
-                            .foregroundColor(playlist.count > 1 ? textCol : textSecCol.opacity(0.35))
-                            .disabled(playlist.count <= 1)
-                            .help("Vorheriger Titel (⌘←)")
+                            .foregroundColor(canNavigateListeningEntries ? textCol : textSecCol.opacity(0.35))
+                            .disabled(!canNavigateListeningEntries)
+                            .help("Vorheriger Eintrag der Hörfolge (⌘←)")
+                            .accessibilityIdentifier("previous-listening-entry")
 
                             Button(action: { skip(by: -15) }) {
                                 Image(systemName: "gobackward.15").font(.system(size: 16))
@@ -642,9 +594,10 @@ public struct MainView: View {
                                 Image(systemName: "forward.end.fill").font(.system(size: 14))
                             }
                             .buttonStyle(BorderlessButtonStyle())
-                            .foregroundColor(playlist.count > 1 ? textCol : textSecCol.opacity(0.35))
-                            .disabled(playlist.count <= 1)
-                            .help("Nächster Titel (⌘→)")
+                            .foregroundColor(canNavigateListeningEntries ? textCol : textSecCol.opacity(0.35))
+                            .disabled(!canNavigateListeningEntries)
+                            .help("Nächster Eintrag der Hörfolge (⌘→)")
+                            .accessibilityIdentifier("next-listening-entry")
 
                             Button(action: { stopPlayback() }) {
                                 Image(systemName: "stop.fill")
@@ -668,7 +621,9 @@ public struct MainView: View {
                         Text(formatTime(coordinator.elapsedSeconds))
                             .font(.system(size: 12, design: .monospaced))
                             .foregroundColor(textSecCol)
-                            .frame(width: 36)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .frame(minWidth: 44)
                         
                         Slider(value: Binding(
                             get: { min(coordinator.elapsedSeconds, currentDuration) },
@@ -681,7 +636,9 @@ public struct MainView: View {
                         Text(formatTime(currentDuration))
                             .font(.system(size: 12, design: .monospaced))
                             .foregroundColor(textSecCol)
-                            .frame(width: 36)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .frame(minWidth: 44)
                             .help(currentTrackLengths != nil
                                   ? "Songlänge aus der HVSC-Datenbank"
                                   : (computedLength != nil ? "Songlänge berechnet (Tune endet in Stille)" : "Keine Songlänge bekannt — Standard-Limit"))
@@ -763,6 +720,30 @@ public struct MainView: View {
                 self.errorMessage = "Importfehler: \(error.localizedDescription)"
             }
         }
+        .sheet(isPresented: $showListeningNameSheet) {
+            ListeningNameSheet(name: $listeningName, renaming: renamingListeningListID != nil,
+                onSave: saveListeningListName, onCancel: { showListeningNameSheet = false })
+        }
+        .sheet(isPresented: $showListeningSubtuneSheet) {
+            ListeningSubtuneSheet(subtune: $editingListeningSubtune, count: editingListeningSubtuneCount,
+                title: editingListeningTitle,
+                onSave: {
+                    if let listID = editingListeningListID, let entryID = editingListeningEntryID {
+                        listening.setSubtune(editingListeningSubtune - 1, entryID: entryID, listID: listID)
+                    }
+                    showListeningSubtuneSheet = false
+                }, onCancel: { showListeningSubtuneSheet = false })
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in listening.flush() }
+        .onChange(of: listening.isLoaded) { ready in
+            guard ready else { return }
+            syncListeningLibrary()
+            if let restore = pendingInitialRestore, !suppressInitialPlayback {
+                pendingInitialRestore = nil
+                startInitialPlayback(restoreSession: restore)
+            }
+        }
+        .onChange(of: shuffle) { listening.setShuffle($0) }
         .onDrop(of: ["public.file-url"], isTargeted: $dragOver) { providers in
             loadLog.info("onDrop: \(providers.count, privacy: .public) provider(s)")
             let container = DropURLsContainer()
@@ -852,6 +833,10 @@ public struct MainView: View {
         // Subtune gewechselt -> Laenge des neuen Subtunes aufloesen (DB-Array wird
         // per Index gelesen; nur die berechnete Laenge muss neu ermittelt werden).
         .onChange(of: coordinator.currentSubtune) { _ in
+            if let track = playlist.track(at: currentTrackIdx), var queue = listening.queue {
+                queue.updateExplicitSubtune(coordinator.currentSubtune, trackID: track.id)
+                listening.setQueue(queue)
+            }
             resolveComputedLengthIfNeeded()
             updateNowPlayingInfo()
         }
@@ -872,20 +857,14 @@ public struct MainView: View {
                 lastNowPlayingSecond = second
                 updateNowPlayingInfo()
             }
-            if PlaybackPolicy.shouldAdvance(isPlaying: coordinator.isPlaying,
+            if !isTransitioning && PlaybackPolicy.shouldAdvance(isPlaying: coordinator.isPlaying,
                                             autoNext: autoNext, elapsed: elapsed,
                                             duration: currentDuration) {
-                // Erst alle weiteren Subtunes DIESER SID-Datei durchspielen, dann
-                // zum naechsten Playlist-Eintrag. setSubtune setzt die Position auf 0
-                // zurueck und laeuft (da isPlaying) direkt weiter.
-                if coordinator.currentSubtune + 1 < coordinator.subtunesCount {
-                    coordinator.setSubtune(sub: coordinator.currentSubtune + 1)
-                } else if playlist.count > 1 {
-                    coordinator.stop()
-                    loadTrack(index: playlist.nextIndex(after: currentTrackIdx, shuffle: shuffle),
-                              autoplay: true)
+                if let next = ListeningPlaybackPolicy.nextSubtune(entry: listening.queue?.current,
+                    current: coordinator.currentSubtune, count: coordinator.subtunesCount) {
+                    coordinator.setSubtune(sub: next)
                 } else {
-                    coordinator.stop()
+                    advanceListeningQueue(forward: true, autoplay: true)
                 }
             }
         }
@@ -932,9 +911,9 @@ public struct MainView: View {
                     Image(systemName: "backward.end.fill").font(.system(size: 13))
                 }
                 .buttonStyle(BorderlessButtonStyle())
-                .foregroundColor(playlist.count > 1 ? textCol : textSecCol.opacity(0.35))
-                .disabled(playlist.count <= 1)
-                .help("Vorheriger Titel (⌘←)")
+                .foregroundColor(canNavigateListeningEntries ? textCol : textSecCol.opacity(0.35))
+                .disabled(!canNavigateListeningEntries)
+                .help("Vorheriger Eintrag der Hörfolge (⌘←)")
 
                 Button(action: { togglePlayPause() }) {
                     Image(systemName: coordinator.isPlaying ? "pause.fill" : "play.fill")
@@ -948,9 +927,9 @@ public struct MainView: View {
                     Image(systemName: "forward.end.fill").font(.system(size: 13))
                 }
                 .buttonStyle(BorderlessButtonStyle())
-                .foregroundColor(playlist.count > 1 ? textCol : textSecCol.opacity(0.35))
-                .disabled(playlist.count <= 1)
-                .help("Nächster Titel (⌘→)")
+                .foregroundColor(canNavigateListeningEntries ? textCol : textSecCol.opacity(0.35))
+                .disabled(!canNavigateListeningEntries)
+                .help("Nächster Eintrag der Hörfolge (⌘→)")
             }
 
             Button(action: { toggleMiniPlayer() }) {
@@ -1004,6 +983,140 @@ public struct MainView: View {
         }
     }
 
+    private var librarySidebarContent: some View {
+        let isLight = theme == .light
+        let textCol = isLight ? Color.macLightText : Color.macDarkText
+        let textSecCol = isLight ? Color.macLightSecondary : Color.macDarkSecondary
+        let accentCol = isLight ? Color.macLightAccent : Color.macDarkAccent
+        let borderCol = isLight ? Color.macLightBorder : Color.macDarkBorder
+        return VStack(alignment: .leading, spacing: 0) {
+        HStack {
+            Text("BIBLIOTHEK")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(textSecCol)
+            // Solange die Bibliothek gegen das Dateisystem
+            // abgeglichen wird, ist die Liste schon benutzbar (sie
+            // steht aus dem gespeicherten Index) — aber eben noch
+            // nicht vollstaendig. Das sagt dieser Ring.
+            if isScanningLibrary {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .controlSize(.small)
+                    .scaleEffect(0.6)
+                    .frame(width: 12, height: 12)
+                    .help("Bibliothek wird abgeglichen …")
+            }
+            Spacer()
+            // Umschalter zwischen flacher Titelliste und
+            // Ordneransicht. Bei einer HVSC-Sammlung ist die flache
+            // Liste mit 50.000 Zeilen kaum zu ueberblicken; die
+            // Ordner sind dort die eigentliche Gliederung
+            // (Komponist, Spiel, Sammlung).
+            if !playlist.isEmpty {
+                Button(action: { showFolderTree.toggle() }) {
+                    Image(systemName: showFolderTree
+                          ? "list.bullet.indent"
+                          : "list.bullet")
+                        .font(.system(size: 10))
+                        .foregroundColor(showFolderTree ? accentCol : textSecCol)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help(showFolderTree ? "Als flache Liste zeigen" : "Nach Ordnern gliedern")
+            }
+            // Alles auf- oder zuklappen — nur in der Ordneransicht
+            // und nur, wenn es ueberhaupt Ordner gibt.
+            if showFolderTree, !folderTree.subfolders.isEmpty {
+                Button(action: expandAllFolders) {
+                    Image(systemName: "chevron.down.2")
+                        .font(.system(size: 9))
+                        .foregroundColor(textSecCol)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Alle Ordner aufklappen")
+
+                Button(action: collapseAllFolders) {
+                    Image(systemName: "chevron.up.2")
+                        .font(.system(size: 9))
+                        .foregroundColor(textSecCol)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Alle Ordner zuklappen")
+            }
+            // Filter "nur Favoriten" (Stern) neben dem Papierkorb.
+            if !playlist.isEmpty {
+                Button(action: { favoritesOnly.toggle() }) {
+                    Image(systemName: favoritesOnly ? "star.fill" : "star")
+                        .font(.system(size: 10))
+                        .foregroundColor(favoritesOnly ? .yellow : textSecCol)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help(favoritesOnly ? "Alle Titel zeigen" : "Nur Favoriten zeigen")
+
+                Button(action: clearPlaylist) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 10))
+                        .foregroundColor(textSecCol)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Playlist leeren")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 6)
+
+        // Live-Suche: filtert die Playlist waehrend des Tippens.
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 10))
+                .foregroundColor(textSecCol)
+            TextField("Suchen", text: $searchText)
+                .textFieldStyle(PlainTextFieldStyle())
+                .font(.system(size: 12))
+                .foregroundColor(textCol)
+            if !searchText.isEmpty {
+                Button(action: { searchText = "" }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 10))
+                        .foregroundColor(textSecCol)
+                }
+                .buttonStyle(PlainButtonStyle())
+                .help("Suche löschen")
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(isLight ? Color.macLightSurface : Color.macDarkSurface)
+        .cornerRadius(6)
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(borderCol, lineWidth: 1))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 6)
+
+        libraryListeningActions
+
+        TrackListView(playlist: playlist,
+                      currentTrackIdx: currentTrackIdx,
+                      searchText: searchText,
+                      favoritesOnly: favoritesOnly,
+                      favorites: favorites,
+                      isLight: isLight,
+                      showTree: showFolderTree && folderTreeReady,
+                      folderTree: folderTree,
+                      expandedFolders: expandedFolders,
+                      onSelect: selectTrack,
+                      onToggleFavorite: toggleFavorite,
+                      onToggleFolder: toggleFolder,
+                      onPlayFolder: { startListeningScope(.folder($0), name: $0.isEmpty ? "Sammlung" : $0) },
+                      onSaveFolder: { prepareListeningList(scope: .folder($0), name: $0.isEmpty ? "Sammlung" : $0) },
+                      onQueueNext: enqueueLibraryTrack,
+                      onSaveSingle: saveSingleListeningTrack,
+                      listeningLists: listening.activeLists.filter { $0.kind == .regular },
+                      onAppendToList: appendLibraryTrack)
+            .disabled(!listening.isLoaded)
+
+        }
+    }
+
     private func selectTrack(at index: Int) {
         loadTrack(index: index, autoplay: coordinator.isPlaying)
     }
@@ -1033,6 +1146,7 @@ public struct MainView: View {
     private func startPlayback() {
         guard playlist.track(at: currentTrackIdx) != nil else { return }
         suppressInitialPlayback = false
+        ensureListeningQueue()
         coordinator.play()
     }
 
@@ -1060,21 +1174,226 @@ public struct MainView: View {
         updateNowPlayingInfo()
     }
 
-    // Vorherigen / Nächsten Titel in der Playlist abspielen.
-    private func playPreviousTrack() {
-        guard playlist.count > 1 else { return }
-        loadTrack(index: playlist.previousIndex(before: currentTrackIdx),
-                  autoplay: coordinator.isPlaying)
+    private var visibleListeningName: String {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !query.isEmpty { return favoritesOnly ? "Favoriten: \(query)" : "Suche: \(query)" }
+        return favoritesOnly ? "Favoriten" : "Bibliotheksauswahl"
     }
 
-    private func playNextTrack() {
-        guard playlist.count > 1 else { return }
-        loadTrack(index: playlist.nextIndex(after: currentTrackIdx, shuffle: shuffle),
-                  autoplay: coordinator.isPlaying)
+    private var libraryListeningActions: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Menu("Auswahl") {
+                Button("Gesamte Bibliothek abspielen") { startListeningScope(.library, name: "Bibliothek") }
+                Button("Sichtbare Auswahl abspielen") {
+                    startListeningScope(.visible(searchText: searchText, favoritesOnly: favoritesOnly), name: visibleListeningName)
+                }
+                Button("Favoriten abspielen") { startListeningScope(.favorites, name: "Favoriten") }
+                Divider()
+                Button("Sichtbare Auswahl als Hörfolge sichern …") {
+                    prepareListeningList(scope: .visible(searchText: searchText, favoritesOnly: favoritesOnly), name: visibleListeningName)
+                }
+                .disabled(listening.isReadOnly)
+                Button("Favoriten als Hörfolge sichern …") { prepareListeningList(scope: .favorites, name: "Favoriten") }
+                    .disabled(listening.isReadOnly)
+                if let track = playlist.track(at: currentTrackIdx) {
+                    Divider()
+                    Button("Aktuellen Ordner abspielen") { startListeningScope(.folder(track.folderPath), name: "Ordner") }
+                }
+            }
+            .controlSize(.small)
+            .accessibilityIdentifier("listening-selection-menu")
+            .disabled(playlist.isEmpty || !listening.isLoaded)
+            if listening.storageError != nil {
+                Button("Hörfolgen: Speicherproblem") { sidebarPage = .lists }
+                    .buttonStyle(.plain)
+                    .font(.caption2)
+                    .foregroundColor(theme == .light ? .macLightWarning : .orange)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 6)
+    }
+
+    private var listeningCollectionID: String {
+        library.map { MusicLibrary.indexFileName(forRoot: $0.root) } ?? "opened-files"
+    }
+
+    private func refreshListeningLibrary(removeMissing: Bool = false) {
+        listeningLibraryEntries = ListeningSelection.entries(in: playlist, scope: .library, favorites: favorites)
+        syncListeningLibrary(removeMissing: removeMissing)
+    }
+
+    private func syncListeningLibrary(removeMissing: Bool = false) {
+        listening.activateLibrary(listeningCollectionID, tracks: listeningLibraryEntries, removeMissing: removeMissing)
+    }
+
+    private func makeDefaultListeningQueue(at index: Int) {
+        if listeningLibraryEntries.count != playlist.count { refreshListeningLibrary() }
+        listening.setQueue(ListeningQueue(libraryID: listeningCollectionID, name: "Bibliothek", kind: .library,
+            entries: listeningLibraryEntries, startingAt: index, shuffled: shuffle, wraps: playlist.count > 1))
+    }
+
+    private func ensureListeningQueue() {
+        if listening.queue == nil, playlist.track(at: currentTrackIdx) != nil { makeDefaultListeningQueue(at: currentTrackIdx) }
+    }
+
+    private func startListeningScope(_ scope: ListeningScope, name: String) {
+        let entries = ListeningSelection.entries(in: playlist, scope: scope, favorites: favorites)
+        let wholeLibrary = scope == .library
+        let start = shuffle && !entries.isEmpty ? Int.random(in: entries.indices) : 0
+        startListeningQueue(ListeningQueue(libraryID: listeningCollectionID, name: name,
+            kind: wholeLibrary ? .library : .selection, entries: entries, startingAt: start,
+            shuffled: shuffle, wraps: wholeLibrary && entries.count > 1))
+    }
+
+    private func startSavedListeningList(_ list: SavedListeningList, entryID: UUID?) {
+        guard list.libraryID == listeningCollectionID else {
+            errorMessage = "Diese Hörfolge gehört zu einer anderen Sammlung."
+            return
+        }
+        let start = entryID.flatMap { id in list.entries.firstIndex { $0.id == id } }
+            ?? (shuffle && !list.entries.isEmpty ? Int.random(in: list.entries.indices) : 0)
+        startListeningQueue(ListeningQueue(libraryID: listeningCollectionID, name: list.name, kind: .savedList,
+            entries: list.entries, startingAt: start, shuffled: shuffle))
+    }
+
+    private func startListeningQueue(_ proposed: ListeningQueue) {
+        guard !proposed.items.isEmpty else { errorMessage = "Diese Auswahl enthält keine Titel."; return }
+        var queue = proposed
+        var skipped = 0
+        for _ in 0..<queue.items.count {
+            if let entry = queue.current, loadListeningEntry(entry, autoplay: true) {
+                listening.setQueue(queue)
+                sidebarPage = .queue
+                if skipped > 0 { errorMessage = "\(skipped) nicht abspielbare Einträge übersprungen." }
+                return
+            }
+            skipped += 1
+            guard queue.next() != nil else { break }
+        }
+        errorMessage = "Kein Eintrag dieser Hörfolge ist abspielbar."
     }
 
     @discardableResult
-    private func loadTrack(index: Int, autoplay: Bool) -> Bool {
+    private func loadListeningEntry(_ entry: ListeningEntry, autoplay: Bool) -> Bool {
+        var index = playlist.index(forID: entry.trackID)
+        if index == nil, let url = entry.url(relativeTo: library?.root, allowExternal: true),
+           FileManager.default.fileExists(atPath: url.path) {
+            index = playlist.append([url], root: library?.root).firstIndex
+            refreshListeningLibrary()
+        }
+        guard let index else { errorMessage = "Titel nicht erreichbar: \(entry.title)"; return false }
+        isTransitioning = false
+        return loadTrack(index: index, autoplay: autoplay, subtune: entry.subtune ?? 0, updateListeningQueue: false)
+    }
+
+    private func advanceListeningQueue(forward: Bool, autoplay: Bool) {
+        guard var queue = listening.queue else { return }
+        var skipped = 0
+        for _ in 0..<max(1, queue.items.count) {
+            guard let entry = forward ? queue.next() : queue.previous() else {
+                if forward { coordinator.stop() } else { seek(to: 0) }
+                if skipped > 0 { errorMessage = "\(skipped) Einträge sind nicht abspielbar." }
+                return
+            }
+            if loadListeningEntry(entry, autoplay: autoplay) {
+                listening.setQueue(queue)
+                if skipped > 0 { errorMessage = "\(skipped) nicht abspielbare Einträge übersprungen." }
+                return
+            }
+            skipped += 1
+        }
+        coordinator.stop()
+        errorMessage = "Kein weiterer Eintrag dieser Hörfolge ist abspielbar."
+    }
+
+    private func selectListeningQueueEntry(_ id: UUID) {
+        guard var queue = listening.queue, let entry = queue.items.first(where: { $0.id == id }) else { return }
+        if loadListeningEntry(entry, autoplay: true) { queue.select(id); listening.setQueue(queue) }
+    }
+
+    private func enqueueLibraryTrack(_ index: Int) {
+        guard let track = playlist.track(at: index) else { return }
+        ensureListeningQueue()
+        if listening.queue == nil {
+            startListeningScope(.library, name: "Bibliothek")
+        } else {
+            listening.enqueueNext(ListeningEntry(trackID: track.id))
+            sidebarPage = .queue
+        }
+    }
+
+    private func prepareListeningList(scope: ListeningScope, name: String) {
+        prepareListeningList(entries: ListeningSelection.entries(in: playlist, scope: scope, favorites: favorites), name: name)
+    }
+
+    private func prepareListeningList(entries: [ListeningEntry], name: String) {
+        creatingListeningEntries = entries
+        listeningName = name
+        renamingListeningListID = nil
+        showListeningNameSheet = true
+    }
+
+    private func prepareListeningRename(_ list: SavedListeningList) {
+        listeningName = list.name
+        renamingListeningListID = list.id
+        showListeningNameSheet = true
+    }
+
+    private func saveListeningListName() {
+        guard showListeningNameSheet else { return }
+        if let id = renamingListeningListID {
+            listening.renameList(id, to: listeningName)
+        } else if let id = listening.createList(name: listeningName, entries: creatingListeningEntries) {
+            selectedListeningListID = id
+        }
+        showListeningNameSheet = false
+        sidebarPage = .lists
+    }
+
+    private func saveSingleListeningTrack(_ index: Int) {
+        guard let track = playlist.track(at: index) else { return }
+        prepareListeningList(entries: [ListeningEntry(trackID: track.id)], name: track.name)
+    }
+
+    private func appendLibraryTrack(_ index: Int, listID: UUID) {
+        guard let track = playlist.track(at: index) else { return }
+        listening.append(ListeningEntry(trackID: track.id), to: listID)
+    }
+
+    private func appendCurrentListeningSubtune(_ listID: UUID) {
+        guard let track = playlist.track(at: currentTrackIdx) else { return }
+        listening.append(ListeningEntry(trackID: track.id, subtune: coordinator.currentSubtune), to: listID)
+    }
+
+    private func prepareListeningSubtune(_ list: SavedListeningList, entry: ListeningEntry) {
+        guard let url = entry.url(relativeTo: library?.root, allowExternal: true),
+              let data = try? Data(contentsOf: url), let sid = try? SidParser.parse(data: data) else {
+            errorMessage = "Die Subtunes von \(entry.title) sind nicht erreichbar."
+            return
+        }
+        editingListeningListID = list.id
+        editingListeningEntryID = entry.id
+        editingListeningTitle = entry.title
+        editingListeningSubtuneCount = sid.subtuneAmount
+        editingListeningSubtune = min(sid.subtuneAmount, (entry.subtune ?? 0) + 1)
+        showListeningSubtuneSheet = true
+    }
+
+    // Vorherigen / Nächsten Titel in der Playlist abspielen.
+    private func playPreviousTrack() {
+        ensureListeningQueue()
+        advanceListeningQueue(forward: false, autoplay: coordinator.isPlaying)
+    }
+
+    private func playNextTrack() {
+        ensureListeningQueue()
+        advanceListeningQueue(forward: true, autoplay: coordinator.isPlaying)
+    }
+
+    @discardableResult
+    private func loadTrack(index: Int, autoplay: Bool, subtune: Int = 0,
+                           updateListeningQueue: Bool = true) -> Bool {
         guard !isTransitioning else { return false }
         guard let track = playlist.track(at: index) else { return false }
 
@@ -1109,6 +1428,10 @@ public struct MainView: View {
             // Reihenfolge-Risiko ohne Nutzen (2026-07-08)
             let data = try Data(contentsOf: fileURL)
             let sidFile = try SidParser.parse(data: data)
+            guard (0..<sidFile.subtuneAmount).contains(subtune) else {
+                errorMessage = "Subtune \(subtune + 1) ist in \(track.name) nicht vorhanden."
+                return false
+            }
 
             // Erst nach erfolgreichem Read/Parse den laufenden Track und seine
             // Session-Auswahl ersetzen. Ein defekter Restore-Eintrag hinterlaesst
@@ -1117,7 +1440,10 @@ public struct MainView: View {
             coordinator.stop()
             currentTrackIdx = index
             coordinator.setSid(sidFile)
+            if subtune > 0 { coordinator.setSubtune(sub: subtune) }
             coordinator.setVolume(volume)
+            pendingInitialRestore = nil
+            if updateListeningQueue { makeDefaultListeningQueue(at: index) }
             // Songlaenge aufloesen: MD5 der Datei ist der Schluessel der HVSC-DB.
             // Ohne DB-Eintrag wird die Laenge im Hintergrund berechnet/gecacht.
             let md5 = SonglengthDB.md5Hex(of: data)
@@ -1172,6 +1498,7 @@ public struct MainView: View {
 
         // Duplikatpruefung und Aufnahme stehen im Core und sind dort getestet.
         let additions = playlist.append(sidFiles, root: library?.root)
+        refreshListeningLibrary()
         // Auch bei einer bereits geladenen Datei springt die Auswahl dorthin:
         // wer sie erneut hereinzieht, will sie hoeren.
         if let index = additions.firstIndex {
@@ -1296,10 +1623,13 @@ public struct MainView: View {
     }
 
     private func clearPlaylist() {
+        listening.setQueue(nil)
+        listeningLibraryEntries = []
         coordinator.stop()
         cancelLengthEstimate()
         cancelLibraryScan()
         playlist.removeAll()
+        syncListeningLibrary()
         folderTreeTask?.cancel()
         folderTreeTask = nil
         folderTreeGeneration &+= 1
@@ -1349,6 +1679,7 @@ public struct MainView: View {
         // leer, bis der Scan unten fertig ist.
         let stored = lib.entries
         playlist.setLibrary(stored, root: lib.root)
+        refreshListeningLibrary()
         rebuildFolderTree(from: stored)
         let startedFromStoredIndex = !playlist.isEmpty
         if startedFromStoredIndex {
@@ -1421,6 +1752,7 @@ public struct MainView: View {
         currentTrackIdx = playlist.setLibrary(entries,
                                               root: root,
                                               keepingTrackAt: currentTrackIdx)
+        refreshListeningLibrary(removeMissing: true)
         rebuildFolderTree(from: entries)
         loadLog.info("Bibliotheks-Abgleich fertig: \(entries.count, privacy: .public) Titel")
         // Ein waehrend des Scans eingegangener `track`-Befehl gewinnt gegen die
@@ -1474,6 +1806,29 @@ public struct MainView: View {
     // Position), sofern der Titel noch da ist. Mit Shuffle beginnt jeder Start
     // bewusst zufaellig — deshalb wird dann gar nicht wiederhergestellt.
     private func startInitialPlayback(restoreSession: Bool) {
+        guard listening.isLoaded else {
+            pendingInitialRestore = restoreSession
+            return
+        }
+        syncListeningLibrary()
+        if restoreSession, var queue = listening.queue, !queue.items.isEmpty {
+            if shuffle { queue.restart(shuffled: true, preservePending: true) }
+            else { queue.setShuffle(false) }
+            if let entry = queue.current, loadListeningEntry(entry, autoplay: true) {
+                listening.setQueue(queue)
+                if !shuffle, entry.trackID == restoredTrackID() {
+                    if entry.subtune == nil, lastSubtune > 0 { coordinator.setSubtune(sub: lastSubtune) }
+                    if lastPosition > 1 { coordinator.seek(seconds: lastPosition) }
+                    resolveComputedLengthIfNeeded()
+                }
+                return
+            }
+            // Ein fehlender Eintrag darf die naechsten lesbaren Titel der
+            // gespeicherten Folge nicht durch eine fremde Bibliotheksfolge ersetzen.
+            listening.setQueue(queue)
+            advanceListeningQueue(forward: true, autoplay: true)
+            return
+        }
         if restoreSession, !shuffle, let id = restoredTrackID(), let restoreIdx = playlist.index(forID: id) {
             let sub = lastSubtune
             let pos = lastPosition
@@ -1986,7 +2341,7 @@ public struct MainView: View {
 //     362 MB beim LazyVStack, bei rund 20 Prozentpunkten mehr Prozessorlast.
 //
 // Die Auswahl arbeitet weiter mit Positionen in der VOLLEN Liste: Suche und
-// Favoritenfilter aendern nur, was zu sehen ist, nicht was gespielt wird.
+// Favoritenfilter aendern die laufende Hoerfolge nicht.
 struct TrackListView: View {
     let playlist: Playlist
     let currentTrackIdx: Int
@@ -2004,6 +2359,12 @@ struct TrackListView: View {
     let onSelect: (Int) -> Void
     let onToggleFavorite: (Int) -> Void
     let onToggleFolder: (String) -> Void
+    let onPlayFolder: (String) -> Void
+    let onSaveFolder: (String) -> Void
+    let onQueueNext: (Int) -> Void
+    let onSaveSingle: (Int) -> Void
+    let listeningLists: [SavedListeningList]
+    let onAppendToList: (Int, UUID) -> Void
 
     // Bewusst NICHT `Equatable` mit `.equatable()`: Der Versuch, den Neuaufbau
     // der Liste damit zu ueberspringen, hat die Seitenleiste zeitweise leer
@@ -2104,6 +2465,10 @@ struct TrackListView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .help(folder.path)
+            .contextMenu {
+                Button("Ordner abspielen") { onPlayFolder(folder.path) }
+                Button("Ordner als Hörfolge sichern …") { onSaveFolder(folder.path) }
+            }
 
         case .track(let track):
             // Ein Titel, den die Playlist (noch) nicht kennt, wird nicht
@@ -2160,6 +2525,16 @@ struct TrackListView: View {
             .background(isActive ? accentCol : Color.clear)
             .foregroundColor(isActive ? .white : textCol)
             .cornerRadius(6)
+            .contextMenu {
+                Button("Als Nächstes") { onQueueNext(idx) }
+                Menu("Zu Hörfolge hinzufügen") {
+                    if listeningLists.isEmpty { Text("Noch keine Hörfolgen") }
+                    ForEach(listeningLists) { list in
+                        Button(list.name) { onAppendToList(idx, list.id) }
+                    }
+                }
+                Button("Neue Hörfolge mit diesem Titel …") { onSaveSingle(idx) }
+            }
         }
     }
 }

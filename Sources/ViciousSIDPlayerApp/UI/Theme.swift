@@ -15,6 +15,7 @@ public extension Color {
     static let macLightText = Color(red: 29/255, green: 29/255, blue: 31/255)
     static let macLightSecondary = Color(red: 104/255, green: 104/255, blue: 109/255)
     static let macLightAccent = Color(red: 0/255, green: 122/255, blue: 255/255) // Apple Blue
+    static let macLightWarning = Color(red: 158/255, green: 82/255, blue: 5/255)
 
     // macOS Dark Mode Colors
     static let macDarkBg = Color(red: 30/255, green: 30/255, blue: 30/255)

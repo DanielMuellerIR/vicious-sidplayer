@@ -45,6 +45,7 @@ not tracked. It opens directly in the browser without a web server.
 - **Quick Look preview (macOS app)**: Select a `.sid` file in Finder and press Space — the tune plays instantly, with title, composer, and copyright plus subtune switching for multi-song files. Setup: see [Quick Look preview](#quick-look-preview-for-sid-files-macos).
 - **Real song lengths**: Reads the HVSC `Songlengths.md5` database (chosen in the settings or found automatically next to your collection) so the position slider and auto-advance use the actual tune length. Tunes without a database entry are analyzed in the background on first play (if they end in silence) and the result is cached.
 - **Tune notes (STIL)**: Reads the HVSC `STIL.txt` (chosen in the settings or found automatically next to your collection) and shows what does not fit into the SID file header — which original a tune covers, who wrote the melody, notes on individual subtunes. The database belongs to the HVSC project and is not bundled.
+- **Listening lists and queue (macOS)**: The sidebar tabs **Musik**, **Listen**, and **Folge** share the library area. Use **Auswahl** to play the entire library, current search results, favorites, or a folder as a deliberate sequence. Later search/filter changes do not alter that sequence. Save named lists, add individual subtunes (including several from the same file), mark favorite subtunes, queue **Als Nächstes**, and reorder entries. Named lists and selections stop at the end; the whole library continues in cycles. Shuffle visits each entry once per cycle and avoids an immediate repeat at the cycle boundary. Lists belong to their collection; switching the autoplay folder retains them for later use.
 - **Folder view**: The sidebar shows your collection either as a flat track list or as an expandable folder tree — the only workable way through an HVSC with tens of thousands of files. Toggle it in the playlist header; search and the favourites filter still show the flat list of matches.
 - **Mini player**: ⌘⌥M shrinks the window to a slim bar with title, elapsed time and transport controls, for keeping it around while you work. The same shortcut brings the full window back at its previous size.
 - **Remote control via URL scheme**: Drive the running app from scripts and shortcuts, with no network service:
@@ -59,7 +60,7 @@ open "vicioussid://track?path=Hubbard_Rob/Commando.sid"
 
 Track paths are relative to the autoplay folder. Absolute paths, `..` and anything that is not a `.sid` file are rejected — any web page can trigger a URL scheme, so playback control is all this offers.
 - **2SID / 3SID stereo**: Multi-SID tunes (PSID v3/v4) play with all chips, panned in stereo, including per-chip 6581/8580 model preferences from the file header.
-- **Session restore**: With shuffle off, the app resumes the last tune, subtune, and position on launch.
+- **Session restore**: With shuffle off, the app resumes the last tune, subtune, and position on launch. On macOS this also restores the listening sequence and pending **Als Nächstes** entries. With shuffle on, a fresh shuffled sequence starts and pending requests are retained.
 - **Search & favorites**: Live playlist search plus a star per track (persistent) with a favorites-only filter.
 - **Voice muting & filter toggle**: Mute each of the three SID voices individually and bypass the SID filter — directly in the oscilloscope view, useful for analyzing how a tune is built.
 - **WAV export**: Render the current tune to a WAV file faster than real time — from the GUI (⌘E) or headless from the command line (see [Headless / CLI](#headless--cli-for-scripts-and-ai-agents)).
@@ -82,11 +83,11 @@ Every control in the app has a tooltip: rest the pointer on it for a moment and 
 |---|---|
 | Tune menu | Pick a track from the playlist. |
 | Öffnen… | Open one or more `.sid` files. |
-| Auto Next | When a tune ends, continue automatically — first through the remaining subtunes of the file, then to the next track. |
+| Auto Next | At the end, advance within the listening sequence. A whole-file entry plays its remaining subtunes; an exact-subtune entry plays only that subtune. |
 | SID: Auto / 6581 / 8580 | Chip model. `Auto` follows the file's preference; a fixed choice forces that model and applies live to the running song. |
 | Auto: PAL / PAL / NTSC | C64 clock. Auto follows the file and uses PAL for unknown or dual-standard files. Changing the clock rebuilds the current position in the background. |
 | ‹ n / m › | Subtune navigation. A `.sid` file can hold several songs ("subtunes"); `2 / 5` means subtune 2 of 5. |
-| Shuffle | Random playback. The setting persists across restarts; while on, a random song starts each time the app launches. |
+| Shuffle | Shuffle the remaining sequence, visiting each entry once. The setting persists across restarts; while on, a fresh shuffled sequence starts on launch. |
 | ↺ 15 | Skip 15 seconds back. |
 | Play / Pause | Start playback, or pause (pausing keeps the current position and freezes the oscilloscope). |
 | 30 ↻ | Skip 30 seconds forward. |
@@ -95,7 +96,9 @@ Every control in the app has a tooltip: rest the pointer on it for a moment and 
 | Volume slider | Playback volume. |
 | Speaker icons (oscilloscope, right edge) | Mute or unmute each SID voice individually — the emulation keeps running, only the audio contribution is removed. |
 | FILTER: ON / OFF (oscilloscope, bottom left) | Bypass the SID filter; filtered voices then play unfiltered. |
-| Trash (playlist header) | Clear the playlist. |
+| Musik / Listen / Folge | Switch between the library, saved listening lists, and the active queue. |
+| Auswahl (library) | Start or save a deliberate selection; searching alone leaves playback unchanged. |
+| Trash (playlist header) | Clear the current library list and queue; saved listening lists remain. |
 
 Title, composer, and info in the sidebar, as well as long track names, also show their full text as a tooltip when truncated.
 
@@ -105,8 +108,8 @@ Title, composer, and info in the sidebar, as well as long track names, also show
 |---|---|
 | Space | Play / pause |
 | ⌘P | Play / pause |
-| ⌘→ | Next track |
-| ⌘← | Previous track |
+| ⌘→ | Next listening entry |
+| ⌘← | Previous listening entry |
 | ⌘E | Export current tune as WAV |
 | ⌘T | Toggle dark / light theme (switches to a fixed appearance; back to *Auto* via settings) |
 | ⌘, | Settings (appearance, autoplay folder) |

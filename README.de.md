@@ -45,6 +45,7 @@ versioniert. Sie lässt sich ohne Webserver direkt im Browser öffnen.
 - **Quick-Look-Vorschau (macOS-App)**: `.sid`-Datei im Finder markieren und Leertaste drücken — der Song spielt sofort, dazu erscheinen Titel, Komponist und Copyright samt Song-Umschaltung bei mehreren Subtunes. Einrichtung: siehe [Quick-Look-Vorschau](#quick-look-vorschau-für-sid-dateien-macos).
 - **Echte Songlängen**: Liest die HVSC-Datenbank `Songlengths.md5` (in den Einstellungen wählbar oder automatisch neben der Sammlung gefunden) — Positions-Slider und Auto-Next nutzen dann die tatsächliche Länge. Songs ohne Datenbank-Eintrag analysiert die App beim ersten Abspielen im Hintergrund (sofern sie in Stille enden) und merkt sich das Ergebnis.
 - **Titel-Anmerkungen (STIL)**: Liest die `STIL.txt` der HVSC (in den Einstellungen wählbar oder automatisch neben der Sammlung gefunden) und zeigt zum laufenden Titel, was im SID-Dateikopf keinen Platz hat — welche Vorlage ein Tune covert, wer die Melodie geschrieben hat, Anmerkungen zu einzelnen Subtunes. Die Datenbank gehört dem HVSC-Projekt und wird nicht mitgeliefert.
+- **Hörfolgen und Warteschlange (macOS)**: Die Tabs **Musik**, **Listen** und **Folge** teilen sich den Bibliotheksbereich. Über **Auswahl** lassen sich die ganze Bibliothek, aktuelle Suchtreffer, Favoriten oder ein Ordner ausdrücklich als Folge starten. Spätere Such-/Filteränderungen verändern diese Folge nicht. Benannte Listen speichern, einzelne Subtunes hinzufügen (auch mehrere derselben Datei), Lieblings-Subtunes merken, **Als Nächstes** einreihen und Einträge umordnen. Listen und Auswahlen stoppen am Ende; die gesamte Bibliothek läuft in Durchläufen weiter. Shuffle spielt jeden Eintrag einmal je Durchlauf und vermeidet die unmittelbare Wiederholung am Übergang. Listen gehören zu ihrer Sammlung; beim Wechsel des Autoplay-Ordners bleiben sie für später erhalten.
 - **Ordneransicht**: Die Seitenleiste zeigt die Sammlung wahlweise als flache Titelliste oder als aufklappbaren Ordnerbaum — bei einer HVSC mit zehntausenden Dateien der einzig brauchbare Weg. Umschalter im Kopf der Playlist; Suche und Favoritenfilter zeigen weiterhin die flache Trefferliste.
 - **Mini-Player**: ⌘⌥M schaltet das Fenster auf eine schmale Leiste mit Titel, Spielzeit und Transport um — zum Nebenherlaufen. Zurück geht es mit demselben Kürzel; das Fenster nimmt wieder seine vorherige Größe an.
 - **Fernsteuerung per URL-Schema**: Die laufende App lässt sich aus Skripten und Kurzbefehlen steuern, ohne Netzwerkdienst:
@@ -59,7 +60,7 @@ open "vicioussid://track?path=Hubbard_Rob/Commando.sid"
 
 Der Titelpfad gilt relativ zum Autoplay-Ordner. Absolute Pfade, `..` und alles, was keine `.sid`-Datei ist, werden abgewiesen — ein URL-Schema kann jede Webseite auslösen, deshalb gibt es hier nur Wiedergabesteuerung.
 - **2SID / 3SID stereo**: Multi-SID-Tunes (PSID v3/v4) spielen mit allen Chips, im Stereo-Panorama verteilt, inklusive Chip-eigener 6581/8580-Modellwahl aus dem Datei-Header.
-- **Session-Restore**: Bei ausgeschaltetem Shuffle setzt die App beim Start den letzten Song an der letzten Position fort (inklusive Subtune).
+- **Session-Restore**: Bei ausgeschaltetem Shuffle setzt die App beim Start den letzten Song an der letzten Position fort (inklusive Subtune). Auf dem Mac werden auch die Hörfolge und offene **Als Nächstes**-Einträge wiederhergestellt. Mit Shuffle startet eine frisch gemischte Folge; offene Wünsche bleiben erhalten.
 - **Suche & Favoriten**: Live-Suche in der Playlist plus Stern pro Titel (persistent) mit „nur Favoriten"-Filter.
 - **Voice-Muting & Filter-Schalter**: Jede der drei SID-Stimmen einzeln stummschalten und den SID-Filter überbrücken — direkt im Oszilloskop, nützlich zum Analysieren, wie ein Tune aufgebaut ist.
 - **WAV-Export**: Den aktuellen Song schneller als Echtzeit als WAV-Datei rendern — aus der GUI (⌘E) oder headless von der Kommandozeile (siehe [Headless / CLI](#headless--cli-für-skripte-und-ai-agenten)).
@@ -82,11 +83,11 @@ Jedes Bedienelement der App hat einen Tooltip: den Zeiger einen Moment darauf ru
 |---|---|
 | Tune-Menü | Titel aus der Playlist auswählen. |
 | Öffnen… | Eine oder mehrere `.sid`-Dateien öffnen. |
-| Auto Next | Am Songende automatisch weiter — erst durch die verbleibenden Subtunes der Datei, dann zum nächsten Titel. |
+| Auto Next | Am Ende innerhalb der Hörfolge weiter. Ein Dateieintrag spielt die verbleibenden Subtunes; ein Eintrag mit festem Subtune spielt nur diesen. |
 | SID: Auto / 6581 / 8580 | Chip-Modell. `Auto` folgt der Präferenz der Datei; eine feste Wahl erzwingt das Modell und wirkt live auf den laufenden Song. |
 | Auto: PAL / PAL / NTSC | C64-Takt. Auto folgt der Datei und verwendet bei fehlender oder doppelter Taktangabe PAL. Ein Wechsel baut die aktuelle Position im Hintergrund neu auf. |
 | ‹ n / m › | Subtune-Navigation. Eine `.sid`-Datei kann mehrere Songs („Subtunes") enthalten; `2 / 5` heißt Subtune 2 von 5. |
-| Shuffle | Zufallswiedergabe. Die Einstellung bleibt über Neustarts erhalten; ist sie an, startet bei jedem App-Start ein zufälliger Song. |
+| Shuffle | Verbleibende Folge mischen, jeden Eintrag einmal spielen. Die Einstellung bleibt über Neustarts erhalten; ist sie an, beginnt beim Start eine frisch gemischte Folge. |
 | ↺ 15 | 15 Sekunden zurück. |
 | Play / Pause | Wiedergabe starten oder pausieren (Pause behält die Position und friert das Oszilloskop ein). |
 | 30 ↻ | 30 Sekunden vor. |
@@ -95,7 +96,9 @@ Jedes Bedienelement der App hat einen Tooltip: den Zeiger einen Moment darauf ru
 | Lautstärke-Slider | Wiedergabelautstärke. |
 | Lautsprecher-Symbole (Oszilloskop, rechter Rand) | Jede SID-Stimme einzeln stumm-/lautschalten — die Emulation läuft weiter, nur der Audio-Beitrag entfällt. |
 | FILTER: ON / OFF (Oszilloskop, unten links) | SID-Filter überbrücken; gefilterte Stimmen laufen dann ungefiltert. |
-| Papierkorb (Playlist-Kopf) | Playlist leeren. |
+| Musik / Listen / Folge | Bibliothek, gespeicherte Hörfolgen oder laufende Warteschlange anzeigen. |
+| Auswahl (Bibliothek) | Eine Auswahl ausdrücklich starten oder sichern; Suchen allein verändert die Wiedergabe nicht. |
+| Papierkorb (Playlist-Kopf) | Aktuelle Bibliotheksliste und Warteschlange leeren; gespeicherte Hörfolgen bleiben erhalten. |
 
 Titel, Komponist und Info in der Seitenleiste sowie lange Titelnamen zeigen ihren vollständigen Text ebenfalls als Tooltip, wenn er abgeschnitten ist.
 
@@ -105,8 +108,8 @@ Titel, Komponist und Info in der Seitenleiste sowie lange Titelnamen zeigen ihre
 |---|---|
 | Leertaste | Play / Pause |
 | ⌘P | Play / Pause |
-| ⌘→ | Nächster Titel |
-| ⌘← | Vorheriger Titel |
+| ⌘→ | Nächster Hörfolgeneintrag |
+| ⌘← | Vorheriger Hörfolgeneintrag |
 | ⌘E | Aktuellen Song als WAV exportieren |
 | ⌘T | Hell-/Dunkelmodus umschalten (wechselt auf feste Wahl; zurück zu *Automatisch* über die Einstellungen) |
 | ⌘, | Einstellungen (Erscheinungsbild, Autoplay-Ordner) |
