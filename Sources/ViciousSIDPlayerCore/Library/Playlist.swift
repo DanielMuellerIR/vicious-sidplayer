@@ -108,10 +108,8 @@ public enum PlaylistMenuWindow {
 
 /// Ein Eintrag der Playlist.
 ///
-/// Bewusst schlank und ohne Titel/Komponist aus dem Datei-Header: die stehen
-/// erst nach dem Parsen fest, und bei einer grossen Sammlung waere das Parsen
-/// aller Dateien beim Start unbezahlbar. Angezeigt wird deshalb der Dateiname;
-/// die echten Metadaten liefert der Koordinator, sobald der Titel laeuft.
+/// Der Dateieintrag bleibt schlank. Headerdaten ergaenzt der getrennte
+/// `LibraryMetadataCache`; der erste Listenaufbau wartet nicht darauf.
 public struct PlaylistTrack: Identifiable, Hashable, Sendable {
 
     /// Stabile Identitaet — siehe `PlaylistTrackID`.

@@ -76,8 +76,10 @@ struct LibraryView: View {
                 }
 
                 if page == .library {
+                    MetadataSearchTools(metadata: model.metadataIndex, saved: model.savedSearches,
+                        query: $model.searchText, favoritesOnly: $model.favoritesOnly)
                     content
-                        .searchable(text: $model.searchText, prompt: Text("Titel oder Ordner suchen"))
+                        .searchable(text: $model.searchText, prompt: Text("Titel, Autor oder Suchfelder"))
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                 } else {
@@ -175,7 +177,9 @@ struct LibraryView: View {
         return TrackRowView(row: row,
                             isCurrent: model.currentTrackID == trackID,
                             isFavorite: isFavorite,
-                            showsFolderPath: showsFolderPath) {
+                            showsFolderPath: showsFolderPath,
+                            metadata: model.metadataIndex.records[trackID]?.metadata,
+                            duration: model.metadataIndex.records[trackID]?.metadata.flatMap(model.knownLibraryDuration)) {
             model.select(trackID: trackID)
         }
         .contextMenu {
@@ -221,7 +225,7 @@ struct LibraryView: View {
                 Divider()
                 Button("Sichtbare Auswahl sichern") { prepareListeningList(scope: .visible(searchText: model.searchText, favoritesOnly: model.favoritesOnly), name: String(localized: "Auswahl")) }
                     .disabled(model.listening.isReadOnly)
-            } label: { Label("Auswahl", systemImage: "text.badge.play") }
+            } label: { Label("Auswahl", systemImage: "music.note.list") }
             .disabled(model.tracks.isEmpty || !model.listening.isLoaded)
             .accessibilityIdentifier("listening-selection-menu")
         }

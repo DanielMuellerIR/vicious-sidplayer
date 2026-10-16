@@ -109,6 +109,8 @@ final class LibraryImportIntegrationTests: XCTestCase {
     override func tearDown() async throws {
         if let source { try? fm.removeItem(at: source) }
         await resetLibrary()
+        await model.metadataIndex.suspend()
+        model.savedSearches.flush()
         model = nil
         defaults.removePersistentDomain(forName: suiteName)
         defaults = nil

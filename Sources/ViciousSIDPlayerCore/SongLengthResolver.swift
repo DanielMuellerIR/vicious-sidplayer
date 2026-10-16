@@ -104,6 +104,11 @@ public final class SongLengthResolver: @unchecked Sendable {
         return activeKey != nil
     }
 
+    public func knownDuration(md5: String, subtune: Int, databaseLengths: [Double]?, clockMode: SidClockMode = .auto) -> Double? {
+        SongLengthSelection.knownDuration(databaseLengths: databaseLengths, subtune: subtune,
+            computed: cache.length(md5: md5, subtune: subtune, clockMode: clockMode))
+    }
+
     // MARK: - Schritt 1: entscheiden
 
     /// Bestimmt, was fuer den laufenden Subtune zu tun ist.
@@ -271,6 +276,14 @@ public final class SongLengthResolver: @unchecked Sendable {
 /// Scrubber-Laenge, Auto-Next-Schwelle, die Restzeit auf dem Sperrbildschirm
 /// und die Dauer des WAV-Exports.
 public enum SongLengthSelection {
+
+    /// Fuer Suchfilter: ein Fallback oder ein negativer Loop-Cache ist keine
+    /// bekannte Dauer. Die Quellreihenfolge bleibt dieselbe wie im Player.
+    public static func knownDuration(databaseLengths: [Double]?, subtune: Int, computed: Double?) -> Double? {
+        if let lengths = databaseLengths, lengths.indices.contains(subtune), lengths[subtune].isFinite, lengths[subtune] >= 0 { return lengths[subtune] }
+        if let computed, computed.isFinite, computed > 0 { return computed }
+        return nil
+    }
 
     /// Fallback-Limit, wenn weder Datenbank noch Berechnung etwas liefern.
     /// Sechs Minuten sind laenger als die meisten SID-Tunes und kurz genug,

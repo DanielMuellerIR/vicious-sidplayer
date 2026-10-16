@@ -55,6 +55,8 @@ final class AppModel: ObservableObject {
 
     /// Nur Favoriten anzeigen.
     @Published var favoritesOnly: Bool = false
+    let metadataIndex = LibraryMetadataController()
+    let savedSearches: SavedLibrarySearchController
 
     /// Favoriten, als Menge relativer Pfade. Bewusst relativ und nicht absolut:
     /// der App-Container bekommt bei jeder Neuinstallation eine neue UUID, mit
@@ -67,12 +69,12 @@ final class AppModel: ObservableObject {
     /// Die Suchregel selbst steht im Core (`PlaylistSearch`), weil die Mac-App
     /// dieselbe braucht — vorher stand sie hier und dort in je eigener Fassung.
     var visibleTracks: [LibraryTrack] {
-        tracks.filter { track in
-            if favoritesOnly && !favorites.contains(track.id) { return false }
-            return PlaylistSearch.matches(name: track.name,
-                                          folderPath: track.folderPath,
-                                          needle: searchText)
-        }
+        LibrarySearchSelection.indices(in: listeningPlaylist, query: LibrarySearchQuery(searchText), records: metadataIndex.records,
+            favoritesOnly: favoritesOnly, favorites: PlaylistFavorites(ids: favorites), duration: knownLibraryDuration).map { tracks[$0] }
+    }
+
+    func knownLibraryDuration(_ metadata: LibraryMetadata) -> Double? {
+        metadata.firstSubtuneDuration(database: songlengthDB, cache: lengthCache, clockMode: coordinator.clockMode)
     }
 
     /// Der gerade geladene Titel als Datensatz, `nil` wenn keiner geladen ist.
@@ -225,8 +227,13 @@ final class AppModel: ObservableObject {
     init(defaults: UserDefaults = .standard, listeningFileURL: URL? = ListeningLibraryStore.defaultURL()) {
         self.defaults = defaults
         self.listening = ListeningLibraryController(fileURL: listeningFileURL)
+        self.savedSearches = SavedLibrarySearchController(fileURL: listeningFileURL?.deletingLastPathComponent().appendingPathComponent("saved-searches.json"))
         loadSettings()
         listening.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &listeningSubscriptions)
+        metadataIndex.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &listeningSubscriptions)
+        savedSearches.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &listeningSubscriptions)
         listening.$isLoaded.filter { $0 }.sink { [weak self] _ in
             Task { @MainActor [weak self] in
@@ -268,6 +275,7 @@ final class AppModel: ObservableObject {
             PlaylistTrack(id: $0.id, name: $0.name, folderPath: $0.folderPath, url: $0.url(in: root))
         })
         activateListeningLibrary(removeMissing: true)
+        if let library = services.library { metadataIndex.refresh(library: library) }
         // Ist der laufende Titel verschwunden (z.B. per Finder geloescht),
         // gilt kein Titel mehr als aktuell — die Wiedergabe laeuft aber weiter,
         // bis der Nutzer etwas anderes waehlt.
@@ -337,7 +345,7 @@ final class AppModel: ObservableObject {
         let active = (phase == .active)
         guard active != isSceneActive else { return }
         isSceneActive = active
-        if !active { listening.flush() }
+        if !active { listening.flush(); savedSearches.flush() }
         // Den Spiegel-Takt des Koordinators mitziehen: im Vordergrund fluessige
         // 50 Hz fuers Oszilloskop, im Hintergrund einmal pro Sekunde. Das reicht
         // dort fuer Auto-Next und die Sperrbildschirm-Anzeige und kostet
@@ -358,9 +366,8 @@ final class AppModel: ObservableObject {
 
 // MARK: - Datentypen der Bibliothek
 
-/// Ein Titel, wie ihn die UI sieht. Bewusst schlank: Titel und Autor aus dem
-/// PSID-Header werden NICHT beim Scannen gelesen — bei tausenden Dateien waere
-/// das viel zu teuer. Sie kommen erst beim Laden des Titels dazu.
+/// Schlanker Dateieintrag. Der getrennte Headercache ergaenzt Metadaten im
+/// Hintergrund, ohne den Dateiscan oder die erste Anzeige aufzuhalten.
 struct LibraryTrack: Identifiable, Hashable, Sendable {
     /// Relativer Pfad zur Bibliothekswurzel. Stabile Identitaet ueber
     /// Neuinstallationen hinweg — anders als eine absolute URL.

@@ -15,6 +15,8 @@ Die HTML5-Einzeldatei speichert ausschließlich persönliche Metadaten im Browse
 - Browseransichten in Hell/Dunkel, bei 1280×900, 390×844 und 1280×600 CSS-Pixeln visuell geprüft. Tastaturbedienung des Shuffle-Schalters und schreibgeschützte Datenversion geprüft. Die ursprüngliche neuere Datenversion blieb unverändert.
 - Fleet-Quellprüfung und Single-File-Build erfolgreich.
 
-## Noch offen
+## Ergänzende iPhone-Abnahme
 
-Die neuen iPhone-Ansichten benötigen noch die visuelle Prüfung im echten Simulatorlauf. Ein bestandener Modelltest ersetzt diese Abnahme nicht. Hintergrundwiedergabe, Sperrbildschirm und Audio-Hardware bleiben Teil der gesonderten Geräteabnahme; sie sind durch diesen Simulatorlauf nicht belegt.
+Im folgenden Entwicklungsstand v1.9.31 wurden die neuen iPhone-Ansichten im echten Simulatorlauf geprüft: leere Listenansicht, Listenanlage, feste Subtunes 1 und 3 derselben Datei, Start der Folge und Wechsel zum zweiten Eintrag. Darstellung und Controls sind in der hellen Ansicht lesbar und erreichbar. Nach App-Neustart blieben beide Einträge, der zweite aktive Subtune und die Position erhalten; der Titel war vorbereitet und die Wiedergabe pausiert.
+
+Dabei wurde im verzögerten nativen Speicherweg eine fehlende ausdrückliche Sendable-Isolation gefunden und für v1.9.30 korrigiert. Ein zusätzlicher iPhone-Test wartet auf die automatische Speicherung ohne Flush. Hintergrundwiedergabe, Sperrbildschirm und Audio-Hardware bleiben Teil der gesonderten Geräteabnahme; sie sind durch diesen Simulatorlauf nicht belegt.

@@ -131,6 +131,8 @@ struct TrackRowView: View {
     /// In der Suchergebnisliste steht der Ordner unter dem Namen, im Baum nicht —
     /// dort ergibt er sich aus der Verschachtelung.
     let showsFolderPath: Bool
+    let metadata: LibraryMetadata?
+    let duration: Double?
     let onPlay: () -> Void
 
     var body: some View {
@@ -141,8 +143,19 @@ struct TrackRowView: View {
                     .foregroundStyle(isCurrent ? Color.accentColor : Color.secondary)
                     .frame(width: 16)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(row.track.name)
+                    Text(metadata?.title ?? row.track.name)
                         .lineLimit(1)
+                    Text(metadata?.author ?? String(localized: "Autor unbekannt"))
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    if let metadata {
+                        Text("\(metadata.chipCount) SID · \(metadata.modelDescription) · \(LibraryMetadata.durationDescription(duration))")
+                            .font(.caption2).foregroundStyle(.secondary).lineLimit(2)
+                    } else {
+                        Text("Metadaten unbekannt").font(.caption2).foregroundStyle(.secondary)
+                    }
+                    if let title = metadata?.title, title != row.track.name {
+                        Text(row.track.name).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    }
                     if showsFolderPath, !row.track.folderPath.isEmpty {
                         Text(row.track.folderPath)
                             .font(.caption2)

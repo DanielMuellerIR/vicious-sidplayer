@@ -473,7 +473,9 @@ select {
 /* Sammlungsansichten teilen sich den bestehenden Seitenleistenbereich. */
 .player { max-width: 1120px; height: min(720px, calc(100vh - 48px)); min-height: 580px; }
 .controls { flex-wrap: wrap; }
-.sidebar { width: 300px; }
+.sidebar { width: 300px; overflow-y: auto; }
+.sidebar > * { flex-shrink: 0; }
+.track-list { min-height: 120px; }
 .sidebar-tabs { display: flex; padding: 8px; gap: 4px; }
 .sidebar-tabs button { flex: 1; padding: 4px; }
 .sidebar-tabs button[aria-selected="true"] { border-color: var(--accent); color: var(--accent); }

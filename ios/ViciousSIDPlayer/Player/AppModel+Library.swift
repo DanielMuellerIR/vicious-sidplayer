@@ -70,6 +70,14 @@ extension AppModel {
         guard services.libraryReloadTask == nil else { return }
 
         services.libraryReloadTask = Task { [self] in
+            if restoreSession, tracks.isEmpty {
+                let stored = await Task.detached(priority: .userInitiated) { LibrarySnapshot(entries: library.entries) }.value
+                guard !Task.isCancelled else { return }
+                if !stored.tracks.isEmpty {
+                    applyLibrary(tracks: stored.tracks, folderTree: stored.folderTree)
+                    restoreSessionIfPossible()
+                }
+            }
             // `Task.detached` haelt die Dateiarbeit sicher vom Hauptthread fern;
             // `MusicLibrary` ist dafuer ausgelegt (interne Sperre um den Index).
             let snapshot = await Task.detached(priority: .utility) { () -> LibrarySnapshot in
@@ -86,9 +94,7 @@ extension AppModel {
             guard !Task.isCancelled else { return }
             applyLibrary(tracks: snapshot.tracks, folderTree: snapshot.folderTree)
 
-            if restoreSession {
-                restoreSessionIfPossible()
-            }
+            if restoreSession, currentTrackID == nil { restoreSessionIfPossible() }
         }
     }
 
@@ -375,6 +381,7 @@ extension AppModel {
             await runningImport?.value
             await runningReload?.value
             await runningEstimate?.value
+            await self.metadataIndex.suspend()
 
             // `clearFavorites: nil` — die Favoriten liegen in den
             // Benutzereinstellungen und werden unten auf dem MainActor
@@ -395,6 +402,7 @@ extension AppModel {
                 switch outcome {
                 case .failure(let error):
                     self.errorMessage = "Zurücksetzen fehlgeschlagen: \(error.localizedDescription)"
+                    self.metadataIndex.refresh(library: library)
                     self.resolveComputedLengthIfNeeded()
                     self.syncPlaybackLoop()
                 case .success(let report):
@@ -407,6 +415,7 @@ extension AppModel {
                     self.computedLength = nil
                     self.clearSessionState()
                     self.listening.setQueue(nil)
+                    self.metadataIndex.cancel(clear: true)
                     self.listening.flush()
                     self.applyLibrary(tracks: [], folderTree: AppModel.emptyFolderTree)
                     if !keepFavorites { self.setFavorites([]) }

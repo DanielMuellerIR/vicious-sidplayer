@@ -8,7 +8,8 @@ extension AppModel {
     }
 
     func listeningEntries(scope: ListeningScope) -> [ListeningEntry] {
-        ListeningSelection.entries(in: listeningPlaylist, scope: scope, favorites: PlaylistFavorites(ids: favorites))
+        LibrarySearchSelection.entries(in: listeningPlaylist, scope: scope, favorites: PlaylistFavorites(ids: favorites),
+            records: metadataIndex.records, duration: knownLibraryDuration)
     }
 
     func makeDefaultListeningQueue(trackID: String) {

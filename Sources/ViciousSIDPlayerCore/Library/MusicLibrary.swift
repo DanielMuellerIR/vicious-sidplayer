@@ -23,10 +23,9 @@ import Foundation
 
 /// Ein Eintrag der Bibliothek — genau eine SID-Datei.
 ///
-/// Bewusst OHNE Titel und Komponist: die stehen im Datei-Header und muessten
-/// dafuer geparst werden. Bei mehreren tausend Dateien (HVSC hat >50.000) waere
-/// das beim Scan viel zu teuer. Wer die Metadaten braucht, holt sie mit
-/// `MusicLibrary.metadata(for:)` gezielt fuer einen Eintrag nach.
+/// Der schnelle Dateiindex bleibt vom Headercache getrennt. Titel, Autor und
+/// Chipangaben ergaenzt `LibraryMetadataCache` abseits des Hauptthreads; ein
+/// Dateiscan wartet nicht auf das Parsen einer ganzen Sammlung.
 public struct MusicLibraryEntry: Codable, Hashable, Sendable, Identifiable {
     /// Pfad relativ zur Bibliothekswurzel, immer mit "/" getrennt und ohne
     /// fuehrenden Schraegstrich. Das ist die stabile ID (siehe oben).

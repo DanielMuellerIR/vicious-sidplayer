@@ -2336,6 +2336,534 @@
           }
         }
       }
+    },
+    "Suchansichten": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suchansichten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved searches"
+          }
+        }
+      }
+    },
+    "Suche sichern": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suche sichern"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save search"
+          }
+        }
+      }
+    },
+    "Verwalten": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwalten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage"
+          }
+        }
+      }
+    },
+    "Suchhilfe": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suchhilfe"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search help"
+          }
+        }
+      }
+    },
+    "Suchfelder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suchfelder"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search fields"
+          }
+        }
+      }
+    },
+    "Suchansicht sichern": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suchansicht sichern"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save search view"
+          }
+        }
+      }
+    },
+    "Suchansicht umbenennen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suchansicht umbenennen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rename search view"
+          }
+        }
+      }
+    },
+    "Beispiele": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beispiele"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Examples"
+          }
+        }
+      }
+    },
+    "Kurze Titel": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kurze Titel"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Short tunes"
+          }
+        }
+      }
+    },
+    "Unbekannte Dauer": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unbekannte Dauer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown duration"
+          }
+        }
+      }
+    },
+    "Titel, Autor oder Suchfelder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Titel, Autor oder Suchfelder"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Title, author or search fields"
+          }
+        }
+      }
+    },
+    "Autor unbekannt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autor unbekannt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown author"
+          }
+        }
+      }
+    },
+    "Modell unbekannt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modell unbekannt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown model"
+          }
+        }
+      }
+    },
+    "Dauer unbekannt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dauer unbekannt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown duration"
+          }
+        }
+      }
+    },
+    "Metadaten unbekannt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metadaten unbekannt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown metadata"
+          }
+        }
+      }
+    },
+    "Metadaten: %lld/%lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metadaten: %lld/%lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metadata: %lld/%lld"
+          }
+        }
+      }
+    },
+    "Metadatencache konnte nicht gesichert werden.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metadatencache konnte nicht gesichert werden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metadata cache could not be saved."
+          }
+        }
+      }
+    },
+    "Wörter durchsuchen Dateiname, Ordner und Metadaten.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wörter durchsuchen Dateiname, Ordner und Metadaten."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Words search file names, folders and metadata."
+          }
+        }
+      }
+    },
+    "Felder: title:, author:, released:, chips:, model:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Felder: title:, author:, released:, chips:, model:"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fields: title:, author:, released:, chips:, model:"
+          }
+        }
+      }
+    },
+    "Dauer von Subtune 1: min:1:00 max:3:00": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dauer von Subtune 1: min:1:00 max:3:00"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duration of subtune 1: min:1:00 max:3:00"
+          }
+        }
+      }
+    },
+    "Unbekannt: duration:unknown model:unknown metadata:unknown": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unbekannt: duration:unknown model:unknown metadata:unknown"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown values: duration:unknown model:unknown metadata:unknown"
+          }
+        }
+      }
+    },
+    "Mehrere Begriffe gelten zusammen. Leerzeichen in Werten: author:\"Rob Hubbard\"": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mehrere Begriffe gelten zusammen. Leerzeichen in Werten: author:\"Rob Hubbard\""
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Terms are combined. Spaces in values: author:\"Rob Hubbard\""
+          }
+        }
+      }
+    },
+    "Anführungszeichen schließen.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anführungszeichen schließen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close the quotation marks."
+          }
+        }
+      }
+    },
+    "chips erwartet 1, 2 oder 3.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "chips erwartet 1, 2 oder 3."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "chips expects 1, 2 or 3."
+          }
+        }
+      }
+    },
+    "model erwartet 6581, 8580 oder unknown.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "model erwartet 6581, 8580 oder unknown."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "model expects 6581, 8580 or unknown."
+          }
+        }
+      }
+    },
+    "min/max erwartet Sekunden oder m:ss.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "min/max erwartet Sekunden oder m:ss."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "min/max expects seconds or m:ss."
+          }
+        }
+      }
+    },
+    "Die Mindestdauer liegt über der Höchstdauer.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Mindestdauer liegt über der Höchstdauer."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minimum duration exceeds maximum duration."
+          }
+        }
+      }
+    },
+    "Unbekanntes Suchfeld: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unbekanntes Suchfeld: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown search field: %@"
+          }
+        }
+      }
+    },
+    "Leerer Wert für Suchfeld: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leerer Wert für Suchfeld: %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empty value for search field: %@"
+          }
+        }
+      }
+    },
+    "%@ erwartet known oder unknown.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ erwartet known oder unknown."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ expects known or unknown."
+          }
+        }
+      }
+    },
+    "Gespeicherte Suchansichten sind nicht lesbar. Die vorhandene Datei bleibt erhalten.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gespeicherte Suchansichten sind nicht lesbar. Die vorhandene Datei bleibt erhalten."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved search views cannot be read. The existing file is preserved."
+          }
+        }
+      }
+    },
+    "Suchansichten konnten nicht gesichert werden.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suchansichten konnten nicht gesichert werden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search views could not be saved."
+          }
+        }
+      }
+    },
+    "Speicherort für Suchansichten nicht verfügbar.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speicherort für Suchansichten nicht verfügbar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Storage location for search views is unavailable."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

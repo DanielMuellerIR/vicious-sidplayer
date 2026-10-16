@@ -17,7 +17,8 @@ final class ListeningIntegrationTests: XCTestCase {
 
     override func tearDown() async throws {
         for model in models {
-            model.coordinator.stop(); model.stopPlaybackLoop(); model.listening.flush()
+            model.coordinator.stop(); model.stopPlaybackLoop(); model.listening.flush(); model.savedSearches.flush()
+            await model.metadataIndex.suspend()
         }
         models = []
         defaults.removePersistentDomain(forName: suite)
@@ -31,6 +32,8 @@ final class ListeningIntegrationTests: XCTestCase {
         word(4, 2); word(6, 0x7C); word(8, 0x1000); word(10, 0x1000); word(12, 0x100B); word(14, 3); word(16, 1)
         data[0x77] = 0x28
         data.replaceSubrange(0x16..<(0x16 + title.utf8.count), with: Array(title.utf8))
+        let author = Array("Listening Composer".utf8)
+        data.replaceSubrange(0x36..<(0x36 + author.count), with: author)
         data.append(contentsOf: [0x0A,0x0A,0x0A,0x0A,0x18,0x69,0x20,0x8D,0x01,0xD4,0x60,0x60])
         return data
     }
@@ -124,6 +127,51 @@ final class ListeningIntegrationTests: XCTestCase {
         XCTAssertEqual(restored.coordinator.currentSubtune, 2)
         XCTAssertEqual(restored.coordinator.elapsedSeconds, 12, accuracy: 0.001)
         XCTAssertFalse(restored.coordinator.isPlaying)
+    }
+
+    private func awaitMetadata(_ model: AppModel) async throws {
+        for _ in 0..<200 where model.metadataIndex.isIndexing { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertFalse(model.metadataIndex.isIndexing)
+        for _ in 0..<100 where !model.savedSearches.isLoaded { try await Task.sleep(nanoseconds: 10_000_000) }
+    }
+
+    func testMetadataFiltersAndSavedViewsLeaveThePreparedSequenceUnchanged() async throws {
+        let model = try await makeModel(); try await awaitMetadata(model)
+        model.select(trackID: "Alpha/A.sid")
+        let queue = model.listening.queue
+        model.searchText = "title:Beta author:\"Listening Composer\" chips:1 model:8580"
+        XCTAssertEqual(model.visibleTracks.map(\.id), ["B.sid"])
+        XCTAssertEqual(model.listeningEntries(scope: .visible(searchText: model.searchText, favoritesOnly: false)).map(\.trackID), ["B.sid"])
+        XCTAssertEqual(model.listening.queue, queue)
+        model.savedSearches.save(name: "Beta", query: model.searchText, favoritesOnly: false); model.savedSearches.flush()
+        let restored = try await makeModel(); try await awaitMetadata(restored)
+        let saved = try XCTUnwrap(restored.savedSearches.document.searches.first)
+        restored.searchText = saved.query
+        XCTAssertEqual(restored.visibleTracks.map(\.id), ["B.sid"])
+    }
+
+    func testChangedHeaderInvalidatesMetadataWithoutReplacingAnExplicitQueue() async throws {
+        let model = try await makeModel(); try await awaitMetadata(model)
+        let entry = ListeningEntry(trackID: "Alpha/A.sid", subtune: 1)
+        model.listening.setQueue(ListeningQueue(libraryID: AppModel.listeningCollectionID, name: "Keep", entries: [entry]))
+        let root = try XCTUnwrap(model.services.library?.root)
+        try fixture(title: "Changed").write(to: root.appendingPathComponent("Alpha/A.sid"))
+        _ = try model.services.library?.refresh()
+        model.applyLibrary(tracks: model.tracks, folderTree: model.folderTree); try await awaitMetadata(model)
+        model.searchText = "title:Changed"
+        XCTAssertEqual(model.visibleTracks.map(\.id), ["Alpha/A.sid"])
+        XCTAssertEqual(model.listening.queue?.items, [entry])
+    }
+
+    func testFutureSavedViewsRemainReadOnlyAndByteIdentical() async throws {
+        let model = try await makeModel(); try await awaitMetadata(model)
+        let url = directory.appendingPathComponent("first/Support/saved-searches.json")
+        let raw = Data("{\"version\":99,\"searches\":[]}".utf8); try raw.write(to: url)
+        let controller = SavedLibrarySearchController(fileURL: url)
+        for _ in 0..<100 where !controller.isLoaded { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertTrue(controller.isReadOnly)
+        controller.save(name: "Do not write", query: "chips:3", favoritesOnly: false); controller.flush()
+        XCTAssertEqual(try Data(contentsOf: url), raw)
     }
 
     func testInvalidSubtuneCannotReplaceThePreparedTitle() async throws {

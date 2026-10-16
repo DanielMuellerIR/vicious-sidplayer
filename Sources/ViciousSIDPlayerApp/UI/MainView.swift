@@ -26,6 +26,8 @@ final class DropURLsContainer: @unchecked Sendable {
 public struct MainView: View {
     @StateObject private var coordinator = ViciousCoordinator()
     @StateObject private var listening = ListeningLibraryController()
+    @StateObject private var metadataIndex = LibraryMetadataController()
+    @StateObject private var savedSearches = SavedLibrarySearchController()
     @State private var sidebarPage = LibrarySidebarPage.library
     @State private var selectedListeningListID: UUID?
     @State private var listeningLibraryEntries: [ListeningEntry] = []
@@ -734,7 +736,7 @@ public struct MainView: View {
                     showListeningSubtuneSheet = false
                 }, onCancel: { showListeningSubtuneSheet = false })
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in listening.flush() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in listening.flush(); savedSearches.flush() }
         .onChange(of: listening.isLoaded) { ready in
             guard ready else { return }
             syncListeningLibrary()
@@ -1092,11 +1094,17 @@ public struct MainView: View {
         .padding(.horizontal, 12)
         .padding(.bottom, 6)
 
+        LibrarySearchTools(metadata: metadataIndex, saved: savedSearches, query: $searchText, favoritesOnly: $favoritesOnly, isLight: isLight)
         libraryListeningActions
 
         TrackListView(playlist: playlist,
                       currentTrackIdx: currentTrackIdx,
                       searchText: searchText,
+                      metadataRecords: metadataIndex.records,
+                      database: songlengthDB,
+                      lengthResolver: lengthResolver,
+                      clockMode: coordinator.clockMode,
+                      computedLength: computedLength,
                       favoritesOnly: favoritesOnly,
                       favorites: favorites,
                       isLight: isLight,
@@ -1237,8 +1245,13 @@ public struct MainView: View {
         if listening.queue == nil, playlist.track(at: currentTrackIdx) != nil { makeDefaultListeningQueue(at: currentTrackIdx) }
     }
 
+    private func knownLibraryDuration(_ metadata: LibraryMetadata) -> Double? {
+        lengthResolver.knownDuration(md5: metadata.md5, subtune: 0,
+            databaseLengths: songlengthDB?.lengths(forMD5: metadata.md5), clockMode: coordinator.clockMode)
+    }
+
     private func startListeningScope(_ scope: ListeningScope, name: String) {
-        let entries = ListeningSelection.entries(in: playlist, scope: scope, favorites: favorites)
+        let entries = LibrarySearchSelection.entries(in: playlist, scope: scope, favorites: favorites, records: metadataIndex.records, duration: knownLibraryDuration)
         let wholeLibrary = scope == .library
         let start = shuffle && !entries.isEmpty ? Int.random(in: entries.indices) : 0
         startListeningQueue(ListeningQueue(libraryID: listeningCollectionID, name: name,
@@ -1324,7 +1337,7 @@ public struct MainView: View {
     }
 
     private func prepareListeningList(scope: ListeningScope, name: String) {
-        prepareListeningList(entries: ListeningSelection.entries(in: playlist, scope: scope, favorites: favorites), name: name)
+        prepareListeningList(entries: LibrarySearchSelection.entries(in: playlist, scope: scope, favorites: favorites, records: metadataIndex.records, duration: knownLibraryDuration), name: name)
     }
 
     private func prepareListeningList(entries: [ListeningEntry], name: String) {
@@ -1498,6 +1511,7 @@ public struct MainView: View {
 
         // Duplikatpruefung und Aufnahme stehen im Core und sind dort getestet.
         let additions = playlist.append(sidFiles, root: library?.root)
+        metadataIndex.refreshOpenedFiles(playlist.externalIndices.map { playlist.tracks[$0] })
         refreshListeningLibrary()
         // Auch bei einer bereits geladenen Datei springt die Auswahl dorthin:
         // wer sie erneut hereinzieht, will sie hoeren.
@@ -1628,6 +1642,7 @@ public struct MainView: View {
         coordinator.stop()
         cancelLengthEstimate()
         cancelLibraryScan()
+        metadataIndex.cancel(clear: true)
         playlist.removeAll()
         syncListeningLibrary()
         folderTreeTask?.cancel()
@@ -1685,6 +1700,9 @@ public struct MainView: View {
         if startedFromStoredIndex {
             startInitialPlayback(restoreSession: restoreSession)
         }
+
+        metadataIndex.refresh(library: lib)
+        metadataIndex.refreshOpenedFiles(playlist.externalIndices.map { playlist.tracks[$0] })
 
         // Der Abgleich mit dem Dateisystem laeuft danach im Hintergrund und
         // zieht die Liste nach: neu hinzugekommene Dateien kommen dazu,
@@ -1753,6 +1771,8 @@ public struct MainView: View {
                                               root: root,
                                               keepingTrackAt: currentTrackIdx)
         refreshListeningLibrary(removeMissing: true)
+        if let library { metadataIndex.refresh(library: library) }
+        metadataIndex.refreshOpenedFiles(playlist.externalIndices.map { playlist.tracks[$0] })
         rebuildFolderTree(from: entries)
         loadLog.info("Bibliotheks-Abgleich fertig: \(entries.count, privacy: .public) Titel")
         // Ein waehrend des Scans eingegangener `track`-Befehl gewinnt gegen die
@@ -2346,6 +2366,13 @@ struct TrackListView: View {
     let playlist: Playlist
     let currentTrackIdx: Int
     let searchText: String
+    let metadataRecords: [String: LibraryMetadataRecord]
+    let database: SonglengthDB?
+    let lengthResolver: SongLengthResolver
+    let clockMode: SidClockMode
+    // Eine neue Schaetzung aendert den Resolver-Cache, dessen Instanz gleich
+    // bleibt. Dieser Wert zieht die Dauerfilter nach dem Ergebnis nach.
+    let computedLength: Double?
     let favoritesOnly: Bool
     let favorites: PlaylistFavorites
     let isLight: Bool
@@ -2375,9 +2402,10 @@ struct TrackListView: View {
     // Grundlast der Emulation).
 
     private var visibleIndices: [Int] {
-        playlist.visibleIndices(searchText: searchText,
-                                favoritesOnly: favoritesOnly,
-                                favorites: favorites)
+        LibrarySearchSelection.indices(in: playlist, query: LibrarySearchQuery(searchText), records: metadataRecords,
+            favoritesOnly: favoritesOnly, favorites: favorites) {
+                lengthResolver.knownDuration(md5: $0.md5, subtune: 0, databaseLengths: database?.lengths(forMD5: $0.md5), clockMode: clockMode)
+            }
     }
 
     /// Die Ordneransicht gilt nur fuer die ungefilterte Bibliothek. Sobald
@@ -2394,6 +2422,7 @@ struct TrackListView: View {
         let accentCol = isLight ? Color.macLightAccent : Color.macDarkAccent
         let surfaceCol = isLight ? Color.macLightSurface : Color.macDarkSurface
 
+        let visible = showsTreeNow ? [] : visibleIndices
         ScrollView {
             LazyVStack(spacing: 2) {
                 if showsTreeNow {
@@ -2421,7 +2450,8 @@ struct TrackListView: View {
                         }
                     }
                 } else {
-                    ForEach(visibleIndices, id: \.self) { idx in
+                    if visible.isEmpty { Text("Keine Treffer.").font(.caption).foregroundColor(textSecCol).padding(12) }
+                    ForEach(visible, id: \.self) { idx in
                         row(idx, textCol: textCol, textSecCol: textSecCol, accentCol: accentCol)
                     }
                 }
@@ -2480,6 +2510,15 @@ struct TrackListView: View {
         }
     }
 
+    private func metadataHelp(for track: PlaylistTrack) -> String {
+        let path = track.folderPath.isEmpty ? track.name : "\(track.folderPath)/\(track.name)"
+        guard let metadata = metadataRecords[track.id]?.metadata else { return path + "\nMetadaten unbekannt" }
+        let seconds = lengthResolver.knownDuration(md5: metadata.md5, subtune: 0,
+            databaseLengths: database?.lengths(forMD5: metadata.md5), clockMode: clockMode)
+        let duration = LibraryMetadata.durationDescription(seconds)
+        return "\(path)\n\(metadata.author ?? "Autor unbekannt")\n\(metadata.released ?? "Veröffentlichung unbekannt")\n\(metadata.chipCount) SID · \(metadata.modelDescription)\nDauer von Subtune 1: \(duration)"
+    }
+
     // Zeile = Auswahl-Button + separater Stern-Button (Favorit an/aus), beide
     // auf gemeinsamem Hintergrund.
     @ViewBuilder
@@ -2496,19 +2535,19 @@ struct TrackListView: View {
                     HStack(spacing: 8) {
                         Image(systemName: isActive ? "play.circle.fill" : "music.note")
                             .font(.system(size: 12))
-                        Text(track.name)
-                            .font(.system(size: 13))
-                            .lineLimit(1)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(metadataRecords[track.id]?.metadata?.title ?? track.name)
+                                .font(.system(size: 13)).lineLimit(1)
+                            Text(track.name + " · " + (metadataRecords[track.id]?.metadata?.author ?? "Autor unbekannt"))
+                                .font(.system(size: 10)).lineLimit(1)
+                                .foregroundColor(isActive ? .white : textSecCol)
+                        }
                         Spacer()
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(PlainButtonStyle())
-                // Der Ordner steht im Tooltip statt in einer zweiten Zeile: in
-                // einer nach Komponisten sortierten Sammlung gibt es denselben
-                // Dateinamen mehrfach, und die Seitenleiste ist zu schmal fuer
-                // beides.
-                .help(track.folderPath.isEmpty ? track.name : "\(track.folderPath)/\(track.name)")
+                .help(metadataHelp(for: track))
 
                 Button(action: { onToggleFavorite(idx) }) {
                     Image(systemName: isFavorite ? "star.fill" : "star")

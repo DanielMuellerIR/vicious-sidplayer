@@ -194,7 +194,7 @@ public final class ListeningLibraryController: ObservableObject {
         let revision = revision, snapshot = document
         isSaving = true
         pendingSave?.cancel()
-        let work = DispatchWorkItem { [weak self] in
+        let write: @Sendable () -> Void = { [weak self] in
             let result = Result { try store.save(snapshot) }
             Task { @MainActor in
                 guard let self, self.revision == revision else { return }
@@ -205,6 +205,7 @@ public final class ListeningLibraryController: ObservableObject {
                 }
             }
         }
+        let work = DispatchWorkItem(block: write)
         pendingSave = work
         writer.asyncAfter(deadline: .now() + 0.25, execute: work)
     }
@@ -218,7 +219,8 @@ public final class ListeningLibraryController: ObservableObject {
         revision += 1
         let snapshot = document
         do {
-            try writer.sync { try store.save(snapshot) }
+            let save: @Sendable () throws -> Void = { try store.save(snapshot) }
+            try writer.sync(execute: save)
             storageError = nil
             isSaving = false
         } catch { storageError = String(format: NSLocalizedString("Hörfolgen konnten nicht gesichert werden: %@", comment: ""), error.localizedDescription) }
