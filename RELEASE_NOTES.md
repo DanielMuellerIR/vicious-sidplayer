@@ -1,3 +1,13 @@
+Vicious SID Player 1.9.32 adds listening history, bookmarks and personal notes to macOS, iPhone and the standalone HTML5 player.
+
+Automated checks and native/HTML5 visual acceptance have passed. See [validation](docs/validation-1.9.32.md).
+
+- History sits beside Music, Lists and Queue. It records actual listening time after ten seconds, or half of a known short subtune. Seeking does not count as listening, and a prepared iPhone track stays unrecorded until playback starts.
+- Named bookmarks return to a file, subtune and position. Personal notes can apply to the whole file or one subtune. Missing or changed files remain visible and cannot silently play a different tune.
+- `heard:never`, `heard:yes` and `heard:unknown` extend the structured search. History keeps up to 2,000 plays from 180 days; the heard index survives automatic pruning. Explicitly clearing history also resets that index and preserves bookmarks and notes.
+- Personal data stays local. Unsupported, damaged or externally changed data is preserved. The Mac waits for pending history saves when quitting; iPhone saves when moving to the background. Browser users must select their music files again after restarting.
+- Bookmarks beyond 20 minutes remain stored with an explicit position-jump limit; playback from the beginning remains available. Cross-platform transfer of personal data is planned separately.
+
 Vicious SID Player 1.9.26 adds Sparkle updates to the macOS app.
 
 - The app checks for signed updates in the background. “Nach Updates suchen…” in the app menu starts an immediate check; installation requires your approval.

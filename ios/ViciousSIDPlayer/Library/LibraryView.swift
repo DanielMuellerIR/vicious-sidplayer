@@ -60,6 +60,7 @@ struct LibraryView: View {
                     Text("Musik").tag(ListeningPage.library)
                     Text("Listen").tag(ListeningPage.lists)
                     Text("Folge").tag(ListeningPage.queue)
+                    Text("Verlauf").tag(ListeningPage.history)
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 16).padding(.vertical, 8)
@@ -82,6 +83,8 @@ struct LibraryView: View {
                         .searchable(text: $model.searchText, prompt: Text("Titel, Autor oder Suchfelder"))
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
+                } else if page == .history {
+                    ListeningHistoryView { model.searchText = "heard:never"; page = .library }
                 } else {
                     ListeningView(controller: model.listening, page: page)
                 }

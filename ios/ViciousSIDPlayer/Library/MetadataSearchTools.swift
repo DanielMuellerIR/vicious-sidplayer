@@ -66,6 +66,7 @@ struct MetadataSearchTools: View {
                         Text("Wörter durchsuchen Dateiname, Ordner und Metadaten.")
                         Text("Felder: title:, author:, released:, chips:, model:")
                         Text("Dauer von Subtune 1: min:1:00 max:3:00")
+                        Text("Hörstatus: heard:never heard:yes heard:unknown")
                         Text("Unbekannt: duration:unknown model:unknown metadata:unknown")
                         Text("Mehrere Begriffe gelten zusammen. Leerzeichen in Werten: author:\"Rob Hubbard\"")
                     }

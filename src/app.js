@@ -177,7 +177,7 @@ positionScrubber.addEventListener('input', (e) => {
   
   if (seekTimer) clearTimeout(seekTimer);
   seekTimer = setTimeout(() => {
-    player.seek(target);
+    seekWebPlayback(target);
     lastVisuals.playtime = target;
     isSeeking = false;
     seekTimer = null;
@@ -228,7 +228,7 @@ window.addEventListener('keydown', (e) => {
     if (currentIdx === -1) return;
     const diff = e.key === 'ArrowLeft' ? -5 : 5;
     const pt = Math.max(0, Math.min(SCRUB_MAX, lastVisuals.playtime + diff));
-    player.seek(pt);
+    seekWebPlayback(pt);
     lastVisuals.playtime = pt;
     positionScrubber.value = pt;
     timeCurrent.textContent = fmtTime(pt);
@@ -380,6 +380,7 @@ async function loadTrack(index, autoplay, subtune = 0, updateListeningQueue = tr
   const generation = ++trackLoadGeneration;
   ++playbackGeneration;
   
+  observeWebHistory(false, true);
   currentIdx = index;
   const track = trackList[index];
   
@@ -450,6 +451,7 @@ async function loadTrack(index, autoplay, subtune = 0, updateListeningQueue = tr
 }
 
 function setPlayingUI(isPlaying) {
+  if (!isPlaying) observeWebHistory(false, true);
   playingState = isPlaying;
   playBtn.textContent = isPlaying ? '■ STOP' : '▶ PLAY';
   footerState.textContent = isPlaying ? '▶ ACTIVE' : '■ IDLE';
@@ -458,6 +460,7 @@ function setPlayingUI(isPlaying) {
 
 function setSubtune(sub) {
   if (!Number.isInteger(sub) || sub < 0 || sub >= totalSubtunesCount) return;
+  observeWebHistory(false, true);
   currentSubtune = sub;
   player.setSubtune(sub);
   lastVisuals.playtime = 0;
@@ -485,6 +488,7 @@ function updateClockLabel() {
   metaClock.textContent = clock.toUpperCase() + (player.clockMode === 'auto' ? ' (AUTO)' : '');
 }
 clockSelect.addEventListener('change', () => {
+  observeWebHistory(false, true);
   player.setClockMode(clockSelect.value);
   updateClockLabel();
 });
@@ -516,6 +520,7 @@ player.watchVisuals((visuals) => {
   lastVisuals.waveforms = visuals.waveforms;
   lastVisuals.pulsewidths = visuals.pulsewidths;
   lastVisuals.playtime = visuals.playtime;
+  observeWebHistory();
   const bucket = Math.floor((visuals.playtime || 0) / 5);
   if (bucket !== lastWebSessionBucket) { lastWebSessionBucket = bucket; persistWebListening(); }
   checkWebAutoNext(visuals.playtime);

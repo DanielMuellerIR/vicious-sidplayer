@@ -11,7 +11,7 @@ enum LibrarySearchText {
 /// Begriffe werden UND-verknuepft. Anfuehrungszeichen erhalten Leerzeichen in
 /// Feldwerten; unbekannte Felder sind Fehler statt unbemerkte leere Treffer.
 public struct LibrarySearchQuery: Equatable, Sendable {
-    private enum Field: String, Sendable { case any, title, author, released, chips, model, min, max, duration, metadata }
+    private enum Field: String, Sendable { case any, title, author, released, chips, model, min, max, duration, metadata, heard }
     private struct Term: Equatable, Sendable {
         let field: Field
         let value: String
@@ -54,6 +54,8 @@ public struct LibrarySearchQuery: Equatable, Sendable {
                 if !["6581", "8580", "unknown"].contains(value.lowercased()) { message = NSLocalizedString("model erwartet 6581, 8580 oder unknown.", comment: "") }
             case .duration, .metadata:
                 if !["known", "unknown"].contains(value.lowercased()) { message = String(format: NSLocalizedString("%@ erwartet known oder unknown.", comment: ""), field.rawValue) }
+            case .heard:
+                if !["yes", "never", "unknown"].contains(value.lowercased()) { message = NSLocalizedString("heard erwartet yes, never oder unknown.", comment: "") }
             case .min, .max:
                 let clock = value.split(separator: ":", omittingEmptySubsequences: false)
                 if clock.count == 1 { number = Double(value) }
@@ -70,7 +72,7 @@ public struct LibrarySearchQuery: Equatable, Sendable {
     }
 
     public func matches(name: String, folderPath: String, metadata: LibraryMetadata?, duration: Double? = nil,
-                        normalizedName: String? = nil, normalizedFolderPath: String? = nil) -> Bool {
+                        normalizedName: String? = nil, normalizedFolderPath: String? = nil, heard: Bool? = nil) -> Bool {
         guard error == nil else { return false }
         func contains(_ text: String?, _ value: String) -> Bool { text?.range(of: value, options: .literal) != nil }
         return terms.allSatisfy { term in
@@ -92,6 +94,12 @@ public struct LibrarySearchQuery: Equatable, Sendable {
             case .max: return duration.map { $0 <= term.number! } ?? false
             case .duration: return (duration != nil) == (term.value.lowercased() == "known")
             case .metadata: return (metadata != nil) == (term.value.lowercased() == "known")
+            case .heard:
+                switch term.value.lowercased() {
+                case "yes": return heard == true
+                case "never": return heard == false
+                default: return heard == nil
+                }
             }
         }
     }
@@ -110,7 +118,8 @@ public struct SavedLibrarySearch: Codable, Equatable, Identifiable, Sendable {
 public enum LibrarySearchSelection {
     public static func indices(in playlist: Playlist, query: LibrarySearchQuery, records: [String: LibraryMetadataRecord],
                                favoritesOnly: Bool, favorites: PlaylistFavorites,
-                               duration: (LibraryMetadata) -> Double? = { _ in nil }) -> [Int] {
+                               duration: (LibraryMetadata) -> Double? = { _ in nil },
+                               heard: (LibraryMetadata) -> Bool? = { _ in nil }) -> [Int] {
         if query.isEmpty && !favoritesOnly { return Array(playlist.tracks.indices) }
         return playlist.tracks.indices.filter { index in
             let track = playlist.tracks[index]
@@ -119,15 +128,16 @@ public enum LibrarySearchSelection {
             return query.matches(name: track.name, folderPath: track.folderPath, metadata: metadata,
                                  duration: query.requiresDuration ? metadata.flatMap(duration) : nil,
                                  normalizedName: record?.normalizedName.isEmpty == false ? record?.normalizedName : nil,
-                                 normalizedFolderPath: record?.normalizedFolderPath)
+                                 normalizedFolderPath: record?.normalizedFolderPath, heard: metadata.flatMap(heard))
         }
     }
 
     public static func entries(in playlist: Playlist, scope: ListeningScope, favorites: PlaylistFavorites,
-                               records: [String: LibraryMetadataRecord], duration: (LibraryMetadata) -> Double? = { _ in nil }) -> [ListeningEntry] {
+                               records: [String: LibraryMetadataRecord], duration: (LibraryMetadata) -> Double? = { _ in nil },
+                               heard: (LibraryMetadata) -> Bool? = { _ in nil }) -> [ListeningEntry] {
         if case .visible(let text, let favoritesOnly) = scope {
             return indices(in: playlist, query: LibrarySearchQuery(text), records: records, favoritesOnly: favoritesOnly,
-                           favorites: favorites, duration: duration).map { ListeningEntry(trackID: playlist.tracks[$0].id) }
+                           favorites: favorites, duration: duration, heard: heard).map { ListeningEntry(trackID: playlist.tracks[$0].id) }
         }
         return ListeningSelection.entries(in: playlist, scope: scope, favorites: favorites)
     }

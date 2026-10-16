@@ -51,6 +51,7 @@ extension AppModel {
             }
 
             cancelLengthEstimate()
+            observeHistory(force: true, playing: false)
             coordinator.stop()
             setCurrentTrackID(id)
             pendingListeningRestore = false
@@ -93,6 +94,7 @@ extension AppModel {
 
     func togglePlayPause() {
         if coordinator.isPlaying {
+            observeHistory(force: true, playing: false)
             coordinator.pause()
         } else if currentTrackID != nil {
             startPlayback(manual: true)
@@ -130,6 +132,7 @@ extension AppModel {
     func seek(to seconds: Double) {
         guard currentTrackID != nil else { return }
         let target = min(max(0, seconds), currentDuration)
+        observeHistory(force: true, playing: false)
         coordinator.seek(seconds: target)
         playbackOptions.refreshSleepTimer()
         applyPlaybackOptions()
@@ -148,6 +151,7 @@ extension AppModel {
     /// Waehlt einen Subtune derselben Datei.
     func setSubtune(_ index: Int, updateListeningQueue: Bool = true) {
         guard index >= 0, index < coordinator.subtunesCount else { return }
+        observeHistory(force: true, playing: false)
         coordinator.setSubtune(sub: index)
         if updateListeningQueue, let trackID = currentTrackID, var queue = listening.queue {
             queue.updateExplicitSubtune(index, trackID: trackID)
@@ -168,10 +172,12 @@ extension AppModel {
     /// Bewusst NICHT gespeichert — genau wie auf dem Mac gilt die Wahl nur fuer
     /// die laufende Sitzung. Sie ist ein Analysewerkzeug, keine Einstellung.
     func setModelOverride(_ model: Int?) {
+        observeHistory(force: true, playing: false)
         coordinator.setModelOverride(model)
     }
 
     func setClockMode(_ mode: SidClockMode) {
+        observeHistory(force: true, playing: false)
         coordinator.setClockMode(mode)
         resolveComputedLengthIfNeeded()
     }
@@ -189,6 +195,7 @@ extension AppModel {
         applyPlaybackOptions()
         services.audioSession.activate()
         coordinator.play()
+        observeHistory(force: true)
     }
 
     // MARK: - Hintergrund-Lauf (Auto-Next und Sperrbildschirm)
@@ -236,6 +243,7 @@ extension AppModel {
             stopPlaybackLoop()
             return
         }
+        observeHistory()
         let elapsed = coordinator.elapsedSeconds
         // Der NowPlayingController drosselt selbst; hier ist ohnehin nur 1 Hz.
         updateNowPlaying()
@@ -256,6 +264,7 @@ extension AppModel {
         }
         session.pauseHandler = { [weak self] in
             guard let self, self.coordinator.isPlaying else { return }
+            self.observeHistory(force: true, playing: false)
             self.coordinator.pause()
             self.syncPlaybackLoop()
             self.saveSessionState()
@@ -303,6 +312,7 @@ extension AppModel {
         // AVAudioEngine selbst ungueltig. Wird sie weiterbenutzt, bleibt die
         // App dauerhaft stumm, obwohl Titel und Status wiederhergestellt
         // aussehen.
+        observeHistory(force: true, playing: false)
         coordinator.rebuildAudioEngine()
         guard loadTrack(id: id, autoplay: false) else { return }
         if subtune > 0 { coordinator.setSubtune(sub: subtune) }

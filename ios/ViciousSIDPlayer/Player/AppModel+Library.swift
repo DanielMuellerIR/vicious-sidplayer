@@ -407,6 +407,7 @@ extension AppModel {
                     self.syncPlaybackLoop()
                 case .success(let report):
                     self.stopPlaybackLoop()
+                    self.observeHistory(force: true, playing: false)
                     self.coordinator.stop()
                     self.services.nowPlaying.clear()
                     self.setCurrentTrackID(nil)

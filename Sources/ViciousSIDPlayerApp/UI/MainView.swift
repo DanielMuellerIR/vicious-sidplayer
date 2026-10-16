@@ -29,6 +29,7 @@ public struct MainView: View {
     @StateObject private var metadataIndex = LibraryMetadataController()
     @StateObject private var savedSearches = SavedLibrarySearchController()
     @StateObject private var playbackOptions = PlaybackOptionsController()
+    @StateObject private var history = ListeningHistoryController()
     @State private var playbackOptionsPresentation: PlaybackOptionsPresentation?
     @State private var sidebarPage = LibrarySidebarPage.library
     @State private var selectedListeningListID: UUID?
@@ -62,7 +63,7 @@ public struct MainView: View {
     private var sidebarLayoutWidth: CGFloat { CGFloat(max(180, min(600, sidebarWidth))) }
     // Die Transportleiste braucht neben der Seitenleiste ihren eigenen Platz.
     // Sonst schiebt SwiftUI bei breiter Seitenleiste den Inhalt aus dem Fenster.
-    private var fullPlayerMinimumWidth: CGFloat { max(1140, sidebarLayoutWidth + 900) }
+    private var fullPlayerMinimumWidth: CGFloat { max(1140, sidebarLayoutWidth + 1020) }
     // Autoplay-Ordner aus den Einstellungen (Cmd+,). "" = Standard-Ordner.
     // Gleicher UserDefaults-Key wie in SettingsView — Aenderungen dort landen
     // hier sofort (onChange laedt die Playlist neu).
@@ -326,9 +327,10 @@ public struct MainView: View {
                         .background(borderCol)
 
                     Picker("Sammlungsansicht", selection: $sidebarPage) {
-                        Text("Musik").tag(LibrarySidebarPage.library)
-                        Text("Listen").tag(LibrarySidebarPage.lists)
-                        Text("Folge").tag(LibrarySidebarPage.queue)
+                        sidebarTab("Musik", symbol: "music.note.list").tag(LibrarySidebarPage.library)
+                        sidebarTab("Listen", symbol: "list.bullet.rectangle").tag(LibrarySidebarPage.lists)
+                        sidebarTab("Folge", symbol: "text.line.first.and.arrowtriangle.forward").tag(LibrarySidebarPage.queue)
+                        sidebarTab("Verlauf", symbol: "clock.arrow.circlepath").tag(LibrarySidebarPage.history)
                     }
                     .pickerStyle(.segmented)
                     .controlSize(.small)
@@ -339,6 +341,10 @@ public struct MainView: View {
 
                     if sidebarPage == .library {
                         librarySidebarContent
+                    } else if sidebarPage == .history {
+                        ListeningHistoryView(controller: history, currentReference: currentHistoryReference,
+                            currentTitle: coordinator.trackName, position: coordinator.elapsedSeconds, isLight: isLight,
+                            onPlay: playHistoryReference, onNeverHeard: { searchText = "heard:never"; sidebarPage = .library })
                     } else {
                         ListeningSidebarView(controller: listening,
                             selectedListID: $selectedListeningListID, page: sidebarPage,
@@ -504,7 +510,7 @@ public struct MainView: View {
                         // dem richtigen Chip korrekt). Wirkt live auf den laufenden Song.
                         Picker("", selection: Binding(
                             get: { coordinator.modelOverride ?? 0 },   // 0 = Auto
-                            set: { coordinator.setModelOverride($0 == 0 ? nil : $0) }
+                            set: { observeHistory(force: true, playing: false); coordinator.setModelOverride($0 == 0 ? nil : $0) }
                         )) {
                             Text("SID: Auto").tag(0)
                             Text("6581").tag(6581)
@@ -516,7 +522,7 @@ public struct MainView: View {
 
                         Picker("C64-Takt", selection: Binding(
                             get: { coordinator.clockMode },
-                            set: { coordinator.setClockMode($0) }
+                            set: { observeHistory(force: true, playing: false); coordinator.setClockMode($0) }
                         )) {
                             Text("Auto: \(SidClockMode.auto.resolve(coordinator.clockPreference).label)").tag(SidClockMode.auto)
                             Text("PAL").tag(SidClockMode.pal)
@@ -752,7 +758,6 @@ public struct MainView: View {
                     showListeningSubtuneSheet = false
                 }, onCancel: { showListeningSubtuneSheet = false })
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in listening.flush(); savedSearches.flush(); playbackOptions.flush() }
         .onChange(of: listening.isLoaded) { ready in
             guard ready else { return }
             syncListeningLibrary()
@@ -798,6 +803,12 @@ public struct MainView: View {
             // doppelte Observer und ein erneutes (storendes) Laden des audio/-Ordners.
             if !didInitialize {
                 didInitialize = true
+                AppDelegate.prepareTermination = {
+                    observeHistory(force: true, playing: false)
+                    listening.flush(); savedSearches.flush(); playbackOptions.flush()
+                    let saved = await history.flush()
+                    return saved || !history.hasUnsavedChanges
+                }
                 // Favoriten aus den Einstellungen. Die Umrechnung alter absoluter
                 // Pfade auf relative Titel-IDs passiert erst, wenn die
                 // Bibliothekswurzel feststeht (`migrateStoredIDs`).
@@ -864,6 +875,8 @@ public struct MainView: View {
         }
         .onChange(of: coordinator.isPaused) { _ in saveSessionState() }
         .onChange(of: coordinator.elapsedSeconds) { elapsed in
+            // Der Controller drosselt den vorhandenen .common-Zeittakt auf 1 Hz.
+            observeHistory()
             // Position alle 5 s sichern (Session-Restore), nicht bei jedem Tick.
             let bucket = Int(elapsed / 5.0)
             if bucket != lastSavedBucket {
@@ -876,6 +889,47 @@ public struct MainView: View {
                 updateNowPlayingInfo()
             }
             if !isTransitioning { handleConfiguredPlaybackEnd(elapsed: elapsed) }
+        }
+    }
+
+    @ViewBuilder
+    private func sidebarTab(_ title: String, symbol: String) -> some View {
+        if sidebarLayoutWidth >= 320 { Text(title) }
+        else { Image(systemName: symbol).help(title).accessibilityLabel(title) }
+    }
+
+    private var currentHistoryReference: ListeningPersonalReference? {
+        guard let track = playlist.track(at: currentTrackIdx), let currentMD5 else { return nil }
+        return ListeningPersonalReference(libraryID: listening.activeLibraryID, trackID: track.id,
+            md5: currentMD5, subtune: coordinator.currentSubtune)
+    }
+    private func observeHistory(force: Bool = false, playing: Bool? = nil) {
+        let known = personalDuration ?? currentTrackLengths.flatMap {
+            $0.indices.contains(coordinator.currentSubtune) && $0[coordinator.currentSubtune] > 0 ? $0[coordinator.currentSubtune] : nil
+        } ?? computedLength
+        history.observe(reference: currentHistoryReference, title: coordinator.trackName,
+            position: coordinator.elapsedSeconds, knownDuration: known,
+            isPlaying: (playing ?? coordinator.isPlaying) && !coordinator.isPreparingSeek, force: force)
+    }
+    private func playHistoryReference(_ reference: ListeningPersonalReference, position: Double) {
+        guard position <= ViciousProcessor.maximumSeekSeconds else {
+            errorMessage = "Positionssprünge sind bis 20:00 min möglich. Die gespeicherte Marke bleibt erhalten."
+            return
+        }
+        var contents = metadataIndex.records.compactMapValues { $0.metadata?.md5 }
+        if let currentHistoryReference { contents[currentHistoryReference.trackID] = currentHistoryReference.md5 }
+        switch ListeningReferenceResolver.resolve(reference, libraryID: listening.activeLibraryID, contents: contents) {
+        case .found(let id):
+            guard let index = playlist.tracks.firstIndex(where: { $0.id == id }),
+                  let data = try? Data(contentsOf: playlist.tracks[index].url), SonglengthDB.md5Hex(of: data) == reference.md5 else {
+                errorMessage = "Der Titel fehlt oder sein Inhalt wurde geändert."; return
+            }
+            playbackOptions.acknowledgeManualPlayback()
+            guard loadTrack(index: index, autoplay: false, subtune: reference.subtune ?? 0) else { return }
+            if position > 0 { seek(to: position) }
+            startPlayback()
+        case .missing: errorMessage = "Der Titel wurde in dieser Sammlung noch nicht gefunden. Den Bibliotheksabgleich abwarten."
+        case .ambiguous: errorMessage = "Mehrere Dateien haben denselben Inhalt. Den gewünschten Titel in der Bibliothek auswählen."
         }
     }
 
@@ -1113,6 +1167,7 @@ public struct MainView: View {
                       clockMode: coordinator.clockMode,
                       computedLength: computedLength,
                       playbackSettings: playbackOptions.document,
+                      heardMD5s: history.isLoaded && !history.isReadOnly ? history.document.heardMD5s : nil,
                       favoritesOnly: favoritesOnly,
                       favorites: favorites,
                       isLight: isLight,
@@ -1168,6 +1223,7 @@ public struct MainView: View {
         pendingInitialRestore = nil; startInitialPlayback(restoreSession: restore)
     }
     private func setPlaybackSubtune(_ sub: Int, updateQueue: Bool) {
+        observeHistory(force: true, playing: false)
         coordinator.setSubtune(sub: sub)
         if updateQueue, let track = playlist.track(at: currentTrackIdx), var queue = listening.queue {
             queue.updateExplicitSubtune(sub, trackID: track.id); listening.setQueue(queue)
@@ -1195,17 +1251,20 @@ public struct MainView: View {
         ensureListeningQueue()
         applyPlaybackOptions()
         coordinator.play()
+        observeHistory(force: true)
     }
 
     private func pausePlayback() {
         suppressInitialPlayback = true
         pendingTrackCommandID = nil
+        observeHistory(force: true, playing: false)
         coordinator.pause()
     }
 
     private func stopPlayback() {
         suppressInitialPlayback = true
         pendingTrackCommandID = nil
+        observeHistory(force: true, playing: false)
         coordinator.stop()
     }
 
@@ -1217,6 +1276,7 @@ public struct MainView: View {
     }
 
     private func seek(to seconds: Double) {
+        observeHistory(force: true, playing: false)
         coordinator.seek(seconds: seconds)
         playbackOptions.refreshSleepTimer(); applyPlaybackOptions()
         updateNowPlayingInfo()
@@ -1291,7 +1351,7 @@ public struct MainView: View {
     }
 
     private func startListeningScope(_ scope: ListeningScope, name: String) {
-        let entries = LibrarySearchSelection.entries(in: playlist, scope: scope, favorites: favorites, records: metadataIndex.records, duration: knownLibraryDuration)
+        let entries = LibrarySearchSelection.entries(in: playlist, scope: scope, favorites: favorites, records: metadataIndex.records, duration: knownLibraryDuration, heard: { history.hasHeard(md5: $0.md5) })
         let wholeLibrary = scope == .library
         let start = shuffle && !entries.isEmpty ? Int.random(in: entries.indices) : 0
         startListeningQueue(ListeningQueue(libraryID: listeningCollectionID, name: name,
@@ -1347,7 +1407,7 @@ public struct MainView: View {
         for _ in 0..<max(1, queue.items.count) {
             guard let entry = forward ? queue.next(allowCycle: repeatSequence) : queue.previous(allowCycle: repeatSequence) else {
                 listening.setQueue(queue)
-                if forward { coordinator.stop() } else { seek(to: 0) }
+                if forward { stopPlayback() } else { seek(to: 0) }
                 if skipped > 0 { errorMessage = "\(skipped) Einträge sind nicht abspielbar." }
                 return
             }
@@ -1358,6 +1418,7 @@ public struct MainView: View {
             }
             skipped += 1
         }
+        observeHistory(force: true, playing: false)
         coordinator.stop()
         errorMessage = "Kein weiterer Eintrag dieser Hörfolge ist abspielbar."
     }
@@ -1380,7 +1441,7 @@ public struct MainView: View {
     }
 
     private func prepareListeningList(scope: ListeningScope, name: String) {
-        prepareListeningList(entries: LibrarySearchSelection.entries(in: playlist, scope: scope, favorites: favorites, records: metadataIndex.records, duration: knownLibraryDuration), name: name)
+        prepareListeningList(entries: LibrarySearchSelection.entries(in: playlist, scope: scope, favorites: favorites, records: metadataIndex.records, duration: knownLibraryDuration, heard: { history.hasHeard(md5: $0.md5) }), name: name)
     }
 
     private func prepareListeningList(entries: [ListeningEntry], name: String) {
@@ -1493,6 +1554,7 @@ public struct MainView: View {
             // Session-Auswahl ersetzen. Ein defekter Restore-Eintrag hinterlaesst
             // damit keinen halb aktualisierten Zustand.
             cancelLengthEstimate()
+            observeHistory(force: true, playing: false)
             coordinator.stop()
             currentTrackIdx = index
             coordinator.setSid(sidFile)
@@ -1509,7 +1571,10 @@ public struct MainView: View {
             loadLog.info("loadTrack[\(index, privacy: .public)] geparst: \(fileURL.lastPathComponent, privacy: .public), autoplay=\(autoplay, privacy: .public)")
             applyPlaybackOptions()
             playbackOptions.refreshSleepTimer()
-            if autoplay, !playbackOptions.didExpire { coordinator.play() }
+            if autoplay, !playbackOptions.didExpire {
+                coordinator.play()
+                observeHistory(force: true)
+            }
             didLoad = true
             return true
         } catch {
@@ -1683,6 +1748,7 @@ public struct MainView: View {
     private func clearPlaylist() {
         listening.setQueue(nil)
         listeningLibraryEntries = []
+        observeHistory(force: true, playing: false)
         coordinator.stop()
         cancelLengthEstimate()
         cancelLibraryScan()
@@ -2419,6 +2485,7 @@ struct TrackListView: View {
     // bleibt. Dieser Wert zieht die Dauerfilter nach dem Ergebnis nach.
     let computedLength: Double?
     let playbackSettings: PlaybackSettingsDocument
+    let heardMD5s: Set<String>?
     let favoritesOnly: Bool
     let favorites: PlaylistFavorites
     let isLight: Bool
@@ -2449,9 +2516,9 @@ struct TrackListView: View {
 
     private var visibleIndices: [Int] {
         LibrarySearchSelection.indices(in: playlist, query: LibrarySearchQuery(searchText), records: metadataRecords,
-            favoritesOnly: favoritesOnly, favorites: favorites) {
+            favoritesOnly: favoritesOnly, favorites: favorites, duration: {
                 lengthResolver.knownDuration(md5: $0.md5, subtune: 0, databaseLengths: database?.lengths(forMD5: $0.md5), clockMode: clockMode, personalDuration: playbackSettings.endTime(md5: $0.md5, subtune: 0))
-            }
+            }, heard: { metadata in heardMD5s.map { $0.contains(metadata.md5) } })
     }
 
     /// Die Ordneransicht gilt nur fuer die ungefilterte Bibliothek. Sobald

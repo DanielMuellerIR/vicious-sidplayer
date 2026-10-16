@@ -10,6 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MainView.onAppear seinen Observer registriert. Deshalb hier zwischenlagern
     // und beim Erscheinen der View nachziehen. (Alles Main-Thread -> static ok.)
     @MainActor static var pendingURLs: [URL] = []
+    @MainActor static var prepareTermination: (() async -> Bool)?
+    private var isTerminating = false
     /// Dasselbe fuer Fernsteuerbefehle aus dem URL-Schema.
     @MainActor static var pendingCommands: [RemoteCommand] = []
 
@@ -60,6 +62,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !AppDelegate.pendingCommands.isEmpty {
             NotificationCenter.default.post(name: NSNotification.Name("remoteCommands"), object: nil)
         }
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !isTerminating else { return .terminateLater }
+        guard let prepare = Self.prepareTermination else { return .terminateNow }
+        isTerminating = true
+        Task { @MainActor in
+            let saved = await prepare()
+            var terminate = saved
+            if !saved {
+                let alert = NSAlert()
+                alert.messageText = "Persönliche Daten konnten nicht gesichert werden."
+                alert.informativeText = "Die vorhandene Datei bleibt erhalten. Beim Beenden können die letzten Änderungen an Verlauf, Lesezeichen oder Notizen verloren gehen."
+                alert.addButton(withTitle: "Zurück zur App")
+                alert.addButton(withTitle: "Trotzdem beenden")
+                terminate = alert.runModal() == .alertSecondButtonReturn
+            }
+            self.isTerminating = false
+            sender.reply(toApplicationShouldTerminate: terminate)
+        }
+        return .terminateLater
     }
 
     // Single-Window-App: schliesst man das Fenster, soll die App beenden

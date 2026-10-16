@@ -31,6 +31,8 @@ final class AppModel: ObservableObject {
     /// Der plattformneutrale Koordinator aus dem Core (AVAudioEngine + Emulator).
     /// Views beobachten ihn direkt fuer Titel, Laufzeit und Oszilloskopdaten.
     let coordinator = ViciousCoordinator()
+    let history: ListeningHistoryController
+    let historyBackgroundSaver = ListeningHistoryBackgroundSaver()
     let listening: ListeningLibraryController
     var listeningPlaylist = Playlist()
     var listeningSubscriptions = Set<AnyCancellable>()
@@ -71,7 +73,7 @@ final class AppModel: ObservableObject {
     /// dieselbe braucht — vorher stand sie hier und dort in je eigener Fassung.
     var visibleTracks: [LibraryTrack] {
         LibrarySearchSelection.indices(in: listeningPlaylist, query: LibrarySearchQuery(searchText), records: metadataIndex.records,
-            favoritesOnly: favoritesOnly, favorites: PlaylistFavorites(ids: favorites), duration: knownLibraryDuration).map { tracks[$0] }
+            favoritesOnly: favoritesOnly, favorites: PlaylistFavorites(ids: favorites), duration: knownLibraryDuration, heard: { history.hasHeard(md5: $0.md5) }).map { tracks[$0] }
     }
 
     func knownLibraryDuration(_ metadata: LibraryMetadata) -> Double? {
@@ -229,6 +231,7 @@ final class AppModel: ObservableObject {
     init(defaults: UserDefaults = .standard, listeningFileURL: URL? = ListeningLibraryStore.defaultURL()) {
         self.defaults = defaults
         self.listening = ListeningLibraryController(fileURL: listeningFileURL)
+        self.history = ListeningHistoryController(fileURL: listeningFileURL?.deletingLastPathComponent().appendingPathComponent(ListeningHistoryStore.fileName))
         self.savedSearches = SavedLibrarySearchController(fileURL: listeningFileURL?.deletingLastPathComponent().appendingPathComponent("saved-searches.json"))
         self.playbackOptions = PlaybackOptionsController(fileURL: listeningFileURL?.deletingLastPathComponent().appendingPathComponent("playback-options.json"))
         loadSettings()
@@ -245,6 +248,8 @@ final class AppModel: ObservableObject {
         playbackOptions.$stopAfterSubtune.dropFirst().sink { [weak self] _ in
             Task { @MainActor [weak self] in self?.applyPlaybackOptions() }
         }.store(in: &listeningSubscriptions)
+        history.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &listeningSubscriptions)
         listening.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &listeningSubscriptions)
         metadataIndex.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
@@ -367,7 +372,11 @@ final class AppModel: ObservableObject {
         let active = (phase == .active)
         guard active != isSceneActive else { return }
         isSceneActive = active
-        if !active { listening.flush(); savedSearches.flush(); playbackOptions.flush() }
+        if !active {
+            observeHistory(force: true)
+            listening.flush(); savedSearches.flush(); playbackOptions.flush()
+            historyBackgroundSaver.flush(history)
+        }
         playbackOptions.refreshSleepTimer()
         // Den Spiegel-Takt des Koordinators mitziehen: im Vordergrund fluessige
         // 50 Hz fuers Oszilloskop, im Hintergrund einmal pro Sekunde. Das reicht

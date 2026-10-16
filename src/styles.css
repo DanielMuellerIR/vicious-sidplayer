@@ -510,3 +510,12 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 @media (max-width: 768px) { .player { height: calc(100vh - 16px); min-height: 0; } }
 
 @media (min-width: 769px) and (max-height: 628px) { body { height: auto; align-items: flex-start; } .player { height: 580px; } }
+
+.history-entry { display: flex; flex-direction: column; gap: 7px; padding: 12px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.history-entry small { color: var(--text-secondary); }
+.history-entry p { white-space: pre-wrap; margin: 0; max-height: 8em; overflow: auto; }
+#history-status { white-space: pre-wrap; font-size: 12px; }
+#history-editor { max-width: min(460px, calc(100vw - 32px)); }
+#history-editor textarea { box-sizing: border-box; width: 100%; resize: vertical; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border); padding: 8px; margin: 12px 0; }
+body:has(.player.theme-dark) #history-editor { --bg-secondary: #2d2d2d; --text-primary: #fff; --border: #3c3c3e; }
+body:has(.player.theme-light) #history-editor { --bg-secondary: #fff; --text-primary: #1d1d1f; --border: #d3d3d3; }

@@ -2,7 +2,7 @@ import SwiftUI
 import ViciousSIDPlayerCore
 
 enum ListeningPage: String, CaseIterable {
-    case library, lists, queue
+    case library, lists, queue, history
 }
 
 struct ListeningView: View {

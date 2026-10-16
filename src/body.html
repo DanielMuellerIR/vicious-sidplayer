@@ -68,11 +68,13 @@
         <button id="tab-library" role="tab">Music</button>
         <button id="tab-lists" role="tab">Lists</button>
         <button id="tab-queue" role="tab">Queue</button>
+        <button id="tab-history" role="tab">History</button>
       </div>
       <div id="listening-status" class="listening-status" role="status"></div>
       <div class="sidebar-tools" id="library-tools">
         <input id="library-search" type="search" placeholder="Search titles or folders" aria-label="Search titles or folders">
         <label><input type="checkbox" id="favorites-only"> Favorites only</label>
+        <label><input type="checkbox" id="never-heard"> Never heard</label>
         <div class="tool-row"><button id="play-library">Play all</button><button id="play-selection">Play results</button><button id="play-favorites">Favorites</button></div>
         <div class="tool-row"><input id="folder-path" placeholder="Folder path" aria-label="Folder path"><button id="play-folder">Play folder</button></div>
         <div class="tool-row"><button id="save-selection">Save results</button><button id="clear-library">Clear</button></div>
@@ -87,6 +89,12 @@
       <div class="sidebar-tools" id="queue-tools" hidden>
         <strong id="queue-title"></strong><span id="queue-position"></span>
         <div class="tool-row"><button id="save-queue">Save as list</button><button id="end-queue">End queue</button></div>
+      </div>
+      <div class="sidebar-tools" id="history-tools" hidden>
+        <select id="history-section" aria-label="Personal data view"><option value="events">Listening history</option><option value="bookmarks">Bookmarks</option><option value="notes">Personal notes</option></select>
+        <div class="tool-row"><button id="add-bookmark">Bookmark</button><button id="add-note">Note</button><button id="clear-history">Clear history</button></div>
+        <small>Up to 2,000 plays / 180 days. Heard status stays until you clear history.</small>
+        <div id="history-status" role="status"></div>
       </div>
       <div class="track-list" id="track-list">
         <!-- Javascript renders track rows here -->
@@ -130,3 +138,14 @@
     <div id="footer-state">■ IDLE</div>
   </div>
 </div>
+
+<dialog id="history-editor">
+  <form id="history-editor-form">
+    <h2 id="history-editor-title">Personal note</h2>
+    <p id="history-editor-reference"></p>
+    <label id="history-note-scope-label">Applies to <select id="history-note-scope"><option value="subtune">This subtune</option><option value="file">Whole file</option></select></label>
+    <label for="history-editor-text">Name or note</label>
+    <textarea id="history-editor-text" rows="7" maxlength="16000"></textarea>
+    <div class="tool-row"><button type="button" id="history-editor-cancel">Cancel</button><button type="submit">Save</button></div>
+  </form>
+</dialog>

@@ -5,6 +5,7 @@ enum LibrarySidebarPage: String, CaseIterable {
     case library
     case lists
     case queue
+    case history
 }
 
 struct ListeningSidebarView: View {

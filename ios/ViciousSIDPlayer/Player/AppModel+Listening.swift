@@ -9,7 +9,7 @@ extension AppModel {
 
     func listeningEntries(scope: ListeningScope) -> [ListeningEntry] {
         LibrarySearchSelection.entries(in: listeningPlaylist, scope: scope, favorites: PlaylistFavorites(ids: favorites),
-            records: metadataIndex.records, duration: knownLibraryDuration)
+            records: metadataIndex.records, duration: knownLibraryDuration, heard: { history.hasHeard(md5: $0.md5) })
     }
 
     func makeDefaultListeningQueue(trackID: String) {
@@ -70,12 +70,14 @@ extension AppModel {
         for _ in 0..<max(1, queue.items.count) {
             guard let entry = forward ? queue.next(allowCycle: repeatSequence) : queue.previous(allowCycle: repeatSequence) else {
                 listening.setQueue(queue)
+                observeHistory(force: true, playing: false)
                 if forward { coordinator.stop() } else { coordinator.seek(seconds: 0) }
                 saveSessionState(); syncPlaybackLoop(); updateNowPlaying(force: true)
                 return
             }
             if loadListeningEntry(entry, autoplay: autoplay) { listening.setQueue(queue); saveSessionState(); return }
         }
+        observeHistory(force: true, playing: false)
         coordinator.stop(); syncPlaybackLoop(); saveSessionState(); updateNowPlaying(force: true)
         errorMessage = String(localized: "Kein weiterer Eintrag dieser Hörfolge ist abspielbar.")
     }

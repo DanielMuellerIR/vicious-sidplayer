@@ -3,11 +3,12 @@ function initializeListeningUI() {
   let storage;
   try { storage = localStorage; } catch (_) {}
   webListeningStore = new ListeningDataStore(storage);
+  initializeWebHistory(storage);
   listeningQueue = webListeningStore.document.queue ? ListeningSequence.fromJSON(webListeningStore.document.queue) : null;
   pendingWebRestore = !!(listeningQueue || webListeningStore.document.session);
   if (listeningQueue && webListeningStore.document.shuffle) listeningQueue.restart(true, true);
   $('listening-shuffle').checked = webListeningStore.document.shuffle;
-  for (const page of ['library', 'lists', 'queue']) $('tab-' + page).addEventListener('click', () => switchListeningPage(page));
+  for (const page of ['library', 'lists', 'queue', 'history']) $('tab-' + page).addEventListener('click', () => switchListeningPage(page));
   for (const id of ['library-search', 'favorites-only']) $(id).addEventListener('input', () => { listeningUI.offset = 0; refreshPlaylistUI(); });
   $('play-library').addEventListener('click', () => startWebScope('library'));
   $('play-selection').addEventListener('click', () => startWebScope('visible'));
@@ -37,6 +38,7 @@ function initializeListeningUI() {
   $('end-queue').addEventListener('click', () => { stopWebSequence(); listeningQueue = null; persistWebListening(); renderListeningUI(); });
   $('clear-library').addEventListener('click', () => {
     if (!window.confirm('Clear the library and queue? Saved lists and music files are kept.')) return;
+    observeWebHistory(false, true);
     player.unload(); currentIdx = -1; trackList = []; listeningQueue = null; pendingWebRestore = false;
     webListeningStore.document.libraryIDs = []; webListeningStore.document.session = null;
     playBtn.disabled = true; positionScrubber.disabled = true; setPlayingUI(false);
@@ -99,7 +101,7 @@ function visibleWebLibraryIDs() {
   const catalog = new Map(webListeningStore.document.catalog.map(t => [t.id, t]));
   return webListeningStore.document.libraryIDs.filter(id => {
     const track = catalog.get(id);
-    return track && (!$('favorites-only').checked || favorites.has(id)) && (!needle || (track.name + ' ' + track.path).toLocaleLowerCase().includes(needle));
+    return track && (!$('never-heard').checked || !webHistoryStore.readOnly && !!webHistoryStore.storage && !webHistoryStore.document.heard.includes(track.fingerprint)) && (!$('favorites-only').checked || favorites.has(id)) && (!needle || (track.name + ' ' + track.path).toLocaleLowerCase().includes(needle));
   });
 }
 function webScopeEntries(scope) {
@@ -151,7 +153,7 @@ async function advanceWebQueue(forward, autoplay) {
   let skipped = 0;
   for (let i = 0; i < Math.max(1, queue.items.length); i++) {
     const entry = forward ? queue.next() : queue.previous();
-    if (!entry) { if (forward) stopWebSequence(); else player.seek(0); return; }
+    if (!entry) { if (forward) stopWebSequence(); else seekWebPlayback(0); return; }
     if (await playWebEntry(entry, autoplay)) {
       listeningQueue = queue; listeningUI.offset = Math.floor(queue.currentIndex / listeningUI.pageSize) * listeningUI.pageSize;
       persistWebListening(); renderListeningUI(); if (skipped) showError(`${skipped} unavailable entries skipped.`); return;
@@ -169,7 +171,7 @@ async function enqueueWebEntry(entry) {
   }
   persistWebListening(); renderListeningUI();
 }
-function stopWebSequence() { player.stop(); player.seek(0); lastVisuals.playtime = 0; setPlayingUI(false); persistWebListening(); }
+function stopWebSequence() { observeWebHistory(false, true); player.stop(); seekWebPlayback(0); lastVisuals.playtime = 0; setPlayingUI(false); persistWebListening(); }
 function makeDefaultWebQueue(index) {
   const entries = webScopeEntries('library');
   const start = entries.findIndex(e => e.trackID === trackList[index]?.id);
@@ -201,7 +203,7 @@ function missingWebFileCount() {
 }
 function renderWebStorageStatus() {
   const missing = missingWebFileCount();
-  $('listening-status').textContent = [webListeningStore.error, missing ? `${missing} files need selection. Reopen the same files or folder; saved lists do not grant file access.` : ''].filter(Boolean).join('\n');
+  $('listening-status').textContent = [webListeningStore.error, $('never-heard').checked ? webHistoryStore?.error : null, missing ? `${missing} files need selection. Reopen the same files or folder; saved lists do not grant file access.` : ''].filter(Boolean).join('\n');
 }
 function webButton(label, action, disabled = false, className = '') {
   const button = document.createElement('button'); button.type = 'button'; button.textContent = label; button.disabled = disabled;
@@ -214,7 +216,7 @@ function renderListeningUI() {
   if (!webListeningStore) return;
   const doc = webListeningStore.document, readonly = webListeningStore.readOnly, loaded = new Set(trackList.map(t => t.id));
   if (!selectedWebList()) listeningUI.selectedListID = doc.lists[0]?.id || null;
-  for (const page of ['library', 'lists', 'queue']) {
+  for (const page of ['library', 'lists', 'queue', 'history']) {
     $('tab-' + page).setAttribute('aria-selected', String(listeningUI.page === page)); $(page + '-tools').hidden = listeningUI.page !== page;
   }
   for (const id of ['list-picker', 'append-list']) {
@@ -242,6 +244,7 @@ function renderListeningUI() {
     const option = document.createElement('option'); option.value = String(i); option.textContent = trackList[i].name; trackSelect.appendChild(option);
   }
   trackSelect.value = currentIdx >= 0 ? String(currentIdx) : '';
+  if (listeningUI.page === 'history') { renderWebHistory(); renderWebStorageStatus(); return; }
   const rows = listeningUI.page === 'library' ? visibleWebLibraryIDs().map(id => ({ id, trackID: id, subtune: null }))
     : listeningUI.page === 'lists' ? list?.entries || [] : listeningQueue?.items || [];
   listeningUI.offset = Math.min(listeningUI.offset, Math.max(0, Math.floor((rows.length - 1) / listeningUI.pageSize) * listeningUI.pageSize));

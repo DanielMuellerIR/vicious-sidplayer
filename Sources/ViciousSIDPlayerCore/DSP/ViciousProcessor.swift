@@ -1227,8 +1227,10 @@ public final class ViciousProcessor: Sendable {
     }
 
     /// Dieselbe Grenze fuer Emulation, gepufferte Position und Anzeige.
+    public static let maximumSeekSeconds = 1200.0
+
     public static func normalizedSeekSeconds(_ seconds: Double) -> Double {
-        seconds.isFinite ? min(1200.0, max(0.0, seconds)) : 0.0
+        seconds.isFinite ? min(maximumSeekSeconds, max(0.0, seconds)) : 0.0
     }
 
     public var sampleRate: Double { samplerate }

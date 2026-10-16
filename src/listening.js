@@ -114,15 +114,15 @@ function validateListeningDocument(doc) {
     || doc.session.subtune > 255 || !Number.isFinite(doc.session.position) || doc.session.position < 0)) throw new Error('Invalid listening session. The original data is preserved.');
 }
 class ListeningDataStore {
-  constructor(storage, key = 'vicious-listening-v1') {
-    this.storage = storage; this.key = key; this.document = emptyListeningDocument(); this.readOnly = false; this.error = null;
+  constructor(storage, key = 'vicious-listening-v1', empty = emptyListeningDocument, validate = validateListeningDocument) {
+    this.storage = storage; this.key = key; this.document = empty(); this.validate = validate; this.readOnly = false; this.error = null;
     if (!storage) { this.error = 'Storage is unavailable. Changes are temporary.'; return; }
     let raw;
     try { raw = storage.getItem(key); }
     catch (_) { this.storage = null; this.error = 'Storage is unavailable. Changes are temporary.'; return; }
     this.savedRaw = raw;
     if (raw) {
-      try { const doc = JSON.parse(raw); validateListeningDocument(doc); this.document = doc; }
+      try { if (raw.length > 32 * 1024 * 1024) throw new Error('Personal data is too large'); const doc = JSON.parse(raw); this.validate(doc); this.document = doc; }
       catch (_) { this.readOnly = true; this.error = 'Saved listening data cannot be read. The original data is preserved.'; }
     }
   }
@@ -133,8 +133,8 @@ class ListeningDataStore {
       if (this.storage.getItem(this.key) !== this.savedRaw) {
         this.readOnly = true; this.error = 'Listening data changed in another page. Reload this page before making changes.'; return false;
       }
-      validateListeningDocument(this.document);
-      const raw = JSON.stringify(this.document); this.storage.setItem(this.key, raw); this.savedRaw = raw; this.error = null; return true;
+      this.validate(this.document);
+      const raw = JSON.stringify(this.document); if (raw.length > 32 * 1024 * 1024) throw new Error('Personal data is too large'); this.storage.setItem(this.key, raw); this.savedRaw = raw; this.error = null; return true;
     } catch (_) { this.error = 'Changes could not be saved. They remain available in this session.'; return false; }
   }
 }

@@ -11,6 +11,7 @@ extension AppModel {
             autoNext: autoNext, hasPersonalEnd: personalDuration != nil))
     }
     func stopForPlaybackOptions() {
+        observeHistory(force: true, playing: false)
         coordinator.stop(); stopPlaybackLoop(); services.lastSessionBucket = -1
         saveSessionState(); updateNowPlaying(force: true)
     }

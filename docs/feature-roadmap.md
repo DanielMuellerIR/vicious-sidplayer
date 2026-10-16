@@ -10,8 +10,8 @@ Dieser Plan setzt die [Erweiterungsanalyse](feature-opportunities.md) um. Jede S
 | 02 | Hörfolgen, Subtunes und Warteschlange: Core und Mac | 8–12 h | Abgeschlossen in v1.9.28 |
 | 02b | Hörfolgen auf iPhone und HTML5 | 6–10 h | Abgeschlossen in v1.9.29; iPhone-Nachprüfung erfolgt |
 | 03 | Metadatensuche und gespeicherte Filter | 6–10 h | Abgeschlossen in v1.9.30 |
-| 04 | Repeat, Fadeout, Endzeiten und Einschlaftimer | 6–10 h | Implementiert in v1.9.31; kontrollierter Mac-Endlauf offen |
-| 05 | Verlauf, Lesezeichen und Notizen | 6–10 h | Core vorbereitet; Oberflächen und Integration offen |
+| 04 | Repeat, Fadeout, Endzeiten und Einschlaftimer | 6–10 h | Abgeschlossen in v1.9.31; kontrollierte Mac-Nachprobe bestanden |
+| 05 | Verlauf, Lesezeichen und Notizen | 6–10 h | Abgeschlossen in v1.9.32; native und HTML5-Abnahme bestanden |
 | 06 | Austausch persönlicher Sammlungsdaten | 6–10 h | Geplant |
 | 07 | Solo und getrennte Multi-SID-Steuerung | 4–6 h | Geplant |
 | 08 | Piano-, Registeransicht und A/B-Schleifen | 8–12 h | Geplant |

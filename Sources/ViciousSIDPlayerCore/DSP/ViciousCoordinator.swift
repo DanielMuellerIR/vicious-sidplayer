@@ -162,7 +162,7 @@ public final class ViciousCoordinator: ObservableObject {
     private var processorSlot: ProcessorSlot?
     private var seekTask: Task<Void, Never>?
     private var seekGeneration = 0
-    var isPreparingSeek: Bool { seekTask != nil }
+    public var isPreparingSeek: Bool { seekTask != nil }
     private let visualsBuffer = RealtimeVisualsBuffer()
     private var uiUpdateTimer: Timer?
     // Taktrate, mit der Oszilloskop-Daten und Laufzeit aus dem Realtime-Puffer

@@ -6,6 +6,8 @@ const wrapper = await readFile(new URL('../sidplayer.js', import.meta.url), 'utf
 const { SidPlayer, parseSidHeader } = await import(`data:text/javascript;base64,${Buffer.from(wrapper).toString('base64')}`);
 const source = await readFile(new URL('../sid-player-worklet.js', import.meta.url), 'utf8');
 const listeningSource = await readFile(new URL('../src/listening.js', import.meta.url), 'utf8');
+const historySource = await readFile(new URL('../src/history.js', import.meta.url), 'utf8');
+const historyUI = await readFile(new URL('../src/history-ui.js', import.meta.url), 'utf8');
 const listeningUI = await readFile(new URL('../src/listening-ui.js', import.meta.url), 'utf8');
 const appSource = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
 const Engine = new Function('sampleRate', source.slice(0, source.indexOf('class SidPlayerWorklet')) + '; return SidPlayerProcessor;')(44100);
@@ -95,11 +97,12 @@ function ui() {
     addEventListener(name, fn) { this.listeners[name] = fn; }
     appendChild(child) { this.children.push(child); }
     setAttribute() {} querySelectorAll() { return []; } getContext() { return {}; }
+    showModal() { this.open = true; } close() { this.open = false; } focus() {}
   }
   let release;
   const module = new Promise(resolve => { release = resolve; });
   const elements = new Map();
-  const context = vm.createContext({ console, Uint8Array, WeakMap, setTimeout, clearTimeout,
+  const context = vm.createContext({ console, Uint8Array, WeakMap, setTimeout, clearTimeout, performance,
     document: { getElementById(id) { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); },
       createElement() { return new Element(); } },
     window: { addEventListener() {}, matchMedia() { return { matches: true }; }, AudioContext: class {
@@ -111,6 +114,8 @@ function ui() {
   });
   vm.runInContext(wrapper.replaceAll('export ', ''), context);
   vm.runInContext(listeningSource, context);
+  vm.runInContext(historySource, context);
+  vm.runInContext(historyUI, context);
   vm.runInContext(listeningUI, context);
   vm.runInContext(appSource, context);
   context.valid = sid();
@@ -312,4 +317,28 @@ test('two incoming identical copies cannot both relink to one old identity', asy
   assert.notEqual(page.run('trackList[0].id'), old);
   assert.notEqual(page.run('trackList[1].id'), old);
   assert.notEqual(page.run('trackList[0].id'), page.run('trackList[1].id'));
+});
+
+test('only the latest seek completion can resume the listening clock', async () => {
+  const mock = audioMock(), player = new SidPlayer(); mock.release();
+  await player.loadBuffer(sid()); await player.play('fixture');
+  player.seek(200); const first = player.seekRequest;
+  player.seek(300); const second = player.seekRequest;
+  const node = mock.nodes[0];
+  node.port.onmessage({ data: { type: 'seekComplete', generation: player.loadGen, request: first } });
+  assert.equal(player.seeking, true);
+  node.port.onmessage({ data: { type: 'seekComplete', generation: player.loadGen - 1, request: second } });
+  assert.equal(player.seeking, true);
+  node.port.onmessage({ data: { type: 'seekComplete', generation: player.loadGen, request: second } });
+  assert.equal(player.seeking, false);
+  player.setClockMode('ntsc'); assert.equal(player.seeking, true);
+  await player.loadBuffer(sid()); assert.equal(player.seeking, false);
+});
+
+test('a note editor keeps its original subtune when playback changes behind the dialog', async () => {
+  const model = ui();
+  model.run("trackList=[{id:'one',name:'One',buffer:valid,isUser:true}];webListeningStore.document.catalog=[{id:'one',path:'A/One.sid',fingerprint:'123456789abcdef0',size:valid.length,name:'One',subtunesCount:3}]");
+  await model.run('loadTrack(0,false)');
+  model.run("openWebHistoryEditor('note');currentSubtune=2;document.getElementById('history-note-scope').value='file';document.getElementById('history-note-scope').listeners.change();document.getElementById('history-note-scope').value='subtune';document.getElementById('history-note-scope').listeners.change()");
+  assert.equal(model.run('historyEditor.reference.subtune'), 0);
 });

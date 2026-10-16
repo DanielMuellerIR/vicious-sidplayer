@@ -1,6 +1,6 @@
 # Aktiver Backlog
 
-Die Erweiterungen ab v1.9.26 werden im [Erweiterungsplan](docs/feature-roadmap.md) verfolgt. Metadatensuche und Wiedergabeoptionen sind bis v1.9.31 umgesetzt. Verlauf, Lesezeichen und Notizen besitzen einen getesteten Core; Wiedergabeintegration und Oberflächen sind der nächste offene Schritt ([Core-Stand](docs/listening-history-core.md)).
+Die Erweiterungen ab v1.9.26 werden im [Erweiterungsplan](docs/feature-roadmap.md) verfolgt. Metadatensuche und Wiedergabeoptionen sind bis v1.9.31 umgesetzt. Verlauf, Lesezeichen und Notizen sind in v1.9.32 für native Apps und HTML5 umgesetzt und abgenommen ([Prüfstand](docs/validation-1.9.32.md)).
 
 1. ~~STIL-Integration~~ **auf dem Mac erledigt am 2026-08-23 (v1.9.12).** Parser,
    Zuordnung über die HVSC-Wurzel und Auto-Fund stehen im Core (`STIL.swift`,

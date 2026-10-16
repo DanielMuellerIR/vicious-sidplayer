@@ -1,3 +1,13 @@
+Vicious SID Player 1.9.32 ergänzt Hörverlauf, Lesezeichen und persönliche Notizen auf Mac, iPhone und im eigenständigen HTML5-Player.
+
+Automatisierte Prüfungen und die Sichtprüfung der nativen Apps und HTML5 sind bestanden. Siehe [Prüfstand](docs/validation-1.9.32.md).
+
+- Der Verlauf steht neben Musik, Listen und Folge. Er erfasst tatsächliche Hörzeit ab zehn Sekunden oder der Hälfte eines bekannten kurzen Subtunes. Ein Positionssprung zählt nicht als Hörzeit; ein vorbereiteter iPhone-Titel erscheint erst nach gestarteter Wiedergabe.
+- Benannte Lesezeichen führen zur Datei, zum Subtune und zur Position zurück. Persönliche Notizen gelten für die ganze Datei oder einen Subtune. Fehlende oder geänderte Dateien bleiben sichtbar und spielen nicht unbemerkt einen anderen Titel ab.
+- `heard:never`, `heard:yes` und `heard:unknown` ergänzen die strukturierte Suche. Der Verlauf bewahrt bis zu 2.000 Wiedergaben aus 180 Tagen; der Gehört-Index bleibt beim automatischen Kürzen erhalten. Bewusstes Leeren setzt auch diesen Index zurück und erhält Lesezeichen und Notizen.
+- Persönliche Daten bleiben lokal. Nicht unterstützte, beschädigte oder extern geänderte Daten werden erhalten. Der Mac wartet beim Beenden auf ausstehende Verlaufsspeicherung; das iPhone sichert beim Wechsel in den Hintergrund. Im Browser müssen Musikdateien nach einem Neustart erneut ausgewählt werden.
+- Lesezeichen nach 20 Minuten bleiben mit einem ausdrücklichen Hinweis auf die Sprunggrenze gespeichert; Abspielen von Anfang bleibt möglich. Der plattformübergreifende Datenaustausch ist separat geplant.
+
 Vicious SID Player 1.9.26 ergänzt Sparkle-Updates für die macOS-App.
 
 - Die App sucht im Hintergrund nach signierten Updates. „Nach Updates suchen…“ im App-Menü prüft sofort; die Installation braucht deine Zustimmung.

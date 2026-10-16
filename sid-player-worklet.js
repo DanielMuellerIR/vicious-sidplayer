@@ -762,6 +762,7 @@ class SidPlayerWorklet extends AudioWorkletProcessor {
     this.playing = false;
     this.loaded = false;
     this.seeking = false;
+    this.seekRequest = 0;
     
     this.visualizerTicker = 0;
     this.generation = 0;
@@ -786,9 +787,11 @@ class SidPlayerWorklet extends AudioWorkletProcessor {
       } else if (data.type === 'setVolume') {
         this.engine.setVolume(data.volume);
       } else if (data.type === 'setClockMode') {
+        this.seekRequest = data.request;
         this.engine.setClockMode(data.mode);
         this.seeking = this.loaded;
       } else if (data.type === 'seek') {
+        this.seekRequest = data.request;
         this.engine.beginSeek(data.seconds);
         this.seeking = true;
       }
@@ -802,7 +805,10 @@ class SidPlayerWorklet extends AudioWorkletProcessor {
     
     if (this.seeking) {
       this.seeking = this.engine.advanceSeek(32768, 1);
-      if (!this.seeking) this.port.postMessage({ type: 'visualizer', generation: this.generation, data: this.engine.getChannelsData() });
+      if (!this.seeking) {
+        this.port.postMessage({ type: 'seekComplete', generation: this.generation, request: this.seekRequest });
+        this.port.postMessage({ type: 'visualizer', generation: this.generation, data: this.engine.getChannelsData() });
+      }
       channelLeft.fill(0);
       if (channelRight) channelRight.fill(0);
       return true;
