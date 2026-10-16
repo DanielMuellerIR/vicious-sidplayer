@@ -57,6 +57,7 @@ final class AppModel: ObservableObject {
     @Published var favoritesOnly: Bool = false
     let metadataIndex = LibraryMetadataController()
     let savedSearches: SavedLibrarySearchController
+    let playbackOptions: PlaybackOptionsController
 
     /// Favoriten, als Menge relativer Pfade. Bewusst relativ und nicht absolut:
     /// der App-Container bekommt bei jeder Neuinstallation eine neue UUID, mit
@@ -74,7 +75,8 @@ final class AppModel: ObservableObject {
     }
 
     func knownLibraryDuration(_ metadata: LibraryMetadata) -> Double? {
-        metadata.firstSubtuneDuration(database: songlengthDB, cache: lengthCache, clockMode: coordinator.clockMode)
+        metadata.firstSubtuneDuration(database: songlengthDB, cache: lengthCache, clockMode: coordinator.clockMode,
+            personalDuration: playbackOptions.document.endTime(md5: metadata.md5, subtune: 0))
     }
 
     /// Der gerade geladene Titel als Datensatz, `nil` wenn keiner geladen ist.
@@ -89,7 +91,7 @@ final class AppModel: ObservableObject {
     @Published var shuffle: Bool = false { didSet { defaults.set(shuffle, forKey: Keys.shuffle); listening.setShuffle(shuffle) } }
 
     /// Am Songende automatisch zum naechsten Titel.
-    @Published var autoNext: Bool = true { didSet { defaults.set(autoNext, forKey: Keys.autoNext) } }
+    @Published var autoNext: Bool = true { didSet { defaults.set(autoNext, forKey: Keys.autoNext); applyPlaybackOptions() } }
 
     /// Master-Lautstaerke 0…1.
     @Published var volume: Float = 1.0 {
@@ -109,7 +111,7 @@ final class AppModel: ObservableObject {
         return SongLengthSelection.duration(databaseLengths: currentTrackLengths,
                                             subtune: coordinator.currentSubtune,
                                             computed: computedLength,
-                                            fallback: Self.fallbackDurationSeconds)
+                                            fallback: Self.fallbackDurationSeconds, personalDuration: personalDuration)
     }
 
     /// Fallback, wenn weder HVSC-Eintrag noch berechnete Laenge vorliegen —
@@ -181,9 +183,9 @@ final class AppModel: ObservableObject {
     /// HVSC-STIL, sofern der Nutzer eine importiert hat. Siehe `AppModel+STIL`.
     var stilDB: STILDatabase?
     /// Laengen des aktuellen Titels je Subtune (aus der HVSC-Datenbank).
-    @Published var currentTrackLengths: [Double]?
+    @Published var currentTrackLengths: [Double]? { didSet { applyPlaybackOptions() } }
     /// Im Hintergrund berechnete Laenge des aktuellen Subtunes.
-    @Published var computedLength: Double?
+    @Published var computedLength: Double? { didSet { applyPlaybackOptions() } }
     /// MD5 der aktuellen Datei — Schluessel fuer beide Laengenquellen.
     var currentMD5: String?
     let lengthCache = SongLengthCache.defaultCache()
@@ -228,13 +230,33 @@ final class AppModel: ObservableObject {
         self.defaults = defaults
         self.listening = ListeningLibraryController(fileURL: listeningFileURL)
         self.savedSearches = SavedLibrarySearchController(fileURL: listeningFileURL?.deletingLastPathComponent().appendingPathComponent("saved-searches.json"))
+        self.playbackOptions = PlaybackOptionsController(fileURL: listeningFileURL?.deletingLastPathComponent().appendingPathComponent("playback-options.json"))
         loadSettings()
+        playbackOptions.onStopRequested = { [weak self] in self?.stopForPlaybackOptions() }
+        playbackOptions.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &listeningSubscriptions)
+        playbackOptions.$document.dropFirst().sink { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.resolveComputedLengthIfNeeded(); self?.applyPlaybackOptions(); self?.updateNowPlaying(force: true)
+            }
+        }.store(in: &listeningSubscriptions)
+        playbackOptions.$remainingSleepSeconds.dropFirst().sink { [weak self] _ in
+            Task { @MainActor [weak self] in self?.applyPlaybackOptions() }
+        }.store(in: &listeningSubscriptions)
+        playbackOptions.$stopAfterSubtune.dropFirst().sink { [weak self] _ in
+            Task { @MainActor [weak self] in self?.applyPlaybackOptions() }
+        }.store(in: &listeningSubscriptions)
         listening.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &listeningSubscriptions)
         metadataIndex.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &listeningSubscriptions)
         savedSearches.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &listeningSubscriptions)
+        playbackOptions.$isLoaded.filter { $0 }.sink { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.pendingListeningRestore else { return }
+                self.pendingListeningRestore = false; self.restoreSessionIfPossible()
+            }
+        }.store(in: &listeningSubscriptions)
         listening.$isLoaded.filter { $0 }.sink { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -345,7 +367,8 @@ final class AppModel: ObservableObject {
         let active = (phase == .active)
         guard active != isSceneActive else { return }
         isSceneActive = active
-        if !active { listening.flush(); savedSearches.flush() }
+        if !active { listening.flush(); savedSearches.flush(); playbackOptions.flush() }
+        playbackOptions.refreshSleepTimer()
         // Den Spiegel-Takt des Koordinators mitziehen: im Vordergrund fluessige
         // 50 Hz fuers Oszilloskop, im Hintergrund einmal pro Sekunde. Das reicht
         // dort fuer Auto-Next und die Sperrbildschirm-Anzeige und kostet

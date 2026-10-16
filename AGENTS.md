@@ -68,7 +68,7 @@ Releaseartefakte bleiben unversioniert.
   bei GENAU EINEM passenden Eintrag etwas — eine falsch zugeordnete Anmerkung
   ist schlechter als gar keine. Subtunes zählt die Datei ab 1, der Player ab 0;
   `STILDatabase.info(forHVSCPath:subtune:)` rechnet das um.
-- Songlänge: HVSC `Songlengths.md5` → berechneter Cache → 360-s-Fallback. Der
+- Songlänge: persönliche Endzeit je Datei-MD5/Subtune → HVSC `Songlengths.md5` → berechneter Cache → 360-s-Fallback. Der
   Hintergrund-Estimator erkennt Ende erst nach mindestens drei Sekunden Stille und
   cached auch Loop-/Negativergebnisse. Diese Reihenfolge steuert Scrubber, Auto-Next,
   Now Playing und Export. Sie steht seit v1.9.9 im Core in `SongLengthResolver`
@@ -76,6 +76,13 @@ Releaseartefakte bleiben unversioniert.
   `SongLengthSelection` (Leiter zur effektiven Dauer); die Frontends halten nur noch
   den Hintergrund-Task. Neue Regeln gehören dorthin, nicht in `MainView` oder
   `AppModel+Playback`.
+- Wiedergabeoptionen liegen versioniert in `PlaybackSettingsDocument`. Repeat,
+  persönliche Endzeiten und Endaktionen verwenden `PlaybackCompletionPolicy`;
+  Fade skaliert den fertigen Mix und verändert weder Nutzerlautstärke noch
+  Emulation. Ein aktiver Einschlaftimer nutzt `ContinuousClock`, läuft auch
+  während Pause weiter und wird nicht als laufende Frist wiederhergestellt.
+  Nach Ablauf darf iOS nicht automatisch fortsetzen; bewusste Play-Aktionen
+  bestätigen den Ablauf. Neue oder beschädigte persönliche Daten erhalten.
 - Session-Restore speichert Track/Subtune/Position gedrosselt. Bei aktivem Shuffle
   nicht restaurieren; zufälliger Start ist beabsichtigt.
 - Titel-IDs sind auch auf dem Mac relative Pfade (`PlaylistTrackID`): Playlist,

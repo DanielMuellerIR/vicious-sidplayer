@@ -40,6 +40,7 @@ extension AppModel {
     }
 
     func startListeningQueue(_ proposed: ListeningQueue) {
+        playbackOptions.acknowledgeManualPlayback()
         guard !proposed.items.isEmpty else { errorMessage = String(localized: "Diese Auswahl enthält keine Titel."); return }
         var queue = proposed
         for _ in 0..<queue.items.count {
@@ -60,20 +61,22 @@ extension AppModel {
 
     func selectListeningEntry(_ id: UUID) {
         guard var queue = listening.queue, let entry = queue.items.first(where: { $0.id == id }) else { return }
+        playbackOptions.acknowledgeManualPlayback()
         if loadListeningEntry(entry, autoplay: true) { queue.select(id); listening.setQueue(queue); saveSessionState() }
     }
 
-    func advanceListeningQueue(forward: Bool, autoplay: Bool) {
+    func advanceListeningQueue(forward: Bool, autoplay: Bool, repeatSequence: Bool = false) {
         guard var queue = listening.queue else { return }
         for _ in 0..<max(1, queue.items.count) {
-            guard let entry = forward ? queue.next() : queue.previous() else {
+            guard let entry = forward ? queue.next(allowCycle: repeatSequence) : queue.previous(allowCycle: repeatSequence) else {
+                listening.setQueue(queue)
                 if forward { coordinator.stop() } else { coordinator.seek(seconds: 0) }
                 saveSessionState(); syncPlaybackLoop(); updateNowPlaying(force: true)
                 return
             }
             if loadListeningEntry(entry, autoplay: autoplay) { listening.setQueue(queue); saveSessionState(); return }
         }
-        coordinator.stop(); syncPlaybackLoop(); updateNowPlaying(force: true)
+        coordinator.stop(); syncPlaybackLoop(); saveSessionState(); updateNowPlaying(force: true)
         errorMessage = String(localized: "Kein weiterer Eintrag dieser Hörfolge ist abspielbar.")
     }
 
@@ -130,7 +133,7 @@ extension AppModel {
             if let entry = queue.current, loadListeningEntry(entry, autoplay: false) {
                 listening.setQueue(queue)
                 if !shuffle, entry.trackID == savedID {
-                    if entry.subtune == nil { coordinator.setSubtune(sub: sub) }
+                    if entry.subtune == nil || playbackOptions.document.repeatMode == .file { coordinator.setSubtune(sub: sub) }
                     if position > 1 { coordinator.seek(seconds: position) }
                     resolveComputedLengthIfNeeded(); saveSessionState(); updateNowPlaying(force: true)
                 }

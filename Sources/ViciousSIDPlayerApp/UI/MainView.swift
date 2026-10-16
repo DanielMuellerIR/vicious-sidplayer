@@ -28,6 +28,8 @@ public struct MainView: View {
     @StateObject private var listening = ListeningLibraryController()
     @StateObject private var metadataIndex = LibraryMetadataController()
     @StateObject private var savedSearches = SavedLibrarySearchController()
+    @StateObject private var playbackOptions = PlaybackOptionsController()
+    @State private var playbackOptionsPresentation: PlaybackOptionsPresentation?
     @State private var sidebarPage = LibrarySidebarPage.library
     @State private var selectedListeningListID: UUID?
     @State private var listeningLibraryEntries: [ListeningEntry] = []
@@ -251,9 +253,11 @@ public struct MainView: View {
         return SongLengthSelection.duration(databaseLengths: currentTrackLengths,
                                             subtune: coordinator.currentSubtune,
                                             computed: computedLength,
-                                            fallback: SCRUB_MAX)
+                                            fallback: SCRUB_MAX, personalDuration: personalDuration)
     }
     
+    private var personalDuration: Double? { playbackOptions.document.endTime(md5: currentMD5, subtune: coordinator.currentSubtune) }
+
     private var themeMode: ThemeMode { ThemeMode(storedValue: themeModeRaw) }
 
     // Effektives Theme: der gespeicherte Modus, im Auto-Fall aufgeloest gegen
@@ -483,6 +487,18 @@ public struct MainView: View {
                             .fixedSize()   // "AUTO NEXT" einzeilig, kein haesslicher Umbruch
                             .help("Am Ende zum nächsten Eintrag der Hörfolge. Dateieinträge spielen vorher ihre weiteren Subtunes.")
 
+                        Button {
+                            playbackOptionsPresentation = PlaybackOptionsPresentation(target: currentMD5.map {
+                                PlaybackEndTimeTarget(md5: $0, subtune: coordinator.currentSubtune, title: coordinator.trackName)
+                            })
+                        } label: { Image(systemName: "slider.horizontal.3").frame(width: 24, height: 24) }
+                        .accessibilityLabel("Wiedergabeoptionen")
+                        .accessibilityIdentifier("playback-options")
+                        .help("Repeat, Fadeout, eigene Endzeiten und Einschlaftimer")
+                        .popover(item: $playbackOptionsPresentation) { presentation in
+                            PlaybackOptionsView(controller: playbackOptions, target: presentation.target)
+                        }
+
                         // SID-Chip-Modell: Auto folgt der Datei-Praeferenz, 6581/8580
                         // erzwingen das jeweilige Modell (viele Tunes klingen nur auf
                         // dem richtigen Chip korrekt). Wirkt live auf den laufenden Song.
@@ -520,7 +536,7 @@ public struct MainView: View {
                             HStack(spacing: 8) {
                                 Button(action: {
                                     let prev = (coordinator.currentSubtune - 1 + coordinator.subtunesCount) % coordinator.subtunesCount
-                                    coordinator.setSubtune(sub: prev)
+                                    setPlaybackSubtune(prev, updateQueue: true)
                                 }) {
                                     Image(systemName: "chevron.left.circle.fill")
                                         .font(.system(size: 16))
@@ -537,7 +553,7 @@ public struct MainView: View {
 
                                 Button(action: {
                                     let next = (coordinator.currentSubtune + 1) % coordinator.subtunesCount
-                                    coordinator.setSubtune(sub: next)
+                                    setPlaybackSubtune(next, updateQueue: true)
                                 }) {
                                     Image(systemName: "chevron.right.circle.fill")
                                         .font(.system(size: 16))
@@ -736,7 +752,7 @@ public struct MainView: View {
                     showListeningSubtuneSheet = false
                 }, onCancel: { showListeningSubtuneSheet = false })
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in listening.flush(); savedSearches.flush() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in listening.flush(); savedSearches.flush(); playbackOptions.flush() }
         .onChange(of: listening.isLoaded) { ready in
             guard ready else { return }
             syncListeningLibrary()
@@ -745,6 +761,10 @@ public struct MainView: View {
                 startInitialPlayback(restoreSession: restore)
             }
         }
+        .modifier(PlaybackOptionsObserver(controller: playbackOptions, coordinator: coordinator,
+            onConfigurationChange: { resolveComputedLengthIfNeeded(); applyPlaybackOptions(); updateNowPlayingInfo() },
+            onFadeChange: applyPlaybackOptions, onStop: stopPlayback, onReady: resumePendingInitialPlayback))
+        .onChange(of: autoNext) { _ in applyPlaybackOptions() }
         .onChange(of: shuffle) { listening.setShuffle($0) }
         .onDrop(of: ["public.file-url"], isTargeted: $dragOver) { providers in
             loadLog.info("onDrop: \(providers.count, privacy: .public) provider(s)")
@@ -831,14 +851,10 @@ public struct MainView: View {
         .onChange(of: coordinator.isPaused) { _ in updateNowPlayingInfo() }
         .onChange(of: coordinator.trackName) { _ in updateNowPlayingInfo() }
         .onChange(of: coordinator.clockMode) { _ in resolveComputedLengthIfNeeded() }
-        .onChange(of: currentDuration) { _ in updateNowPlayingInfo() }
+        .onChange(of: currentDuration) { _ in applyPlaybackOptions(); updateNowPlayingInfo() }
         // Subtune gewechselt -> Laenge des neuen Subtunes aufloesen (DB-Array wird
         // per Index gelesen; nur die berechnete Laenge muss neu ermittelt werden).
         .onChange(of: coordinator.currentSubtune) { _ in
-            if let track = playlist.track(at: currentTrackIdx), var queue = listening.queue {
-                queue.updateExplicitSubtune(coordinator.currentSubtune, trackID: track.id)
-                listening.setQueue(queue)
-            }
             resolveComputedLengthIfNeeded()
             updateNowPlayingInfo()
         }
@@ -859,16 +875,7 @@ public struct MainView: View {
                 lastNowPlayingSecond = second
                 updateNowPlayingInfo()
             }
-            if !isTransitioning && PlaybackPolicy.shouldAdvance(isPlaying: coordinator.isPlaying,
-                                            autoNext: autoNext, elapsed: elapsed,
-                                            duration: currentDuration) {
-                if let next = ListeningPlaybackPolicy.nextSubtune(entry: listening.queue?.current,
-                    current: coordinator.currentSubtune, count: coordinator.subtunesCount) {
-                    coordinator.setSubtune(sub: next)
-                } else {
-                    advanceListeningQueue(forward: true, autoplay: true)
-                }
-            }
+            if !isTransitioning { handleConfiguredPlaybackEnd(elapsed: elapsed) }
         }
     }
 
@@ -1105,6 +1112,7 @@ public struct MainView: View {
                       lengthResolver: lengthResolver,
                       clockMode: coordinator.clockMode,
                       computedLength: computedLength,
+                      playbackSettings: playbackOptions.document,
                       favoritesOnly: favoritesOnly,
                       favorites: favorites,
                       isLight: isLight,
@@ -1151,10 +1159,41 @@ public struct MainView: View {
         if coordinator.isPlaying { pausePlayback() } else { startPlayback() }
     }
 
+    private func applyPlaybackOptions() {
+        coordinator.setFadeEnvelope(playbackOptions.fadeEnvelope(duration: currentDuration, elapsed: coordinator.elapsedSeconds,
+            autoNext: autoNext, hasPersonalEnd: personalDuration != nil))
+    }
+    private func resumePendingInitialPlayback() {
+        guard playbackOptions.isLoaded, listening.isLoaded, let restore = pendingInitialRestore, !suppressInitialPlayback else { return }
+        pendingInitialRestore = nil; startInitialPlayback(restoreSession: restore)
+    }
+    private func setPlaybackSubtune(_ sub: Int, updateQueue: Bool) {
+        coordinator.setSubtune(sub: sub)
+        if updateQueue, let track = playlist.track(at: currentTrackIdx), var queue = listening.queue {
+            queue.updateExplicitSubtune(sub, trackID: track.id); listening.setQueue(queue)
+        }
+        resolveComputedLengthIfNeeded(); applyPlaybackOptions()
+    }
+    private func handleConfiguredPlaybackEnd(elapsed: Double) {
+        guard let action = PlaybackCompletionPolicy.action(isPlaying: coordinator.isPlaying, elapsed: elapsed, duration: currentDuration,
+            currentSubtune: coordinator.currentSubtune, subtuneCount: coordinator.subtunesCount, entry: listening.queue?.current,
+            autoNext: autoNext, repeatMode: playbackOptions.document.repeatMode,
+            hasExplicitEnd: personalDuration != nil || playbackOptions.document.fadeOutSeconds > 0,
+            stopAfterSubtune: playbackOptions.stopAfterSubtune) else { return }
+        switch action {
+        case .stop:
+            if playbackOptions.stopAfterSubtune { playbackOptions.finishSubtuneStop() } else { stopPlayback() }
+        case .subtune(let sub): setPlaybackSubtune(sub, updateQueue: false)
+        case .advanceEntry(let repeatSequence): ensureListeningQueue(); advanceListeningQueue(forward: true, autoplay: true, repeatSequence: repeatSequence)
+        }
+    }
+
     private func startPlayback() {
         guard playlist.track(at: currentTrackIdx) != nil else { return }
         suppressInitialPlayback = false
+        playbackOptions.acknowledgeManualPlayback()
         ensureListeningQueue()
+        applyPlaybackOptions()
         coordinator.play()
     }
 
@@ -1179,6 +1218,7 @@ public struct MainView: View {
 
     private func seek(to seconds: Double) {
         coordinator.seek(seconds: seconds)
+        playbackOptions.refreshSleepTimer(); applyPlaybackOptions()
         updateNowPlayingInfo()
     }
 
@@ -1247,7 +1287,7 @@ public struct MainView: View {
 
     private func knownLibraryDuration(_ metadata: LibraryMetadata) -> Double? {
         lengthResolver.knownDuration(md5: metadata.md5, subtune: 0,
-            databaseLengths: songlengthDB?.lengths(forMD5: metadata.md5), clockMode: coordinator.clockMode)
+            databaseLengths: songlengthDB?.lengths(forMD5: metadata.md5), clockMode: coordinator.clockMode, personalDuration: playbackOptions.document.endTime(md5: metadata.md5, subtune: 0))
     }
 
     private func startListeningScope(_ scope: ListeningScope, name: String) {
@@ -1271,6 +1311,7 @@ public struct MainView: View {
     }
 
     private func startListeningQueue(_ proposed: ListeningQueue) {
+        playbackOptions.acknowledgeManualPlayback()
         guard !proposed.items.isEmpty else { errorMessage = "Diese Auswahl enthält keine Titel."; return }
         var queue = proposed
         var skipped = 0
@@ -1300,11 +1341,12 @@ public struct MainView: View {
         return loadTrack(index: index, autoplay: autoplay, subtune: entry.subtune ?? 0, updateListeningQueue: false)
     }
 
-    private func advanceListeningQueue(forward: Bool, autoplay: Bool) {
+    private func advanceListeningQueue(forward: Bool, autoplay: Bool, repeatSequence: Bool = false) {
         guard var queue = listening.queue else { return }
         var skipped = 0
         for _ in 0..<max(1, queue.items.count) {
-            guard let entry = forward ? queue.next() : queue.previous() else {
+            guard let entry = forward ? queue.next(allowCycle: repeatSequence) : queue.previous(allowCycle: repeatSequence) else {
+                listening.setQueue(queue)
                 if forward { coordinator.stop() } else { seek(to: 0) }
                 if skipped > 0 { errorMessage = "\(skipped) Einträge sind nicht abspielbar." }
                 return
@@ -1321,6 +1363,7 @@ public struct MainView: View {
     }
 
     private func selectListeningQueueEntry(_ id: UUID) {
+        playbackOptions.acknowledgeManualPlayback()
         guard var queue = listening.queue, let entry = queue.items.first(where: { $0.id == id }) else { return }
         if loadListeningEntry(entry, autoplay: true) { queue.select(id); listening.setQueue(queue) }
     }
@@ -1464,9 +1507,9 @@ public struct MainView: View {
             currentTrackLengths = songlengthDB?.lengths(forMD5: md5)
             resolveComputedLengthIfNeeded()
             loadLog.info("loadTrack[\(index, privacy: .public)] geparst: \(fileURL.lastPathComponent, privacy: .public), autoplay=\(autoplay, privacy: .public)")
-            if autoplay {
-                coordinator.play()
-            }
+            applyPlaybackOptions()
+            playbackOptions.refreshSleepTimer()
+            if autoplay, !playbackOptions.didExpire { coordinator.play() }
             didLoad = true
             return true
         } catch {
@@ -1510,6 +1553,7 @@ public struct MainView: View {
         loadLog.info("handleDroppedURLs: \(sidFiles.count, privacy: .public) .sid Datei(en) gefunden")
 
         // Duplikatpruefung und Aufnahme stehen im Core und sind dort getestet.
+        playbackOptions.acknowledgeManualPlayback()
         let additions = playlist.append(sidFiles, root: library?.root)
         metadataIndex.refreshOpenedFiles(playlist.externalIndices.map { playlist.tracks[$0] })
         refreshListeningLibrary()
@@ -1826,7 +1870,7 @@ public struct MainView: View {
     // Position), sofern der Titel noch da ist. Mit Shuffle beginnt jeder Start
     // bewusst zufaellig — deshalb wird dann gar nicht wiederhergestellt.
     private func startInitialPlayback(restoreSession: Bool) {
-        guard listening.isLoaded else {
+        guard listening.isLoaded && playbackOptions.isLoaded else {
             pendingInitialRestore = restoreSession
             return
         }
@@ -1837,7 +1881,7 @@ public struct MainView: View {
             if let entry = queue.current, loadListeningEntry(entry, autoplay: true) {
                 listening.setQueue(queue)
                 if !shuffle, entry.trackID == restoredTrackID() {
-                    if entry.subtune == nil, lastSubtune > 0 { coordinator.setSubtune(sub: lastSubtune) }
+                    if entry.subtune == nil || playbackOptions.document.repeatMode == .file, lastSubtune > 0 { coordinator.setSubtune(sub: lastSubtune) }
                     if lastPosition > 1 { coordinator.seek(seconds: lastPosition) }
                     resolveComputedLengthIfNeeded()
                 }
@@ -2028,8 +2072,8 @@ public struct MainView: View {
                                    subtune: coordinator.currentSubtune,
                                    databaseLengths: currentTrackLengths,
                                    fileURL: playlist.track(at: currentTrackIdx)?.url,
-                                   clockMode: coordinator.clockMode) {
-        case .databaseProvidesLength, .noLengthKnown:
+                                   clockMode: coordinator.clockMode, personalDuration: personalDuration) {
+        case .databaseProvidesLength, .personalProvidesLength, .noLengthKnown:
             // Nichts zu rechnen. Eine ueberfluessig gewordene Rechnung hat der
             // Resolver bereits entwertet — der Task hier gehoert noch abgeraeumt.
             lengthEstimateTask?.cancel()
@@ -2193,6 +2237,7 @@ public struct MainView: View {
         let subtune = coordinator.currentSubtune
         let model = coordinator.modelOverride
         let clock = coordinator.clockMode
+        let fade = playbackOptions.document.fadeOutSeconds
         // Echte Songlaenge, wenn bekannt — sonst das Standard-Limit.
         let seconds = currentDuration
         errorMessage = nil
@@ -2203,7 +2248,7 @@ public struct MainView: View {
                 let data = try Data(contentsOf: fileURL)
                 let sid = try SidParser.parse(data: data)
                 try WavRenderer.render(sidFile: sid, subtune: subtune, seconds: seconds,
-                                       modelOverride: model, clockMode: clock, to: dest)
+                                       modelOverride: model, clockMode: clock, fadeOutSeconds: fade, to: dest)
                 await MainActor.run {
                     // Fertige Datei im Finder zeigen (erwartetes Export-Feedback).
                     NSWorkspace.shared.activateFileViewerSelecting([dest])
@@ -2304,7 +2349,7 @@ public struct MainView: View {
             seek(to: min(seconds, currentDuration))
         case .subtune(let index):
             // setSubtune prueft den Bereich gegen die Datei selbst.
-            coordinator.setSubtune(sub: index)
+            setPlaybackSubtune(index, updateQueue: true)
             resolveComputedLengthIfNeeded()
         case .track(let id):
             // Nur was wirklich in der Liste steht. Ein unbekannter Pfad wird
@@ -2373,6 +2418,7 @@ struct TrackListView: View {
     // Eine neue Schaetzung aendert den Resolver-Cache, dessen Instanz gleich
     // bleibt. Dieser Wert zieht die Dauerfilter nach dem Ergebnis nach.
     let computedLength: Double?
+    let playbackSettings: PlaybackSettingsDocument
     let favoritesOnly: Bool
     let favorites: PlaylistFavorites
     let isLight: Bool
@@ -2404,7 +2450,7 @@ struct TrackListView: View {
     private var visibleIndices: [Int] {
         LibrarySearchSelection.indices(in: playlist, query: LibrarySearchQuery(searchText), records: metadataRecords,
             favoritesOnly: favoritesOnly, favorites: favorites) {
-                lengthResolver.knownDuration(md5: $0.md5, subtune: 0, databaseLengths: database?.lengths(forMD5: $0.md5), clockMode: clockMode)
+                lengthResolver.knownDuration(md5: $0.md5, subtune: 0, databaseLengths: database?.lengths(forMD5: $0.md5), clockMode: clockMode, personalDuration: playbackSettings.endTime(md5: $0.md5, subtune: 0))
             }
     }
 
@@ -2514,7 +2560,7 @@ struct TrackListView: View {
         let path = track.folderPath.isEmpty ? track.name : "\(track.folderPath)/\(track.name)"
         guard let metadata = metadataRecords[track.id]?.metadata else { return path + "\nMetadaten unbekannt" }
         let seconds = lengthResolver.knownDuration(md5: metadata.md5, subtune: 0,
-            databaseLengths: database?.lengths(forMD5: metadata.md5), clockMode: clockMode)
+            databaseLengths: database?.lengths(forMD5: metadata.md5), clockMode: clockMode, personalDuration: playbackSettings.endTime(md5: metadata.md5, subtune: 0))
         let duration = LibraryMetadata.durationDescription(seconds)
         return "\(path)\n\(metadata.author ?? "Autor unbekannt")\n\(metadata.released ?? "Veröffentlichung unbekannt")\n\(metadata.chipCount) SID · \(metadata.modelDescription)\nDauer von Subtune 1: \(duration)"
     }

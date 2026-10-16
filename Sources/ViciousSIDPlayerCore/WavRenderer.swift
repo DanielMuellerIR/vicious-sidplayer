@@ -21,12 +21,14 @@ public enum WavRenderer {
     public enum RenderError: Error, LocalizedError {
         case invalidDuration
         case invalidSampleRate
+        case invalidFadeOut
         case fileTooLarge
         case cannotCreateTemporaryFile
         public var errorDescription: String? {
             switch self {
             case .invalidDuration: return "Ungültige Dauer für den WAV-Export."
             case .invalidSampleRate: return "Ungültige Sample-Rate für den WAV-Export."
+            case .invalidFadeOut: return "Ungültiger Fadeout für den WAV-Export."
             case .fileTooLarge: return "Die WAV-Datei überschreitet die Größenbegrenzung des RIFF-Formats."
             case .cannotCreateTemporaryFile: return "Temporäre WAV-Datei konnte nicht angelegt werden."
             }
@@ -63,7 +65,9 @@ public enum WavRenderer {
                               sampleRate: Double = 44100.0,
                               modelOverride: Int? = nil,
                               clockMode: SidClockMode = .auto,
+                              fadeOutSeconds: Double = 0,
                               to url: URL) throws {
+        guard fadeOutSeconds.isFinite, (0...30).contains(fadeOutSeconds) else { throw RenderError.invalidFadeOut }
         let totalFrames = try frameCount(seconds: seconds, sampleRate: sampleRate)
         let channels = sidFile.secondSidAddress != 0 ? 2 : 1
         guard sampleRate * Double(channels * MemoryLayout<Int16>.size) <= Double(UInt32.max) else {
@@ -84,6 +88,7 @@ public enum WavRenderer {
         let sub = max(0, min(subtune, sidFile.metadata.subtunesCount - 1))
         processor.initSubtune(sub: sub)
         processor.setVolume(vol: 1.0)
+        if fadeOutSeconds > 0 { processor.setFadeEnvelope(PlaybackFadeEnvelope(songEnd: seconds, seconds: fadeOutSeconds)) }
 
         // Erst in eine eindeutige Nachbardatei streamen. Dadurch bleibt ein
         // vorhandenes Ziel bei Render-/I/O-Fehlern unangetastet; erst die fertig

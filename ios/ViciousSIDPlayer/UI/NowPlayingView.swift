@@ -14,6 +14,7 @@ import ViciousSIDPlayerCore
 struct NowPlayingView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.colorScheme) private var systemScheme
+    @State private var optionsPresentation: PlaybackOptionsPresentation?
 
     private var palette: PlayerPalette {
         PlayerPalette(themeMode: model.themeMode, systemScheme: systemScheme)
@@ -69,8 +70,23 @@ struct NowPlayingView: View {
             }
             .navigationTitle("Now Playing")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { optionsPresentation = PlaybackOptionsPresentation(target: model.playbackEndTimeTarget) }
+                        label: { Label("Wiedergabeoptionen", systemImage: "slider.horizontal.3") }
+                        .accessibilityIdentifier("playback-options")
+                }
+            }
+            .sheet(item: $optionsPresentation) { presentation in
+                AdvancedPlaybackOptionsView(controller: model.playbackOptions, target: presentation.target)
+            }
         }
     }
+}
+
+private struct PlaybackOptionsPresentation: Identifiable {
+    let id = UUID()
+    let target: PlaybackEndTimeTarget?
 }
 
 // MARK: - Titelangaben

@@ -689,7 +689,7 @@ class SidPlayerProcessor {
     this.setClockMode = function(mode) {
       clockMode = ['pal', 'ntsc'].includes(mode) ? mode : 'auto';
       applyClock();
-      if (loaded) this.beginSeek(playtime);
+      if (loaded) this.beginSeek(playtime + seekRemaining / samplerate);
     };
     
     this.setVolume = function(vol) {

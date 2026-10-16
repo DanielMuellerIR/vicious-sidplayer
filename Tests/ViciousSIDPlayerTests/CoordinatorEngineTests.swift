@@ -1,14 +1,8 @@
 import XCTest
 @testable import ViciousSIDPlayerCore
 
-// Der Audio-Koordinator ist die einzige Stelle des Cores, die echte
-// Systemausgabe anfasst — deshalb gibt es hier nur genau einen Test, und der
-// prueft die eine Eigenschaft, die sich sonst nur auf echter iPhone-Hardware
-// zeigt: dass die Wiedergabe nach einem Neuaufbau der Audio-Engine wieder
-// laeuft.
-//
-// Unter Linux faellt der Koordinator aus der Uebersetzung heraus (kein
-// AVFoundation), deshalb die Klammer.
+// Der Koordinator beruehrt echte Audioausgabe. Ohne AVFoundation fallen
+// diese Tests weg; ohne nutzbares Audiogeraet ueberspringen sie den Lauf.
 #if canImport(AVFoundation)
 final class CoordinatorEngineTests: XCTestCase {
 
@@ -57,6 +51,29 @@ final class CoordinatorEngineTests: XCTestCase {
         XCTAssertFalse(coordinator.isPreparingSeek)
         XCTAssertFalse(coordinator.isPlaying)
         XCTAssertEqual(coordinator.elapsedSeconds, 0)
+    }
+
+    @MainActor
+    func testSubtuneDuringClockPreparationUsesTheSelectedClock() async throws {
+        var data = silentSID()
+        data[15] = 2
+        data.replaceSubrange(0x7C..<data.count, with: [0x60,0,0,0xEE,0,0xD4,0x60])
+        let coordinator = ViciousCoordinator()
+        coordinator.setSid(try SidParser.parse(data: data)); coordinator.setVolume(0)
+        coordinator.setUIUpdateInterval(0.01)
+        coordinator.play(); defer { coordinator.stop() }
+        try XCTSkipUnless(coordinator.isPlaying, "Kein nutzbares Audiogeraet")
+        coordinator.seek(seconds: 300)
+        coordinator.setClockMode(.ntsc)
+        coordinator.setSubtune(sub: 1)
+        XCTAssertFalse(coordinator.isPreparingSeek)
+        try await Task.sleep(for: .seconds(2))
+        let visuals = coordinator.currentVisuals()
+        XCTAssertGreaterThan(coordinator.elapsedSeconds, 1.5)
+        // Die Anzeigezeit ist auf Zehntelsekunden gedrosselt; der Registerpuffer
+        // kann deshalb schon bis zu etwa 0,13 Sekunden weiter sein.
+        XCTAssertEqual(Double(visuals.frequencies[0]), 60 * coordinator.elapsedSeconds, accuracy: 8)
+        XCTAssertEqual(coordinator.currentSubtune, 1)
     }
 
     @MainActor

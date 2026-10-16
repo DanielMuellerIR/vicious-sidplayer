@@ -1,0 +1,31 @@
+import Foundation
+import ViciousSIDPlayerCore
+
+extension AppModel {
+    var personalDuration: Double? { playbackOptions.document.endTime(md5: currentMD5, subtune: coordinator.currentSubtune) }
+    var playbackEndTimeTarget: PlaybackEndTimeTarget? {
+        currentMD5.map { PlaybackEndTimeTarget(md5: $0, subtune: coordinator.currentSubtune, title: coordinator.trackName) }
+    }
+    func applyPlaybackOptions() {
+        coordinator.setFadeEnvelope(playbackOptions.fadeEnvelope(duration: currentDuration, elapsed: coordinator.elapsedSeconds,
+            autoNext: autoNext, hasPersonalEnd: personalDuration != nil))
+    }
+    func stopForPlaybackOptions() {
+        coordinator.stop(); stopPlaybackLoop(); services.lastSessionBucket = -1
+        saveSessionState(); updateNowPlaying(force: true)
+    }
+    func handleConfiguredPlaybackEnd(elapsed: Double) {
+        guard let action = PlaybackCompletionPolicy.action(isPlaying: coordinator.isPlaying, elapsed: elapsed, duration: currentDuration,
+            currentSubtune: coordinator.currentSubtune, subtuneCount: coordinator.subtunesCount, entry: listening.queue?.current,
+            autoNext: autoNext, repeatMode: playbackOptions.document.repeatMode,
+            hasExplicitEnd: personalDuration != nil || playbackOptions.document.fadeOutSeconds > 0,
+            stopAfterSubtune: playbackOptions.stopAfterSubtune) else { return }
+        switch action {
+        case .stop:
+            if playbackOptions.stopAfterSubtune { playbackOptions.finishSubtuneStop() } else { stopForPlaybackOptions() }
+        case .subtune(let index): setSubtune(index, updateListeningQueue: false); applyPlaybackOptions()
+        case .advanceEntry(let repeatSequence):
+            ensureListeningQueue(); advanceListeningQueue(forward: true, autoplay: true, repeatSequence: repeatSequence)
+        }
+    }
+}

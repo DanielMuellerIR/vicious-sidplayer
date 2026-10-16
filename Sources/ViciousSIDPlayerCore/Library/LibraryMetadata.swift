@@ -41,9 +41,9 @@ public struct LibraryMetadata: Codable, Equatable, Sendable {
     }
 
     /// Dauer von Subtune 1. Das Fallback ist keine bekannte Musiklaenge.
-    public func firstSubtuneDuration(database: SonglengthDB?, cache: SongLengthCache?, clockMode: SidClockMode = .auto) -> Double? {
+    public func firstSubtuneDuration(database: SonglengthDB?, cache: SongLengthCache?, clockMode: SidClockMode = .auto, personalDuration: Double? = nil) -> Double? {
         SongLengthSelection.knownDuration(databaseLengths: database?.lengths(forMD5: md5), subtune: 0,
-            computed: cache?.length(md5: md5, subtune: 0, clockMode: clockMode))
+            computed: cache?.length(md5: md5, subtune: 0, clockMode: clockMode), personalDuration: personalDuration)
     }
 
     public var modelDescription: String {

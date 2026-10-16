@@ -17,7 +17,7 @@ final class ListeningIntegrationTests: XCTestCase {
 
     override func tearDown() async throws {
         for model in models {
-            model.coordinator.stop(); model.stopPlaybackLoop(); model.listening.flush(); model.savedSearches.flush()
+            model.coordinator.stop(); model.stopPlaybackLoop(); model.listening.flush(); model.savedSearches.flush(); model.playbackOptions.cancelSleepTimer(); model.playbackOptions.flush()
             await model.metadataIndex.suspend()
         }
         models = []
@@ -51,7 +51,7 @@ final class ListeningIntegrationTests: XCTestCase {
         model.services = PlayerServices(library: library)
         model.applyLibrary(tracks: library.entries.map { LibraryTrack(id: $0.id, name: $0.displayName, folderPath: $0.folderPath) },
                            folderTree: MusicLibrary.folderTree(for: library.entries))
-        for _ in 0..<100 where !model.listening.isLoaded { try await Task.sleep(nanoseconds: 10_000_000) }
+        for _ in 0..<100 where !model.listening.isLoaded || !model.playbackOptions.isLoaded { try await Task.sleep(nanoseconds: 10_000_000) }
         model.activateListeningLibrary()
         models.append(model)
         return model
@@ -172,6 +172,59 @@ final class ListeningIntegrationTests: XCTestCase {
         XCTAssertTrue(controller.isReadOnly)
         controller.save(name: "Do not write", query: "chips:3", favoritesOnly: false); controller.flush()
         XCTAssertEqual(try Data(contentsOf: url), raw)
+    }
+
+    func testPersonalDurationPrecedesHVSCAndStopsWhenAutoNextIsOff() async throws {
+        let model = try await makeModel(); try await awaitMetadata(model)
+        model.select(trackID: "Alpha/A.sid")
+        model.currentTrackLengths = [30,40,50]
+        let target = try XCTUnwrap(model.playbackEndTimeTarget)
+        try model.playbackOptions.setEndTime("1:30", target: target)
+        XCTAssertEqual(model.currentDuration, 90)
+        model.searchText = "min:80 max:100"
+        XCTAssertEqual(model.visibleTracks.map(\.id), ["Alpha/A.sid"])
+        model.autoNext = false; model.coordinator.isPlaying = true
+        model.handleConfiguredPlaybackEnd(elapsed: 90)
+        XCTAssertFalse(model.coordinator.isPlaying)
+        try model.playbackOptions.setEndTime("", target: target)
+        XCTAssertEqual(model.currentDuration, 30)
+    }
+
+    func testFileRepeatPreservesTheFixedEntryAndRestoresTheActualSubtune() async throws {
+        let first = try await makeModel()
+        let entry = ListeningEntry(trackID: "Alpha/A.sid", subtune: 2)
+        first.listening.setQueue(ListeningQueue(libraryID: AppModel.listeningCollectionID, name: "Fixed", kind: .savedList, entries: [entry]))
+        XCTAssertTrue(first.loadListeningEntry(entry, autoplay: false))
+        first.playbackOptions.setRepeatMode(.file); first.coordinator.isPlaying = true
+        first.handleConfiguredPlaybackEnd(elapsed: first.currentDuration)
+        XCTAssertEqual(first.coordinator.currentSubtune, 0)
+        XCTAssertEqual(first.listening.queue?.current?.subtune, 2)
+        first.seek(to: 2); first.saveSessionState(); first.playbackOptions.flush(); first.listening.flush()
+        let restored = try await makeModel(); restored.restoreSessionIfPossible()
+        XCTAssertEqual(restored.coordinator.currentSubtune, 0)
+        XCTAssertEqual(restored.listening.queue?.current?.subtune, 2)
+        XCTAssertEqual(restored.coordinator.elapsedSeconds, 2, accuracy: 0.001)
+        XCTAssertFalse(restored.coordinator.isPlaying)
+    }
+
+    func testSleepExpiryPreventsAutomaticInterruptionResume() async throws {
+        let model = try await makeModel(); model.select(trackID: "Alpha/A.sid")
+        model.configureSystemPlayback(); model.coordinator.isPlaying = true
+        try model.playbackOptions.startSleepTimer(seconds: 0.05)
+        for _ in 0..<150 where !model.playbackOptions.didExpire { try await Task.sleep(nanoseconds: 20_000_000) }
+        XCTAssertTrue(model.playbackOptions.didExpire); XCTAssertFalse(model.coordinator.isPlaying)
+        model.services.audioSession.resumeHandler?()
+        XCTAssertFalse(model.coordinator.isPlaying)
+        model.togglePlayPause()
+        XCTAssertFalse(model.playbackOptions.didExpire)
+        XCTAssertTrue(model.coordinator.isPlaying)
+        try model.playbackOptions.startSleepTimer(seconds: 0.05)
+        for _ in 0..<150 where !model.playbackOptions.didExpire { try await Task.sleep(nanoseconds: 20_000_000) }
+        let entry = try XCTUnwrap(model.listening.queue?.items.last)
+        model.selectListeningEntry(entry.id)
+        XCTAssertFalse(model.playbackOptions.didExpire)
+        XCTAssertTrue(model.coordinator.isPlaying)
+        XCTAssertEqual(model.currentTrackID, entry.trackID)
     }
 
     func testInvalidSubtuneCannotReplaceThePreparedTitle() async throws {

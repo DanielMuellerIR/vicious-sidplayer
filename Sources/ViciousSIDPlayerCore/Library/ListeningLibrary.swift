@@ -110,7 +110,7 @@ public struct ListeningQueue: Codable, Equatable, Sendable {
     public private(set) var items: [ListeningEntry]
     public private(set) var currentID: UUID?
     public private(set) var shuffled: Bool
-    public let wraps: Bool
+    public private(set) var wraps: Bool
     public private(set) var oneShotIDs: Set<UUID> = []
 
     public init(libraryID: String, name: String, kind: Kind = .selection,
@@ -163,7 +163,7 @@ public struct ListeningQueue: Codable, Equatable, Sendable {
         for entry in upcoming { enqueueNext(entry) }
     }
 
-    public mutating func next() -> ListeningEntry? {
+    public mutating func next(allowCycle: Bool = false) -> ListeningEntry? {
         guard !items.isEmpty else { return nil }
         guard let index = currentIndex else {
             currentID = items.first?.id
@@ -173,7 +173,7 @@ public struct ListeningQueue: Codable, Equatable, Sendable {
             currentID = items[index + 1].id
             return current
         }
-        guard wraps else { return nil }
+        guard wraps || allowCycle else { return nil }
         let previous = currentID
         restart(shuffled: shuffled)
         if shuffled, items.count > 1, items.first?.id == previous { items.swapAt(0, 1) }
@@ -181,10 +181,10 @@ public struct ListeningQueue: Codable, Equatable, Sendable {
         return current
     }
 
-    public mutating func previous() -> ListeningEntry? {
+    public mutating func previous(allowCycle: Bool = false) -> ListeningEntry? {
         guard let index = currentIndex else { return nil }
         if index > 0 { currentID = items[index - 1].id }
-        else if wraps { currentID = items.last?.id }
+        else if wraps || allowCycle { currentID = items.last?.id }
         else { return nil }
         return current
     }
@@ -232,8 +232,9 @@ public struct ListeningQueue: Codable, Equatable, Sendable {
         let available = Set(tracks.map(\.trackID))
         items.removeAll { removeMissing && !available.contains($0.trackID) && $0.id != currentID
             && !oneShotIDs.contains($0.id) && !PlaylistTrackID.isExternal($0.trackID) }
-        let known = Set(items.map(\.trackID))
+        let known = Set(items.filter { !oneShotIDs.contains($0.id) }.map(\.trackID))
         items.append(contentsOf: tracks.filter { !known.contains($0.trackID) })
+        wraps = items.filter { !oneShotIDs.contains($0.id) && available.contains($0.trackID) }.count > 1
         if shuffled, items.map(\.id) != oldIDs { shuffleRemaining() }
     }
 }

@@ -25,6 +25,27 @@ final class ListeningLibraryTests: XCTestCase {
         XCTAssertEqual(selected.map(\.trackID), ["A/Sub/Other.sid"], "Eine gestartete Auswahl bleibt ein Schnappschuss")
     }
 
+    func testRestoredLibraryTrackGetsARegularEntryBesideItsOneShotRequest() {
+        let a = ListeningEntry(trackID: "A.sid"), b = ListeningEntry(trackID: "B.sid"), c = ListeningEntry(trackID: "C.sid")
+        var queue = ListeningQueue(libraryID: "root", name: "Library", kind: .library, entries: [a,c])
+        queue.enqueueNext(b)
+        queue.reconcileLibrary([a,b,c])
+        XCTAssertEqual(queue.items.filter { $0.trackID == b.trackID }.count, 2)
+        queue.restart(shuffled: false)
+        XCTAssertEqual(Set(queue.items.map(\.trackID)), Set([a,b,c].map(\.trackID)))
+        XCTAssertTrue(queue.oneShotIDs.isEmpty)
+    }
+
+    func testLibraryReconciliationUpdatesWrapRuleButSelectionKeepsItsEnd() {
+        let a = ListeningEntry(trackID: "A.sid"), b = ListeningEntry(trackID: "B.sid")
+        var queue = ListeningQueue(libraryID: "root", name: "Library", kind: .library, entries: [a])
+        queue.reconcileLibrary([a,b]); XCTAssertTrue(queue.wraps)
+        XCTAssertEqual(queue.next(), b); XCTAssertEqual(queue.next(), a)
+        queue.reconcileLibrary([a]); XCTAssertFalse(queue.wraps); XCTAssertNil(queue.next())
+        var selection = ListeningQueue(libraryID: "root", name: "Selection", entries: [a,b])
+        selection.reconcileLibrary([a,b]); XCTAssertFalse(selection.wraps)
+    }
+
     func testExactSubtunesAndRepeatedFilesRemainDistinctQueueEntries() {
         let first = ListeningEntry(trackID: "A.sid", subtune: 2)
         let second = ListeningEntry(trackID: "A.sid", subtune: 0)

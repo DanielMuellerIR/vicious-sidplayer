@@ -11,15 +11,14 @@ import Foundation
 // beiden, weil `MainView` in einem `executableTarget` liegt und aus XCTest gar
 // nicht erreichbar ist. Deshalb steht die Regel jetzt hier.
 //
-// Die Reihenfolge ist ein Architekturvertrag (siehe CLAUDE.md) und darf sich
-// nicht aendern:
+// Die Reihenfolge ist ein Architekturvertrag (siehe AGENTS.md):
 //
-//   1. HVSC-`Songlengths.md5` — von Menschen kuratiert, hat immer Vorrang.
-//   2. Berechneter Cache — Ergebnis einer frueheren Analyse dieser Datei.
-//   3. Hintergrund-Berechnung — der Emulator laeuft schneller als Echtzeit und
-//      sucht das Ende. Als Ende gilt erst, wenn mindestens drei Sekunden Stille
-//      am Stueck folgen (steckt im `SongLengthEstimator`).
-//   4. Sonst bleibt es beim Fallback-Limit der App (360 Sekunden).
+//   1. Persoenliche Endzeit fuer Dateiinhalt und Subtune.
+//   2. HVSC-`Songlengths.md5` — von Menschen kuratiert.
+//   3. Positiver berechneter Cache; ein negativer Eintrag verhindert eine
+//      erneute erfolglose Hintergrundanalyse.
+//   4. Hintergrund-Berechnung mit mindestens drei Sekunden Stille.
+//   5. Fallback-Limit der App (360 Sekunden), falls keine Laenge bekannt ist.
 //
 // Diese Reihenfolge steuert Scrubber, Auto-Next, Now Playing und den WAV-Export.
 
@@ -42,6 +41,8 @@ public enum SongLengthPlan: Equatable, Sendable {
     /// Die HVSC-Datenbank kennt die Laenge. Es gibt nichts zu berechnen; eine
     /// eventuell laufende Berechnung wurde abgebrochen.
     case databaseProvidesLength
+    /// Eine ausdrueckliche persoenliche Endzeit ersetzt alle anderen Quellen.
+    case personalProvidesLength
     /// Frueher berechnete Laenge aus dem Cache, sofort verwendbar.
     case cached(Double)
     /// Der Cache weiss bereits, dass dieser Tune kein erkennbares Ende hat
@@ -104,9 +105,9 @@ public final class SongLengthResolver: @unchecked Sendable {
         return activeKey != nil
     }
 
-    public func knownDuration(md5: String, subtune: Int, databaseLengths: [Double]?, clockMode: SidClockMode = .auto) -> Double? {
+    public func knownDuration(md5: String, subtune: Int, databaseLengths: [Double]?, clockMode: SidClockMode = .auto, personalDuration: Double? = nil) -> Double? {
         SongLengthSelection.knownDuration(databaseLengths: databaseLengths, subtune: subtune,
-            computed: cache.length(md5: md5, subtune: subtune, clockMode: clockMode))
+            computed: cache.length(md5: md5, subtune: subtune, clockMode: clockMode), personalDuration: personalDuration)
     }
 
     // MARK: - Schritt 1: entscheiden
@@ -123,10 +124,14 @@ public final class SongLengthResolver: @unchecked Sendable {
     public func plan(md5: String?,
                      subtune: Int,
                      databaseLengths: [Double]?,
-                     fileURL: URL?, clockMode: SidClockMode = .auto) -> SongLengthPlan {
+                     fileURL: URL?, clockMode: SidClockMode = .auto, personalDuration: Double? = nil) -> SongLengthPlan {
         lock.lock()
         defer { lock.unlock() }
 
+        if SongLengthSelection.validPersonalDuration(personalDuration) != nil {
+            cancelLocked()
+            return .personalProvidesLength
+        }
         // 1. Die Datenbank kennt die Laenge? Dann ist nichts zu rechnen — und
         //    eine noch laufende Rechnung fuer den vorigen Titel ist gegenstandslos.
         if let lengths = databaseLengths, subtune >= 0, subtune < lengths.count {
@@ -270,16 +275,21 @@ public final class SongLengthResolver: @unchecked Sendable {
 
 // MARK: - Die effektive Dauer
 
-/// Die Leiter aus den drei Quellen zu genau einer Dauer.
+/// Waehlt aus den Laengenquellen genau eine effektive Dauer.
 ///
 /// Stand ebenfalls doppelt in beiden Apps (`currentDuration`). Sie bestimmt
 /// Scrubber-Laenge, Auto-Next-Schwelle, die Restzeit auf dem Sperrbildschirm
 /// und die Dauer des WAV-Exports.
 public enum SongLengthSelection {
+    static func validPersonalDuration(_ seconds: Double?) -> Double? {
+        guard let seconds, seconds.isFinite, seconds > 0, seconds <= WavRenderer.maximumDurationSeconds else { return nil }
+        return seconds
+    }
 
     /// Fuer Suchfilter: ein Fallback oder ein negativer Loop-Cache ist keine
     /// bekannte Dauer. Die Quellreihenfolge bleibt dieselbe wie im Player.
-    public static func knownDuration(databaseLengths: [Double]?, subtune: Int, computed: Double?) -> Double? {
+    public static func knownDuration(databaseLengths: [Double]?, subtune: Int, computed: Double?, personalDuration: Double? = nil) -> Double? {
+        if let personal = validPersonalDuration(personalDuration) { return personal }
         if let lengths = databaseLengths, lengths.indices.contains(subtune), lengths[subtune].isFinite, lengths[subtune] >= 0 { return lengths[subtune] }
         if let computed, computed.isFinite, computed > 0 { return computed }
         return nil
@@ -293,7 +303,8 @@ public enum SongLengthSelection {
     public static func duration(databaseLengths: [Double]?,
                                 subtune: Int,
                                 computed: Double?,
-                                fallback: Double = fallbackSeconds) -> Double {
+                                fallback: Double = fallbackSeconds, personalDuration: Double? = nil) -> Double {
+        if let personal = validPersonalDuration(personalDuration) { return personal }
         if let lengths = databaseLengths, subtune >= 0, subtune < lengths.count {
             return lengths[subtune]
         }

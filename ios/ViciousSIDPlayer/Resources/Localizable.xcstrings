@@ -2864,6 +2864,374 @@
           }
         }
       }
+    },
+    "Wiedergabeoptionen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiedergabeoptionen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playback options"
+          }
+        }
+      }
+    },
+    "Wiederholen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiederholen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Repeat"
+          }
+        }
+      }
+    },
+    "Datei": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Datei"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File"
+          }
+        }
+      }
+    },
+    "Hörfolge": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hörfolge"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listening sequence"
+          }
+        }
+      }
+    },
+    "Fadeout: %lld s": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fadeout: %lld s"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fade out: %lld s"
+          }
+        }
+      }
+    },
+    "Eigene Endzeit": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eigene Endzeit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom end time"
+          }
+        }
+      }
+    },
+    "%@ · Subtune %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Subtune %lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Subtune %lld"
+          }
+        }
+      }
+    },
+    "Sekunden oder m:ss": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sekunden oder m:ss"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seconds or m:ss"
+          }
+        }
+      }
+    },
+    "Vorgabe verwenden": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorgabe verwenden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use default"
+          }
+        }
+      }
+    },
+    "Zuerst einen Titel laden.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuerst einen Titel laden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Load a tune first."
+          }
+        }
+      }
+    },
+    "Eigene Endzeit vor HVSC und Berechnung. Maximal 60 Minuten; leer löscht die Vorgabe.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eigene Endzeit vor HVSC und Berechnung. Maximal 60 Minuten; leer löscht die Vorgabe."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Custom end time takes priority over HVSC and estimated lengths. Maximum 60 minutes; leave empty to clear it."
+          }
+        }
+      }
+    },
+    "Einschlaftimer": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einschlaftimer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sleep timer"
+          }
+        }
+      }
+    },
+    "%lld Minuten": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Minuten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld minutes"
+          }
+        }
+      }
+    },
+    "Timer starten": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timer starten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start timer"
+          }
+        }
+      }
+    },
+    "Nach diesem Subtune": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach diesem Subtune"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "After this subtune"
+          }
+        }
+      }
+    },
+    "Noch %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remaining: %@"
+          }
+        }
+      }
+    },
+    "Stoppt am Ende des aktuellen Subtunes.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stoppt am Ende des aktuellen Subtunes."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stops at the end of the current subtune."
+          }
+        }
+      }
+    },
+    "Timer abbrechen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Timer abbrechen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel timer"
+          }
+        }
+      }
+    },
+    "Wiedergabe durch Timer beendet.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiedergabe durch Timer beendet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playback stopped by the timer."
+          }
+        }
+      }
+    },
+    "Repeat und gewählte Endaktionen gelten auch bei ausgeschaltetem Auto Next.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Repeat und gewählte Endaktionen gelten auch bei ausgeschaltetem Auto Next."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Repeat and selected end actions also apply when Auto Next is off."
+          }
+        }
+      }
+    },
+    "Ungültige Dauer. Sekunden oder m:ss verwenden.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ungültige Dauer. Sekunden oder m:ss verwenden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Invalid duration. Use seconds or m:ss."
+          }
+        }
+      }
+    },
+    "Wiedergabeeinstellungen sind nicht lesbar. Die vorhandenen Daten bleiben erhalten.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiedergabeeinstellungen sind nicht lesbar. Die vorhandenen Daten bleiben erhalten."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playback settings could not be read. Existing data is preserved."
+          }
+        }
+      }
+    },
+    "Wiedergabeeinstellungen konnten nicht gesichert werden.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiedergabeeinstellungen konnten nicht gesichert werden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playback settings could not be saved."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

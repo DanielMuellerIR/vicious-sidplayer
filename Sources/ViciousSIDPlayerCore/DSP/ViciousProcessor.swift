@@ -89,6 +89,7 @@ public final class ViciousProcessor: Sendable {
     nonisolated(unsafe) private var frame_sampleperiod: Double = 0.0
     nonisolated(unsafe) private var framecnt: Double = 1.0
     nonisolated(unsafe) private var volume: Double = 1.0
+    nonisolated(unsafe) private var fadeEnvelope = PlaybackFadeEnvelope()
     nonisolated(unsafe) private var CPUtime: Double = 0.0
     nonisolated(unsafe) private var pPC: UInt16 = 0
     nonisolated(unsafe) private var SIDamount: Int = 1
@@ -1018,7 +1019,7 @@ public final class ViciousProcessor: Sendable {
         mix = chipOut[0] + chipOut[1] + chipOut[2]
 
         let activeVol = SIDamount_vol[min(3, max(1, SIDamount))]
-        return mix * volume * activeVol
+        return mix * volume * activeVol * fadeEnvelope.gain(at: playtime)
     }
 
     // Stereo-Variante fuer Multi-SID-Tunes: 1 SID = Mitte; 2 SIDs = Chip 1 links,
@@ -1030,7 +1031,7 @@ public final class ViciousProcessor: Sendable {
         defer { lock.unlock() }
 
         synthesizeSample()
-        let activeVol = SIDamount_vol[min(3, max(1, SIDamount))] * volume
+        let activeVol = SIDamount_vol[min(3, max(1, SIDamount))] * volume * fadeEnvelope.gain(at: playtime)
 
         if SIDamount <= 1 {
             let mono = chipOut[0] * activeVol
@@ -1143,6 +1144,12 @@ public final class ViciousProcessor: Sendable {
         lock.lock()
         defer { lock.unlock() }
         self.volume = vol
+    }
+
+    public func setFadeEnvelope(_ envelope: PlaybackFadeEnvelope) {
+        lock.lock()
+        defer { lock.unlock() }
+        fadeEnvelope = envelope
     }
 
     // Aktuelles SID-Modell anwenden: Nutzer-Override hat Vorrang (gilt dann fuer

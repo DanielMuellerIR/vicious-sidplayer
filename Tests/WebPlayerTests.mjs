@@ -50,6 +50,17 @@ test('clock override rebuilds the same position and preserves seek determinism',
   assert.equal(p.getChannelsData().clock, 'ntsc');
 });
 
+test('clock changes during preparation preserve the complete seek target', () => {
+  const p = engine(sid());
+  p.beginSeek(5); p.advanceSeek(4410);
+  p.setClockMode('ntsc'); p.advanceSeek(8820);
+  p.setClockMode('pal'); p.advanceSeek(Number.MAX_SAFE_INTEGER);
+  assert.ok(Math.abs(p.getChannelsData().playtime - 5) < 2 / 44100);
+  assert.equal(p.getChannelsData().clock, 'pal');
+  p.playSample(); p.setClockMode('ntsc'); p.advanceSeek(Number.MAX_SAFE_INTEGER);
+  assert.ok(Math.abs(p.getChannelsData().playtime - 5) < 4 / 44100);
+});
+
 test('CIA latch changes during play take effect after the running interval', () => {
   const data = sid([0x60,0xA9,0,0x8D,4,0xDC,0xA9,0x10,0x8D,5,0xDC,0xEE,0,0xD4,0x60], 2, 1);
   data[0x77] |= 8; data[0x15] = 1;

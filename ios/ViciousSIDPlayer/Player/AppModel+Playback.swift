@@ -95,8 +95,9 @@ extension AppModel {
         if coordinator.isPlaying {
             coordinator.pause()
         } else if currentTrackID != nil {
-            startPlayback()
+            startPlayback(manual: true)
         } else if let first = visibleTracks.first {
+            playbackOptions.acknowledgeManualPlayback()
             // Noch nichts geladen: mit dem ersten sichtbaren Titel anfangen.
             loadTrack(id: first.id, autoplay: true)
             return
@@ -130,6 +131,8 @@ extension AppModel {
         guard currentTrackID != nil else { return }
         let target = min(max(0, seconds), currentDuration)
         coordinator.seek(seconds: target)
+        playbackOptions.refreshSleepTimer()
+        applyPlaybackOptions()
         services.lastSessionBucket = -1
         saveSessionState()
         updateNowPlaying(force: true)
@@ -143,10 +146,10 @@ extension AppModel {
     }
 
     /// Waehlt einen Subtune derselben Datei.
-    func setSubtune(_ index: Int) {
+    func setSubtune(_ index: Int, updateListeningQueue: Bool = true) {
         guard index >= 0, index < coordinator.subtunesCount else { return }
         coordinator.setSubtune(sub: index)
-        if let trackID = currentTrackID, var queue = listening.queue {
+        if updateListeningQueue, let trackID = currentTrackID, var queue = listening.queue {
             queue.updateExplicitSubtune(index, trackID: trackID)
             listening.setQueue(queue)
         }
@@ -154,6 +157,7 @@ extension AppModel {
         // berechnete Laenge muss komplett neu ermittelt werden.
         computedLength = nil
         resolveComputedLengthIfNeeded()
+        applyPlaybackOptions()
         services.lastSessionBucket = -1
         saveSessionState()
         updateNowPlaying(force: true)
@@ -178,7 +182,11 @@ extension AppModel {
     /// unsere Audio-Sitzung deaktiviert. Der Coordinator aktiviert sie nur, wenn
     /// er die Engine komplett neu aufbaut — beim Fortsetzen aus der Pause tut er
     /// es nicht, und der Start der Engine wuerde dann still scheitern.
-    private func startPlayback() {
+    private func startPlayback(manual: Bool = false) {
+        playbackOptions.refreshSleepTimer()
+        if manual { playbackOptions.acknowledgeManualPlayback() }
+        guard !playbackOptions.didExpire else { return }
+        applyPlaybackOptions()
         services.audioSession.activate()
         coordinator.play()
     }
@@ -233,28 +241,7 @@ extension AppModel {
         updateNowPlaying()
         saveSessionStateThrottled(elapsed: elapsed)
 
-        guard autoNext, elapsed >= currentDuration else { return }
-        advanceAtEndOfTrack()
-    }
-
-    /// Songende erreicht. Reihenfolge wie auf dem Mac: erst die restlichen
-    /// Subtunes DIESER Datei, dann der naechste Titel, sonst anhalten.
-    private func advanceAtEndOfTrack() {
-        if let next = ListeningPlaybackPolicy.nextSubtune(entry: listening.queue?.current,
-            current: coordinator.currentSubtune, count: coordinator.subtunesCount) {
-            setSubtune(next)
-            return
-        }
-        ensureListeningQueue()
-        advanceListeningQueue(forward: true, autoplay: true)
-        // Der Takt oben hat gerade eine Position nahe dem Songende gesichert;
-        // `stop()` setzt die Laufzeit auf 0. Diesen Endzustand auch speichern —
-        // sonst stuende der Titel beim naechsten App-Start wieder kurz vor
-        // seinem Ende und stoppte nach dem ersten Takt gleich noch einmal.
-        services.lastSessionBucket = -1
-        saveSessionState()
-        syncPlaybackLoop()
-        updateNowPlaying(force: true)
+        handleConfiguredPlaybackEnd(elapsed: elapsed)
     }
 
     // MARK: - Sperrbildschirm und Audio-Sitzung
@@ -275,6 +262,8 @@ extension AppModel {
             self.updateNowPlaying(force: true)
         }
         session.resumeHandler = { [weak self] in
+            self?.playbackOptions.refreshSleepTimer()
+            guard self?.playbackOptions.didExpire != true else { return }
             guard let self, self.currentTrackID != nil, !self.coordinator.isPlaying else { return }
             self.startPlayback()
             self.syncPlaybackLoop()
@@ -487,8 +476,8 @@ extension AppModel {
         switch lengthResolver.plan(md5: currentMD5,
                                    subtune: coordinator.currentSubtune,
                                    databaseLengths: currentTrackLengths,
-                                   fileURL: fileURL, clockMode: coordinator.clockMode) {
-        case .databaseProvidesLength, .noLengthKnown:
+                                   fileURL: fileURL, clockMode: coordinator.clockMode, personalDuration: personalDuration) {
+        case .databaseProvidesLength, .personalProvidesLength, .noLengthKnown:
             lengthEstimateTask?.cancel()
             lengthEstimateTask = nil
             lengthEstimateOwner = nil
@@ -573,7 +562,7 @@ extension AppModel {
         defaults.set(coordinator.currentSubtune, forKey: Keys.lastSubtune)
         defaults.set(coordinator.elapsedSeconds, forKey: Keys.lastPosition)
         if let entry = listening.queue?.current, entry.trackID == id,
-           entry.subtune == nil || entry.subtune == coordinator.currentSubtune {
+           entry.subtune == nil || entry.subtune == coordinator.currentSubtune || playbackOptions.document.repeatMode == .file {
             defaults.set(entry.id.uuidString, forKey: Keys.lastListeningEntryID)
         } else {
             defaults.removeObject(forKey: Keys.lastListeningEntryID)
@@ -613,7 +602,7 @@ extension AppModel {
     ///    macht der Nutzer.
     func restoreSessionIfPossible() {
         guard currentTrackID == nil, !tracks.isEmpty else { return }
-        guard listening.isLoaded else { pendingListeningRestore = true; return }
+        guard listening.isLoaded && playbackOptions.isLoaded else { pendingListeningRestore = true; return }
         activateListeningLibrary()
         if restoreListeningQueueIfPossible() { return }
 
@@ -682,6 +671,7 @@ extension AppModel {
         let subtune = coordinator.currentSubtune
         let model = coordinator.modelOverride
         let clock = coordinator.clockMode
+        let fade = playbackOptions.document.fadeOutSeconds
         // Der Renderer hat eine eigene Obergrenze; alles darueber lehnt er ab.
         let seconds = min(currentDuration, WavRenderer.maximumDurationSeconds)
 
@@ -696,6 +686,7 @@ extension AppModel {
                                        seconds: seconds,
                                        modelOverride: model,
                                        clockMode: clock,
+                                       fadeOutSeconds: fade,
                                        to: destination)
                 return .finished(destination)
             } catch {

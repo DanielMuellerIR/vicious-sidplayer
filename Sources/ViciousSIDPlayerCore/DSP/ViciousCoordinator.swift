@@ -169,6 +169,7 @@ public final class ViciousCoordinator: ObservableObject {
     // in die @Published-Felder gespiegelt werden. Siehe setUIUpdateInterval().
     private var uiUpdateInterval: TimeInterval = 0.02
     private var currentVolume: Float = 0.3
+    private var fadeEnvelope = PlaybackFadeEnvelope()
     // Zielposition eines Seeks, der im gestoppten Zustand angefordert wurde (dann
     // gibt es noch keinen Processor). play() wendet sie beim Aufbau an, damit die
     // Wiedergabe an der per Slider gewaehlten Stelle beginnt.
@@ -234,6 +235,7 @@ public final class ViciousCoordinator: ObservableObject {
         for voice in 0..<3 { processor.setVoiceMuted(voice: voice, muted: voiceMuted[voice]) }
         processor.setFilterEnabled(filterEnabled)
         processor.initSubtune(sub: currentSubtune)
+        processor.setFadeEnvelope(fadeEnvelope)
         let requestedSeek = pendingSeekSeconds
         pendingSeekSeconds = nil
         // Die Master-Lautstaerke regelt ausschliesslich der Mixer (siehe unten,
@@ -383,6 +385,11 @@ public final class ViciousCoordinator: ObservableObject {
         audioEngine.mainMixerNode.outputVolume = vol * vol
     }
 
+    public func setFadeEnvelope(_ envelope: PlaybackFadeEnvelope) {
+        fadeEnvelope = envelope
+        engineProcessor?.setFadeEnvelope(envelope)
+    }
+
     // SID-Modell-Override setzen (nil = Auto). Wirkt live auf den laufenden Song.
     public func setModelOverride(_ model: Int?) {
         self.modelOverride = model
@@ -447,6 +454,7 @@ public final class ViciousCoordinator: ObservableObject {
                     prepared.setModelOverride(self.modelOverride.map { Double($0) })
                     for voice in 0..<3 { prepared.setVoiceMuted(voice: voice, muted: self.voiceMuted[voice]) }
                     prepared.setFilterEnabled(self.filterEnabled)
+                    prepared.setFadeEnvelope(self.fadeEnvelope)
                     slot.replace(with: prepared)
                     self.engineProcessor = prepared
                     self.seekTask = nil
@@ -491,9 +499,19 @@ public final class ViciousCoordinator: ObservableObject {
         self.pendingSeekSeconds = nil
         visualsBuffer.updatePlaytime(0.0)
 
-        if let processor = engineProcessor {
-            processor.initSubtune(sub: sub)
-        }
+        if wasSeeking, let processor = engineProcessor, let sid = activeSid, let slot = processorSlot {
+            // Ein abgebrochener Taktwechsel darf den alten Processor nicht
+            // behalten: dessen CPU-Takt ist beim Laden festgelegt worden.
+            let replacement = ViciousProcessor(sampleRate: processor.sampleRate, clockMode: clockMode)
+            _ = replacement.loadSID(sidFile: sid)
+            replacement.setModelOverride(modelOverride.map { Double($0) })
+            for voice in 0..<3 { replacement.setVoiceMuted(voice: voice, muted: voiceMuted[voice]) }
+            replacement.setFilterEnabled(filterEnabled)
+            replacement.initSubtune(sub: sub)
+            replacement.setFadeEnvelope(fadeEnvelope)
+            slot.replace(with: replacement)
+            engineProcessor = replacement
+        } else { engineProcessor?.initSubtune(sub: sub) }
         if wasSeeking && isPlaying { try? audioEngine.start() }
     }
 

@@ -110,7 +110,7 @@ final class LibraryImportIntegrationTests: XCTestCase {
         if let source { try? fm.removeItem(at: source) }
         await resetLibrary()
         await model.metadataIndex.suspend()
-        model.savedSearches.flush()
+        model.savedSearches.flush(); model.playbackOptions.cancelSleepTimer(); model.playbackOptions.flush()
         model = nil
         defaults.removePersistentDomain(forName: suiteName)
         defaults = nil
