@@ -1,3 +1,8 @@
+Vicious SID Player 1.9.33 schützt gespeicherte Hörlisten und Wiedergabeeinstellungen vor externen Änderungen. Vorübergehende Wiedergabeoptionen bleiben bei schreibgeschützter Ablage verfügbar.
+
+- Vor verzögertem Speichern oder einem späteren Import bleiben vorhandene, geänderte, beschädigte und neuere persönliche Daten erhalten.
+- Die erste Speicherkomponente für den Sammlungsaustausch ist einschließlich Rücksetzen und Wiederherstellung nach Prozessende geprüft. Import/Export und Konfliktvorschau sind weiter in Arbeit. Siehe [Prüfstand](docs/validation-1.9.33.md).
+
 Vicious SID Player 1.9.32 ergänzt Hörverlauf, Lesezeichen und persönliche Notizen auf Mac, iPhone und im eigenständigen HTML5-Player.
 
 Automatisierte Prüfungen und die Sichtprüfung der nativen Apps und HTML5 sind bestanden. Siehe [Prüfstand](docs/validation-1.9.32.md).

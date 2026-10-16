@@ -1,3 +1,8 @@
+Vicious SID Player 1.9.33 protects saved listening lists and playback settings against external changes. Temporary playback options remain available when their storage is read-only.
+
+- Existing, changed, damaged or newer personal data is preserved before pending saves or a future import.
+- The first storage component for collection transfer is tested, including rollback and interrupted-operation recovery. Import/export and conflict preview remain in development. See [validation](docs/validation-1.9.33.md).
+
 Vicious SID Player 1.9.32 adds listening history, bookmarks and personal notes to macOS, iPhone and the standalone HTML5 player.
 
 Automated checks and native/HTML5 visual acceptance have passed. See [validation](docs/validation-1.9.32.md).

@@ -98,7 +98,10 @@ final class ListeningIntegrationTests: XCTestCase {
         restored.services = PlayerServices(library: second.services.library)
         restored.applyLibrary(tracks: second.tracks, folderTree: second.folderTree)
         models.append(restored)
-        for _ in 0..<100 where !restored.listening.isLoaded { try await Task.sleep(nanoseconds: 10_000_000) }
+        for _ in 0..<100 where !restored.listening.isLoaded || !restored.playbackOptions.isLoaded {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(restored.listening.isLoaded && restored.playbackOptions.isLoaded)
         restored.restoreSessionIfPossible()
         XCTAssertEqual(restored.currentTrackID, "Alpha/A.sid")
         XCTAssertEqual(restored.coordinator.currentSubtune, 2)

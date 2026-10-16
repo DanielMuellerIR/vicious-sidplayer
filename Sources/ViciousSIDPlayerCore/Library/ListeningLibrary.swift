@@ -289,30 +289,29 @@ public enum ListeningLibraryError: Error, LocalizedError {
 public final class ListeningLibraryStore: @unchecked Sendable {
     public static let fileName = "listening-library.json"
     public let fileURL: URL
-    private let lock = NSLock()
+    private let file: PersonalDataFile
 
-    public init(fileURL: URL) { self.fileURL = fileURL }
+    public init(fileURL: URL) {
+        self.fileURL = fileURL
+        file = PersonalDataFile(url: fileURL)
+    }
 
     public static func defaultURL(fm: FileManager = .default) -> URL? {
         MusicLibraryLocation.support(fm: fm)?.appendingPathComponent(fileName)
     }
 
     public func load() throws -> ListeningLibraryDocument {
-        lock.lock()
-        defer { lock.unlock() }
-        guard FileManager.default.fileExists(atPath: fileURL.path) else { return ListeningLibraryDocument() }
-        let document = try JSONDecoder().decode(ListeningLibraryDocument.self, from: Data(contentsOf: fileURL))
-        try document.validate()
-        return document
+        try file.load { data in
+            guard let data else { return ListeningLibraryDocument() }
+            let document = try JSONDecoder().decode(ListeningLibraryDocument.self, from: data)
+            try document.validate()
+            return document
+        }
     }
 
     public func save(_ document: ListeningLibraryDocument) throws {
-        lock.lock()
-        defer { lock.unlock() }
         try document.validate()
-        let data = try JSONEncoder().encode(document)
-        try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try data.write(to: fileURL, options: .atomic)
+        try file.write(JSONEncoder().encode(document))
     }
 }
 

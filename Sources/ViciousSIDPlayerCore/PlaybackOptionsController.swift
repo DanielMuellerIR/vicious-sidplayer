@@ -20,7 +20,7 @@ public final class PlaybackOptionsController: ObservableObject {
     @Published public private(set) var didExpire = false
     public var onStopRequested: (@MainActor @Sendable () -> Void)?
     public var hasSleepTimer: Bool { sleepInstant != nil }
-    private let fileURL: URL?
+    private let store: PlaybackSettingsStore?
     private let writer = DispatchQueue(label: "ViciousSIDPlayer.playback-options", qos: .utility)
     private var pending: DispatchWorkItem?
     private var revision = 0
@@ -28,16 +28,13 @@ public final class PlaybackOptionsController: ObservableObject {
     private var timerTask: Task<Void, Never>?
     private let clock = ContinuousClock()
 
-    public init(fileURL: URL? = MusicLibraryLocation.support()?.appendingPathComponent("playback-options.json")) {
-        self.fileURL = fileURL
+    public init(fileURL: URL? = MusicLibraryLocation.support()?.appendingPathComponent(PlaybackSettingsStore.fileName)) {
+        self.store = fileURL.map { PlaybackSettingsStore(fileURL: $0) }
         Task { [weak self] in
             guard let self else { return }
-            guard let fileURL else { isReadOnly = true; isLoaded = true; return }
+            guard let store = self.store else { isReadOnly = true; isLoaded = true; return }
             let result = await Task.detached(priority: .utility) {
-                Result {
-                    guard FileManager.default.fileExists(atPath: fileURL.path) else { return PlaybackSettingsDocument() }
-                    return try JSONDecoder().decode(PlaybackSettingsDocument.self, from: Data(contentsOf: fileURL)).validated()
-                }
+                Result { try store.load() }
             }.value
             switch result {
             case .success(let document): self.document = document
@@ -104,34 +101,33 @@ public final class PlaybackOptionsController: ObservableObject {
 
     public func retrySave() { saveSoon() }
     public func flush() {
-        guard isLoaded, !isReadOnly, let fileURL else { return }
+        guard isLoaded, !isReadOnly, let store else { return }
         pending?.cancel(); pending = nil; revision += 1
         let snapshot = document
-        let save: @Sendable () -> String? = { Self.write(snapshot, to: fileURL) }
-        let result = writer.sync(execute: save)
-        storageError = result
+        let save: @Sendable () -> Result<Void, Error> = { Result { try store.save(snapshot) } }
+        receive(writer.sync(execute: save))
     }
     private func saveSoon() {
-        guard isLoaded, !isReadOnly, let fileURL else { return }
+        guard isLoaded, !isReadOnly, let store else { return }
         revision += 1; let current = revision, snapshot = document
         pending?.cancel()
         let write: @Sendable () -> Void = { [weak self] in
-            let error = Self.write(snapshot, to: fileURL)
+            let result = Result { try store.save(snapshot) }
             Task { @MainActor in
                 guard let self, self.revision == current else { return }
-                self.storageError = error
+                self.receive(result)
             }
         }
         let work = DispatchWorkItem(block: write)
         pending = work; writer.asyncAfter(deadline: .now() + 0.25, execute: work)
     }
-    nonisolated private static func write(_ document: PlaybackSettingsDocument, to url: URL) -> String? {
-        do {
-            let data = try JSONEncoder().encode(document.validated())
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try data.write(to: url, options: .atomic)
-            return nil
-        } catch { return NSLocalizedString("Wiedergabeeinstellungen konnten nicht gesichert werden.", comment: "") }
+    private func receive(_ result: Result<Void, Error>) {
+        switch result {
+        case .success: storageError = nil
+        case .failure(let error):
+            if error is PersonalDataFileError { isReadOnly = true }
+            storageError = String(format: NSLocalizedString("Wiedergabeeinstellungen konnten nicht gesichert werden: %@", comment: ""), error.localizedDescription)
+        }
     }
 }
 #endif

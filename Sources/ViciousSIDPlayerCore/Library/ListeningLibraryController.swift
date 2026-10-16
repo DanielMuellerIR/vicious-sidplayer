@@ -201,7 +201,9 @@ public final class ListeningLibraryController: ObservableObject {
                 self.isSaving = false
                 switch result {
                 case .success: self.storageError = nil
-                case .failure(let error): self.storageError = String(format: NSLocalizedString("Hörfolgen sind noch nicht gesichert: %@", comment: ""), error.localizedDescription)
+                case .failure(let error):
+                    if error is PersonalDataFileError { self.isReadOnly = true }
+                    self.storageError = String(format: NSLocalizedString("Hörfolgen sind noch nicht gesichert: %@", comment: ""), error.localizedDescription)
                 }
             }
         }
@@ -223,7 +225,10 @@ public final class ListeningLibraryController: ObservableObject {
             try writer.sync(execute: save)
             storageError = nil
             isSaving = false
-        } catch { storageError = String(format: NSLocalizedString("Hörfolgen konnten nicht gesichert werden: %@", comment: ""), error.localizedDescription) }
+        } catch {
+            if error is PersonalDataFileError { isReadOnly = true }
+            storageError = String(format: NSLocalizedString("Hörfolgen konnten nicht gesichert werden: %@", comment: ""), error.localizedDescription)
+        }
     }
 }
 #endif
