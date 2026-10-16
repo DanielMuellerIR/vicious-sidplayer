@@ -1,3 +1,8 @@
+Vicious SID Player 1.9.34 bereitet das portable Sammlungsformat und die Zusammenführung mit Konfliktwahl im gemeinsamen Core vor.
+
+- Relative Pfade und MD5-Inhaltsfingerabdrücke unterscheiden verschobene, fehlende, geänderte und mehrdeutige Dateien. Wiederholter Import erhält Listenidentitäten und addiert Hörzeit nicht doppelt.
+- Lesezeichen, Datei-/Subtunenotizen und persönliche Endzeiten erhalten ausdrückliche Konflikte. Verlauf ist optional und standardmäßig ausgeschaltet. Die Import-/Exportoberfläche ist noch in Arbeit; der Sammlungsaustausch ist in den Apps noch nicht verfügbar.
+
 Vicious SID Player 1.9.33 schützt gespeicherte Hörlisten und Wiedergabeeinstellungen vor externen Änderungen. Vorübergehende Wiedergabeoptionen bleiben bei schreibgeschützter Ablage verfügbar.
 
 - Vor verzögertem Speichern oder einem späteren Import bleiben vorhandene, geänderte, beschädigte und neuere persönliche Daten erhalten.

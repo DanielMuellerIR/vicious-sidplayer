@@ -1,3 +1,8 @@
+Vicious SID Player 1.9.34 prepares the portable collection format and conflict-aware merge in the shared core.
+
+- Relative paths and MD5 content fingerprints distinguish moved, missing, changed and ambiguous files. Repeated import preserves list identities and does not add listening time twice.
+- Bookmarks, file/subtune notes and personal end times retain explicit conflicts. History is optional and disabled by default. The import/export interface is still in development; collection transfer is not yet available in the apps.
+
 Vicious SID Player 1.9.33 protects saved listening lists and playback settings against external changes. Temporary playback options remain available when their storage is read-only.
 
 - Existing, changed, damaged or newer personal data is preserved before pending saves or a future import.

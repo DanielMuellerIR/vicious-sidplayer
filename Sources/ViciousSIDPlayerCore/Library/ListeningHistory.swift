@@ -97,6 +97,11 @@ public struct ListeningHistoryDocument: Codable, Equatable, Sendable {
     public private(set) var notes: [ListeningNote] = []
     public init() {}
 
+    public init(events: [ListeningHistoryEvent], heardMD5s: Set<String>, bookmarks: [ListeningBookmark], notes: [ListeningNote]) throws {
+        self.events = events; self.heardMD5s = heardMD5s; self.bookmarks = bookmarks; self.notes = notes
+        _ = try validated()
+    }
+
     public func hasHeard(md5: String) -> Bool { heardMD5s.contains(md5.lowercased()) }
     public func note(for reference: ListeningPersonalReference) -> ListeningNote? {
         notes.first { $0.reference.contentKey == reference.contentKey }
