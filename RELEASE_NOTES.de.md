@@ -1,3 +1,9 @@
+Vicious SID Player 1.9.37 ergänzt getrennte Mute- und Solo-Regler für bis zu drei SID-Chips auf Mac, iPhone und in HTML5.
+
+- Angezeigten Oszilloskop-Chip samt Modell wählen, jede der neun Stimmen steuern oder einen ganzen Chip stummschalten. Mehrere Solos wirken gemeinsam; Mutes haben Vorrang und bleiben nach „Solos aufheben“ erhalten.
+- Die Mischung bleibt bei Pause, Seek und Emulator-Neuaufbau erhalten. Solos nicht vorhandener Chips schalten Stücke mit weniger Chips nicht stumm. Die Analyseauswahl gilt nur für die Sitzung; Musik und persönliche Exportdaten bleiben erhalten.
+- Native und Web-Mischung, Zustandswechsel und echte Oberflächen sind geprüft. Siehe [Prüfstand](docs/validation-1.9.37.md).
+
 Vicious SID Player 1.9.36 ergänzt den Sammlungsaustausch im eigenständigen HTML5-Player.
 
 - Native Sammlungsdateien mit konkreter Konfliktwahl, widerrufbarer Pfadannahme und optionalem Verlauf importieren. Heruntergeladene Browserdaten verwenden dasselbe native Format und erhalten geordnete Listenduplikate sowie genaue Lesezeichenpositionen.

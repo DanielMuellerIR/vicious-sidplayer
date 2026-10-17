@@ -1,12 +1,32 @@
 import Foundation
 
-public struct SidVisuals: Sendable {
+public struct SidChipVisuals: Sendable {
     public let envelopes: (Float, Float, Float)
     public let frequencies: (Int, Int, Int)
     public let gates: (Int, Int, Int)
     public let waveforms: (Int, Int, Int)
     public let pulsewidths: (Float, Float, Float)
-    public let playtime: Double
+
+    public static let silent = SidChipVisuals(envelopes: (0, 0, 0), frequencies: (0, 0, 0),
+        gates: (0, 0, 0), waveforms: (0, 0, 0), pulsewidths: (0.5, 0.5, 0.5))
+}
+
+public struct SidVisuals: Sendable {
+    private let chips: (SidChipVisuals, SidChipVisuals, SidChipVisuals)
+    public var playtime: Double
+    public var envelopes: (Float, Float, Float) { chips.0.envelopes }
+    public var frequencies: (Int, Int, Int) { chips.0.frequencies }
+    public var gates: (Int, Int, Int) { chips.0.gates }
+    public var waveforms: (Int, Int, Int) { chips.0.waveforms }
+    public var pulsewidths: (Float, Float, Float) { chips.0.pulsewidths }
+
+    init(chips: (SidChipVisuals, SidChipVisuals, SidChipVisuals), playtime: Double) {
+        self.chips = chips; self.playtime = playtime
+    }
+    public func chip(_ index: Int) -> SidChipVisuals {
+        switch index { case 0: return chips.0; case 1: return chips.1; case 2: return chips.2; default: return .silent }
+    }
+    public static let silent = SidVisuals(chips: (.silent, .silent, .silent), playtime: 0)
 }
 
 public final class ViciousProcessor: Sendable {
@@ -1187,6 +1207,22 @@ public final class ViciousProcessor: Sendable {
         voiceMuted[voice + 6] = muted
     }
 
+    public func setChannelMuted(channel: Int, muted: Bool) {
+        guard (0..<9).contains(channel) else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        voiceMuted[channel] = muted
+    }
+
+    @discardableResult
+    public func setMutedChannels(_ muted: [Bool]) -> Bool {
+        guard muted.count == 9 else { return false }
+        lock.lock()
+        defer { lock.unlock() }
+        voiceMuted = muted
+        return true
+    }
+
     // SID-Filter ueberbruecken/aktivieren (wirkt live, s. Kommentar am Feld).
     public func setFilterEnabled(_ enabled: Bool) {
         lock.lock()
@@ -1263,46 +1299,27 @@ public final class ViciousProcessor: Sendable {
     public func getChannelsData() -> SidVisuals {
         lock.lock()
         defer { lock.unlock() }
-        
-        let envs = (
-            Float(envcnt[0] / 255.0),
-            Float(envcnt[1] / 255.0),
-            Float(envcnt[2] / 255.0)
-        )
-        
-        let freqs = (
-            Int(UInt16(memory[0xD400]) | UInt16(memory[0xD401]) << 8),
-            Int(UInt16(memory[0xD407]) | UInt16(memory[0xD408]) << 8),
-            Int(UInt16(memory[0xD40E]) | UInt16(memory[0xD40F]) << 8)
-        )
-
-        let gts = (
-            Int(memory[0xD404] & 1),
-            Int(memory[0xD40B] & 1),
-            Int(memory[0xD412] & 1)
-        )
-
-        let wfs = (
-            Int(memory[0xD404] & 0xF0),
-            Int(memory[0xD40B] & 0xF0),
-            Int(memory[0xD412] & 0xF0)
-        )
-
-        let pws = (
-            Float(Double(UInt16(memory[0xD402]) | UInt16(memory[0xD403] & 0x0F) << 8) / 4096.0),
-            Float(Double(UInt16(memory[0xD409]) | UInt16(memory[0xD40A] & 0x0F) << 8) / 4096.0),
-            Float(Double(UInt16(memory[0xD410]) | UInt16(memory[0xD411] & 0x0F) << 8) / 4096.0)
-        )
-
-        return SidVisuals(
-            envelopes: envs,
-            frequencies: freqs,
-            gates: gts,
-            waveforms: wfs,
-            pulsewidths: pws,
-            playtime: playtime
-        )
+        func chip(_ index: Int) -> SidChipVisuals {
+            guard SID_address[index] != 0 else { return .silent }
+            let base = Int(SID_address[index]), channel = index * 3
+            func frequency(_ voice: Int) -> Int {
+                let address = base + voice * 7
+                return Int(UInt16(memory[address]) | UInt16(memory[address + 1]) << 8)
+            }
+            func pulsewidth(_ voice: Int) -> Float {
+                let address = base + voice * 7
+                return Float(Double(UInt16(memory[address + 2]) | UInt16(memory[address + 3] & 0x0F) << 8) / 4096.0)
+            }
+            return SidChipVisuals(
+                envelopes: (Float(envcnt[channel] / 255), Float(envcnt[channel + 1] / 255), Float(envcnt[channel + 2] / 255)),
+                frequencies: (frequency(0), frequency(1), frequency(2)),
+                gates: (Int(memory[base + 4] & 1), Int(memory[base + 11] & 1), Int(memory[base + 18] & 1)),
+                waveforms: (Int(memory[base + 4] & 0xF0), Int(memory[base + 11] & 0xF0), Int(memory[base + 18] & 0xF0)),
+                pulsewidths: (pulsewidth(0), pulsewidth(1), pulsewidth(2)))
+        }
+        return SidVisuals(chips: (chip(0), chip(1), chip(2)), playtime: playtime)
     }
+
 }
 
 struct SafeMemory: Sendable {

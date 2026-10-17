@@ -15,48 +15,38 @@ import Combine
 // einem eigenen Audio-Backend weiterverwenden.
 public final class RealtimeVisualsBuffer: @unchecked Sendable {
     private let lock = NSLock()
-    private var _envelopes: (Float, Float, Float) = (0.0, 0.0, 0.0)
-    private var _frequencies: (Int, Int, Int) = (0, 0, 0)
-    private var _gates: (Int, Int, Int) = (0, 0, 0)
-    private var _waveforms: (Int, Int, Int) = (0, 0, 0)
-    private var _pulsewidths: (Float, Float, Float) = (0.5, 0.5, 0.5)
-    private var _playtime: Double = 0.0
-    
+    private var visuals: SidVisuals = .silent
     public var visualizerTicker: Int = 0
     public init() {}
-    
-    public func write(envelopes: (Float, Float, Float),
-                      frequencies: (Int, Int, Int),
-                      gates: (Int, Int, Int),
-                      waveforms: (Int, Int, Int),
-                      pulsewidths: (Float, Float, Float),
-                      playtime: Double) {
-        lock.lock()
-        _envelopes = envelopes
-        _frequencies = frequencies
-        _gates = gates
-        _waveforms = waveforms
-        _pulsewidths = pulsewidths
-        _playtime = playtime
-        lock.unlock()
+
+    public func write(_ value: SidVisuals) {
+        lock.lock(); visuals = value; lock.unlock()
     }
-    
+
+    public func write(envelopes: (Float, Float, Float), frequencies: (Int, Int, Int),
+                      gates: (Int, Int, Int), waveforms: (Int, Int, Int),
+                      pulsewidths: (Float, Float, Float), playtime: Double) {
+        let first = SidChipVisuals(envelopes: envelopes, frequencies: frequencies, gates: gates,
+                                  waveforms: waveforms, pulsewidths: pulsewidths)
+        write(SidVisuals(chips: (first, .silent, .silent), playtime: playtime))
+    }
+
     public func updatePlaytime(_ playtime: Double) {
-        lock.lock()
-        _playtime = playtime
-        lock.unlock()
+        lock.lock(); visuals.playtime = playtime; lock.unlock()
     }
-    
-    public func read() -> (envelopes: (Float, Float, Float),
-                           frequencies: (Int, Int, Int),
-                           gates: (Int, Int, Int),
-                           waveforms: (Int, Int, Int),
-                           pulsewidths: (Float, Float, Float),
-                           playtime: Double) {
-        lock.lock()
-        defer { lock.unlock() }
-        return (_envelopes, _frequencies, _gates, _waveforms, _pulsewidths, _playtime)
+
+    public func readVisuals() -> SidVisuals {
+        lock.lock(); defer { lock.unlock() }
+        return visuals
     }
+
+    public func read() -> (envelopes: (Float, Float, Float), frequencies: (Int, Int, Int),
+                           gates: (Int, Int, Int), waveforms: (Int, Int, Int),
+                           pulsewidths: (Float, Float, Float), playtime: Double) {
+        let value = readVisuals()
+        return (value.envelopes, value.frequencies, value.gates, value.waveforms, value.pulsewidths, value.playtime)
+    }
+
 }
 
 /// Der Anzeigestand der drei SID-Stimmen fuer die Oszilloskope.
@@ -131,13 +121,24 @@ public final class ViciousCoordinator: ObservableObject {
     @Published public private(set) var clockMode: SidClockMode = .auto
     @Published public private(set) var clockPreference: SidClockPreference = .unknown
     public var effectiveClock: C64Clock { clockMode.resolve(clockPreference) }
-    // Analyse-Features (nicht persistent — gelten pro Sitzung): Stimmen 1-3 einzeln
-    // stumm und SID-Filter an/aus. Wirken live und ueberleben den Processor-
-    // Neuaufbau in play() (werden dort erneut angewandt).
-    @Published public var voiceMuted: [Bool] = [false, false, false]
+    // Nur Nutzerentscheidungen werden veröffentlicht; Registerwerte bleiben
+    // im festen Echtzeitpuffer und werden beim Zeichnen gelesen.
+    @Published public private(set) var analysisMix = AnalysisMix()
+    @Published public private(set) var activeSIDChips = [0]
+    @Published public private(set) var preferredChipModels = [8580, 8580, 8580]
+    public var voiceMuted: [Bool] {
+        get { Array(analysisMix.channelMuted.prefix(3)) }
+        set {
+            guard newValue.count == 3 else { return }
+            var mix = analysisMix
+            for voice in 0..<3 { mix.setVoiceMuted(voice, muted: newValue[voice]) }
+            analysisMix = mix; applyAnalysisMix()
+        }
+    }
+    public var effectiveChannelMuted: [Bool] { analysisMix.effectiveMuted(activeChips: activeSIDChips) }
     @Published public var filterEnabled = true
 
-    // Die Anzeigewerte der drei Stimmen (Huellkurve, Frequenz, Gate, Wellenform,
+    // Die Anzeigewerte aller SID-Stimmen (Huellkurve, Frequenz, Gate, Wellenform,
     // Pulsbreite) sind BEWUSST nicht `@Published`.
     //
     // Sie aendern sich 50-mal je Sekunde — einmal je C64-Bild. Als
@@ -188,6 +189,10 @@ public final class ViciousCoordinator: ObservableObject {
         self.elapsedSeconds = 0.0
         self.prefModel = fileData.prefModel
         self.clockPreference = fileData.clockPreference
+        activeSIDChips = [0] + (fileData.secondSidAddress != 0 ? [1] : []) + (fileData.thirdSidAddress != 0 ? [2] : [])
+        preferredChipModels = [fileData.prefModel,
+            fileData.prefModel2 == 0 ? fileData.prefModel : fileData.prefModel2,
+            fileData.prefModel3 == 0 ? fileData.prefModel : fileData.prefModel3]
     }
 
     public func play() {
@@ -232,7 +237,7 @@ public final class ViciousCoordinator: ObservableObject {
         let processor = ViciousProcessor(sampleRate: sampleRate, clockMode: clockMode)
         _ = processor.loadSID(sidFile: sid)
         processor.setModelOverride(modelOverride.map { Double($0) })
-        for voice in 0..<3 { processor.setVoiceMuted(voice: voice, muted: voiceMuted[voice]) }
+        processor.setMutedChannels(effectiveChannelMuted)
         processor.setFilterEnabled(filterEnabled)
         processor.initSubtune(sub: currentSubtune)
         processor.setFadeEnvelope(fadeEnvelope)
@@ -274,12 +279,7 @@ public final class ViciousCoordinator: ObservableObject {
             if buffer.visualizerTicker >= 1024 {
                 buffer.visualizerTicker = 0
                 let liveData = processor.getChannelsData()
-                buffer.write(envelopes: liveData.envelopes,
-                             frequencies: liveData.frequencies,
-                             gates: liveData.gates,
-                             waveforms: liveData.waveforms,
-                             pulsewidths: liveData.pulsewidths,
-                             playtime: liveData.playtime)
+                buffer.write(liveData)
             }
 
             return noErr
@@ -409,8 +409,26 @@ public final class ViciousCoordinator: ObservableObject {
     // Stimme 1-3 stumm/laut schalten (Analyse; wirkt live auf den laufenden Song).
     public func toggleVoiceMuted(_ voice: Int) {
         guard voice >= 0 && voice < voiceMuted.count else { return }
-        voiceMuted[voice].toggle()
-        engineProcessor?.setVoiceMuted(voice: voice, muted: voiceMuted[voice])
+        var mix = analysisMix
+        mix.setVoiceMuted(voice, muted: !mix.channelMuted[voice])
+        analysisMix = mix; applyAnalysisMix()
+    }
+
+    public func toggleChannelMuted(_ channel: Int) {
+        analysisMix.toggleChannelMuted(channel); applyAnalysisMix()
+    }
+    public func toggleChipMuted(_ chip: Int) {
+        analysisMix.toggleChipMuted(chip); applyAnalysisMix()
+    }
+    public func toggleChannelSolo(_ channel: Int) {
+        analysisMix.toggleSolo(channel); applyAnalysisMix()
+    }
+    public func clearSolos() {
+        analysisMix.clearSolos(); applyAnalysisMix()
+    }
+    private func applyAnalysisMix() { engineProcessor?.setMutedChannels(effectiveChannelMuted) }
+    public func modelForChip(_ chip: Int) -> Int {
+        modelOverride ?? (preferredChipModels.indices.contains(chip) ? preferredChipModels[chip] : prefModel)
     }
 
     // SID-Filter an/aus (Analyse; wirkt live auf den laufenden Song).
@@ -437,7 +455,7 @@ public final class ViciousCoordinator: ObservableObject {
             let rate = processor.sampleRate
             let model = modelOverride
             let clock = clockMode
-            let muted = voiceMuted
+            let muted = effectiveChannelMuted
             let worker = Task.detached(priority: .userInitiated) {
                 try Self.prepareSeekProcessor(sid: sid, subtune: sub, sampleRate: rate,
                                               model: model, voiceMuted: muted, seconds: target,
@@ -452,7 +470,7 @@ public final class ViciousCoordinator: ObservableObject {
                     }
                     guard let self, self.seekGeneration == generation else { return }
                     prepared.setModelOverride(self.modelOverride.map { Double($0) })
-                    for voice in 0..<3 { prepared.setVoiceMuted(voice: voice, muted: self.voiceMuted[voice]) }
+                    prepared.setMutedChannels(self.effectiveChannelMuted)
                     prepared.setFilterEnabled(self.filterEnabled)
                     prepared.setFadeEnvelope(self.fadeEnvelope)
                     slot.replace(with: prepared)
@@ -485,7 +503,7 @@ public final class ViciousCoordinator: ObservableObject {
         prepared.initSubtune(sub: subtune)
         // Mute beeinflusst den Filtereingang und muss deshalb schon beim
         // Vorspulen gelten; spaeteres Setzen liesse einen hoerbaren Filterrest.
-        for voice in 0..<3 { prepared.setVoiceMuted(voice: voice, muted: voiceMuted[voice]) }
+        prepared.setMutedChannels(voiceMuted.count == 3 ? (0..<9).map { voiceMuted[$0 % 3] } : voiceMuted)
         try prepared.seekCancellable(seconds: seconds) { try Task.checkCancellation() }
         return prepared
     }
@@ -505,7 +523,7 @@ public final class ViciousCoordinator: ObservableObject {
             let replacement = ViciousProcessor(sampleRate: processor.sampleRate, clockMode: clockMode)
             _ = replacement.loadSID(sidFile: sid)
             replacement.setModelOverride(modelOverride.map { Double($0) })
-            for voice in 0..<3 { replacement.setVoiceMuted(voice: voice, muted: voiceMuted[voice]) }
+            replacement.setMutedChannels(effectiveChannelMuted)
             replacement.setFilterEnabled(filterEnabled)
             replacement.initSubtune(sub: sub)
             replacement.setFadeEnvelope(fadeEnvelope)
@@ -559,14 +577,14 @@ public final class ViciousCoordinator: ObservableObject {
         uiUpdateTimer = nil
     }
 
-    /// Der aktuelle Anzeigestand der drei Stimmen, an SwiftUI vorbei.
+    /// Der aktuelle Anzeigestand der drei Stimmen eines Chips, an SwiftUI vorbei.
     ///
     /// Gedacht fuer Ansichten, die ohnehin in ihrem eigenen Takt zeichnen (die
     /// Oszilloskope). Sie holen sich den Stand beim Zeichnen ab, statt ihn sich
     /// 50-mal je Sekunde zustellen zu lassen — siehe die Begruendung oben bei
     /// den Anzeigewerten.
-    public func currentVisuals() -> VoiceVisuals {
-        let b = visualsBuffer.read()
+    public func currentVisuals(chip: Int = 0) -> VoiceVisuals {
+        let b = visualsBuffer.readVisuals().chip(chip)
         return VoiceVisuals(envelopes: [b.envelopes.0, b.envelopes.1, b.envelopes.2],
                             frequencies: [b.frequencies.0, b.frequencies.1, b.frequencies.2],
                             gates: [b.gates.0, b.gates.1, b.gates.2],

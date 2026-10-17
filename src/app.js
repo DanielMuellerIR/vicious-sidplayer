@@ -396,7 +396,8 @@ async function loadTrack(index, autoplay, subtune = 0, updateListeningQueue = tr
   showError(null);
   
   // Clean scrubber
-  lastVisuals.playtime = 0;
+  Object.assign(lastVisuals, { envelopes: [0, 0, 0], frequencies: [0, 0, 0], gates: [0, 0, 0],
+    waveforms: [0, 0, 0], pulsewidths: [0.5, 0.5, 0.5], chips: null, playtime: 0 });
   if (seekTimer) clearTimeout(seekTimer);
   seekTimer = null;
   isSeeking = false;
@@ -498,8 +499,10 @@ clockSelect.addEventListener('change', () => {
   updateClockLabel();
 });
 
+function bindWebPlayerCallbacks() {
 player.watchLoaded((meta) => {
   currentMetadata = meta;
+  applyWebAnalysisMix();
   updateClockLabel();
   currentSubtune = 0;
   totalSubtunesCount = meta.subtunesCount || 1;
@@ -525,11 +528,14 @@ player.watchVisuals((visuals) => {
   lastVisuals.waveforms = visuals.waveforms;
   lastVisuals.pulsewidths = visuals.pulsewidths;
   lastVisuals.playtime = visuals.playtime;
+  lastVisuals.chips = visuals.chips || null;
   observeWebHistory();
   const bucket = Math.floor((visuals.playtime || 0) / 5);
   if (bucket !== lastWebSessionBucket) { lastWebSessionBucket = bucket; persistWebListening(); }
   checkWebAutoNext(visuals.playtime);
 });
+}
+bindWebPlayerCallbacks();
 
 async function checkWebAutoNext(playtime) {
   if (webAdvanceInProgress || !playingState || !autoNextCheck.checked || playtime < SCRUB_MAX) return;
@@ -546,7 +552,7 @@ async function checkWebAutoNext(playtime) {
 const ctx = canvas.getContext('2d');
 
 function resizeCanvas() {
-  const container = $('visualizer-container');
+  const container = $('scope-canvas');
   canvas.width = container.clientWidth;
   canvas.height = container.clientHeight;
 }
@@ -586,11 +592,13 @@ function draw() {
   }
 
   const live = playingState;
-  const envelopes = lastVisuals.envelopes;
-  const frequencies = lastVisuals.frequencies;
-  const gates = lastVisuals.gates;
-  const waveforms = lastVisuals.waveforms;
-  const pulsewidths = lastVisuals.pulsewidths;
+  const chipVisuals = lastVisuals.chips?.[webAnalysisChip] || lastVisuals;
+  const envelopes = chipVisuals.envelopes;
+  const frequencies = chipVisuals.frequencies;
+  const gates = chipVisuals.gates;
+  const waveforms = chipVisuals.waveforms;
+  const pulsewidths = chipVisuals.pulsewidths;
+  const mutedChannels = webAnalysisMix.effectiveMuted(activeWebSIDChips());
   const playtime = lastVisuals.playtime || 0;
 
   // Sync scrubber value and text
@@ -627,6 +635,7 @@ function draw() {
     // Draw oscillating wave
     ctx.beginPath();
     ctx.lineWidth = gate ? 2.0 : 1.0;
+    ctx.globalAlpha = mutedChannels[webAnalysisChip * 3 + c] ? 0.3 : 1;
     ctx.strokeStyle = traceColors[c];
     
     // Glowing trace shadow
@@ -659,19 +668,20 @@ function draw() {
     const wfStr = wfName(wf);
 
     ctx.fillText(
-      `V${c + 1} | ${wfStr} | [${gateStr}] | Freq:${freqStr} | Env:${envStr}`,
+      `SID ${webAnalysisChip + 1} V${c + 1} | ${wfStr} | [${gateStr}] | Freq:${freqStr} | Env:${envStr}`,
       10,
       channelH * c + 10
     );
   }
 
+  ctx.globalAlpha = 1;
   // Draw HUD Chip Model indicator
-  const model = currentMetadata?.prefModel === 8580 ? '8580' : '6581';
+  const model = currentMetadata?.chipModels?.[webAnalysisChip] || currentMetadata?.prefModel || 6581;
   ctx.fillStyle = themeStyle.getPropertyValue('--text-secondary').trim();
   ctx.font = '9px monospace';
   ctx.textAlign = 'right';
   ctx.fillText(
-    `CHIP MODEL: C64 ${model} // CHANNELS: 3 TRACE`,
+    `SID ${webAnalysisChip + 1} · ${model} // 3 TRACE`,
     W - 10,
     H - 10
   );

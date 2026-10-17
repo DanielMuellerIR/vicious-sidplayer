@@ -4,6 +4,9 @@ import ViciousSIDPlayerCore
 public struct OscilloscopeView: View {
     @ObservedObject var coordinator: ViciousCoordinator
     var theme: PlayerTheme
+    @State private var selectedChip = 0
+    @State private var showsMixControls = false
+    private var displayedChip: Int { coordinator.activeSIDChips.contains(selectedChip) ? selectedChip : coordinator.activeSIDChips[0] }
 
     // Trace-Farben pro Theme: die Neon-Toene (Cyan/Gruen/Pink) leuchten nur auf
     // dunklem Grund — auf Weiss sind sie kaum lesbar. Der Hell-Modus bekommt
@@ -22,36 +25,121 @@ public struct OscilloscopeView: View {
     }
 
     public var body: some View {
-        // Canvas + Bedien-Overlay: die Mute-Buttons liegen als echte SwiftUI-Views
-        // UEBER dem Canvas (Canvas selbst ist nicht klickbar) — vertikal auf die
-        // drei Kanal-Baender verteilt, der Filter-Schalter unten links (das HUD
-        // sitzt unten rechts).
-        ZStack {
-            scopeCanvas
-            GeometryReader { geo in
-                let channelH = geo.size.height / 3
-                ForEach(0..<3, id: \.self) { voice in
-                    let muted = coordinator.voiceMuted[voice]
-                    Button(action: { coordinator.toggleVoiceMuted(voice) }) {
-                        Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                            .font(.system(size: 13))
-                            .foregroundColor(muted ? .red : traceColors[voice].opacity(0.7))
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                if coordinator.activeSIDChips.count > 1 {
+                    Picker("Angezeigter SID-Chip", selection: $selectedChip) {
+                        ForEach(coordinator.activeSIDChips, id: \.self) { chip in
+                            Text(verbatim: "SID \(chip + 1)").tag(chip)
+                        }
                     }
-                    .buttonStyle(BorderlessButtonStyle())
-                    .help(muted ? "Stimme \(voice + 1) wieder einschalten" : "Stimme \(voice + 1) stummschalten")
-                    .position(x: geo.size.width - 20, y: channelH * CGFloat(voice) + 14)
+                    .pickerStyle(.segmented).labelsHidden()
+                    .frame(maxWidth: 220)
+                } else { Text(verbatim: "SID 1").font(.caption) }
+                Text(verbatim: "\(coordinator.modelForChip(displayedChip))").font(.caption.monospaced())
+                Spacer(minLength: 8)
+                Button("Mischung …") { showsMixControls.toggle() }
+                    .popover(isPresented: $showsMixControls) { mixControls }
+            }
+            .padding(8)
+            ZStack {
+                scopeCanvas
+                GeometryReader { geo in
+                    let channelH = geo.size.height / 3
+                    ForEach(0..<3, id: \.self) { voice in
+                        let channel = displayedChip * 3 + voice
+                        HStack(spacing: 4) {
+                            Button { coordinator.toggleChannelMuted(channel) } label: {
+                                Image(systemName: coordinator.analysisMix.channelMuted[channel] ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                                    .frame(width: 24, height: 26)
+                            }
+                            .foregroundColor(coordinator.analysisMix.channelMuted[channel] ? .red : traceColors[voice])
+                            .accessibilityLabel(Text("SID \(displayedChip + 1), Stimme \(voice + 1) stummschalten"))
+                            .accessibilityValue(coordinator.analysisMix.channelMuted[channel] ? Text("An") : Text("Aus"))
+                            .help("Stimmen-Mute umschalten; Solo und Chip-Mute bleiben erhalten")
+                            Button { coordinator.toggleChannelSolo(channel) } label: {
+                                Image(systemName: coordinator.analysisMix.soloChannels.contains(channel) ? "s.circle.fill" : "s.circle").frame(width: 24, height: 26)
+                            }
+                                .foregroundColor(coordinator.analysisMix.soloChannels.contains(channel) ? .orange : .secondary)
+                                .accessibilityLabel(Text("SID \(displayedChip + 1), Stimme \(voice + 1) Solo"))
+                                .accessibilityValue(coordinator.analysisMix.soloChannels.contains(channel) ? Text("An") : Text("Aus"))
+                                .help("Solo umschalten; mehrere Solos wirken gemeinsam")
+                        }
+                        .buttonStyle(.borderless)
+                        .font(.system(size: 12, weight: .semibold))
+                        .background(theme == .dark ? Color.macDarkSurface : Color.macLightSurface)
+                        .position(x: geo.size.width - 34, y: channelH * CGFloat(voice) + 14)
+                    }
+                    Button { coordinator.toggleFilterEnabled() } label: {
+                        Text(coordinator.filterEnabled ? "FILTER: ON" : "FILTER: OFF")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(coordinator.filterEnabled ? traceColors[1] : .red)
+                            .frame(width: 100, height: 24)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("SID-Filter an/aus; der Filterzustand läuft weiter")
+                    .position(x: 52, y: geo.size.height - 12)
                 }
-
-                Button(action: { coordinator.toggleFilterEnabled() }) {
-                    Text(coordinator.filterEnabled ? "FILTER: ON" : "FILTER: OFF")
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundColor(coordinator.filterEnabled ? Color.green.opacity(0.7) : .red)
-                }
-                .buttonStyle(BorderlessButtonStyle())
-                .help("SID-Filter an/aus (Analyse — gefilterte Stimmen laufen bei OFF ungefiltert weiter)")
-                .position(x: 52, y: geo.size.height - 12)
             }
         }
+        .onChange(of: coordinator.activeSIDChips) { chips in
+            if !chips.contains(selectedChip) { selectedChip = chips[0] }
+        }
+    }
+
+    private var mixControls: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("SID-Mischung").font(.headline)
+            ForEach(coordinator.activeSIDChips, id: \.self) { chip in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(verbatim: "SID \(chip + 1) · \(coordinator.modelForChip(chip))").font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Toggle("Chip stumm", isOn: Binding(
+                            get: { coordinator.analysisMix.chipMuted[chip] },
+                            set: { if $0 != coordinator.analysisMix.chipMuted[chip] { coordinator.toggleChipMuted(chip) } }))
+                            .toggleStyle(.checkbox)
+                            .accessibilityLabel(Text("SID \(chip + 1) Chip stumm"))
+                    }
+                    HStack(spacing: 12) {
+                        ForEach(0..<3, id: \.self) { voice in
+                            let channel = chip * 3 + voice
+                            VStack(spacing: 5) {
+                                Text(verbatim: "V\(voice + 1)").font(.caption.monospaced())
+                                HStack(spacing: 4) {
+                                    Button { coordinator.toggleChannelMuted(channel) } label: {
+                                        Image(systemName: coordinator.analysisMix.channelMuted[channel] ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                                            .frame(width: 30, height: 24)
+                                    }
+                                    .tint(coordinator.analysisMix.channelMuted[channel] ? .red : traceColors[voice])
+                                    .accessibilityLabel(Text("SID \(chip + 1), Stimme \(voice + 1) stummschalten"))
+                                    .accessibilityValue(coordinator.analysisMix.channelMuted[channel] ? Text("An") : Text("Aus"))
+                                    Button { coordinator.toggleChannelSolo(channel) } label: {
+                                        HStack(spacing: 2) {
+                                            Text("Solo")
+                                            Image(systemName: "checkmark").font(.system(size: 10)).opacity(coordinator.analysisMix.soloChannels.contains(channel) ? 1 : 0)
+                                        }.fixedSize(horizontal: true, vertical: false)
+                                            .frame(minWidth: 46, minHeight: 24)
+                                    }
+                                        .tint(coordinator.analysisMix.soloChannels.contains(channel) ? .orange : .secondary)
+                                        .accessibilityLabel(Text("SID \(chip + 1), Stimme \(voice + 1) Solo"))
+                                        .accessibilityValue(coordinator.analysisMix.soloChannels.contains(channel) ? Text("An") : Text("Aus"))
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                    }
+                }
+            }
+            Button("Solos aufheben") { coordinator.clearSolos() }.disabled(coordinator.analysisMix.soloChannels.isEmpty)
+            Text("Mehrere Solos wirken gemeinsam. Stimmen- und Chip-Mute haben Vorrang.")
+                .font(.caption).foregroundColor(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .padding(16)
+        .frame(width: 440)
+        .preferredColorScheme(theme == .dark ? .dark : .light)
     }
 
     private var scopeCanvas: some View {
@@ -65,7 +153,8 @@ public struct OscilloscopeView: View {
                 // `@Published` zugestellt: So wirft die Emulation nicht 50-mal je
                 // Sekunde den ganzen Rumpf der Oberflaeche neu auf (siehe
                 // `ViciousCoordinator`).
-                let visuals = coordinator.currentVisuals()
+                let visuals = coordinator.currentVisuals(chip: displayedChip)
+                let mutedChannels = coordinator.effectiveChannelMuted
                 let W = size.width
                 let H = size.height
 
@@ -141,7 +230,7 @@ public struct OscilloscopeView: View {
 
                     // Draw the wave trace — stummgeschaltete Stimmen gedimmt zeichnen
                     // (die Emulation laeuft weiter, nur der Mix-Beitrag fehlt).
-                    let isMuted = coordinator.voiceMuted[c]
+                    let isMuted = mutedChannels[displayedChip * 3 + c]
                     let color = isMuted ? traceColors[c].opacity(0.25) : traceColors[c]
                     context.stroke(wavePath, with: .color(color), style: StrokeStyle(lineWidth: gate != 0 ? 2.0 : 1.0))
 
@@ -151,7 +240,7 @@ public struct OscilloscopeView: View {
                     let envStr = "\(Int(round(Double(env) * 100.0)))%"
                     let wfStr = wfName(wf)
                     let mutedStr = isMuted ? " | MUTED" : ""
-                    let textInfo = "V\(c + 1) | \(wfStr) | [\(gateStr)] | Freq: \(freqStr) | Env: \(envStr)\(mutedStr)"
+                    let textInfo = "SID \(displayedChip + 1) V\(c + 1) | \(wfStr) | [\(gateStr)] | Freq: \(freqStr) | Env: \(envStr)\(mutedStr)"
 
                     let resolvedText = context.resolve(Text(textInfo)
                         .font(.system(size: 9, design: .monospaced))
@@ -161,13 +250,13 @@ public struct OscilloscopeView: View {
                 }
 
                 // Draw bottom HUD label
-                let model = coordinator.prefModel == 8580 ? "8580" : "6581"
-                let hudText = "CHIP MODEL: C64 \(model) // CHANNELS: 3 TRACE"
+                let model = String(coordinator.modelForChip(displayedChip))
+                let hudText = "SID \(displayedChip + 1) · \(model) // 3 TRACE"
                 // HUD-Farbe passend zum Theme: halbtransparentes Neon-Gruen ist auf
                 // Weiss unsichtbar -> im Hell-Modus dunkleres Gruen, etwas kraeftiger.
                 let hudColor = isDark
                     ? Color.green.opacity(0.4)
-                    : Color(red: 0.13, green: 0.50, blue: 0.13).opacity(0.55)
+                    : Color(red: 0.13, green: 0.50, blue: 0.13)
                 let resolvedHud = context.resolve(Text(hudText)
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundColor(hudColor))

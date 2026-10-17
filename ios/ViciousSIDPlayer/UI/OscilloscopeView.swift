@@ -32,6 +32,8 @@ struct OscilloscopeView: View {
     let palette: PlayerPalette
     /// App im Vordergrund? Nur dann laeuft der Zeichentakt.
     let isSceneActive: Bool
+    @State private var selectedChip = 0
+    private var displayedChip: Int { coordinator.activeSIDChips.contains(selectedChip) ? selectedChip : coordinator.activeSIDChips[0] }
 
     /// Zielbild: 30 Bilder pro Sekunde.
     private static let minimumFrameInterval = 1.0 / 30.0
@@ -42,6 +44,16 @@ struct OscilloscopeView: View {
     }
 
     var body: some View {
+        VStack(spacing: 6) {
+            if coordinator.activeSIDChips.count > 1 {
+                Picker("Angezeigter SID-Chip", selection: $selectedChip) {
+                    ForEach(coordinator.activeSIDChips, id: \.self) { chip in
+                        Text(verbatim: "SID \(chip + 1)").tag(chip)
+                    }
+                }
+                .pickerStyle(.segmented).labelsHidden()
+                .padding(.horizontal, 8).padding(.top, 6)
+            }
         TimelineView(.animation(minimumInterval: Self.minimumFrameInterval, paused: isPaused)) { timeline in
             Canvas { context, size in
                 draw(context: &context,
@@ -57,6 +69,10 @@ struct OscilloscopeView: View {
         )
         .accessibilityLabel("Oszilloskop")
         .accessibilityHint("Zeigt die Wellenform der drei SID-Stimmen.")
+        }
+        .onChange(of: coordinator.activeSIDChips) { _, chips in
+            if !chips.contains(selectedChip) { selectedChip = chips[0] }
+        }
     }
 
     // MARK: - Zeichnen
@@ -76,7 +92,7 @@ struct OscilloscopeView: View {
         // `@Published` zugestellt: So wirft die Emulation nicht 50-mal je
         // Sekunde den ganzen Rumpf der Oberflaeche neu auf (siehe
         // `ViciousCoordinator`).
-        let visuals = showWave ? coordinator.currentVisuals() : .silent
+        let visuals = showWave ? coordinator.currentVisuals(chip: displayedChip) : .silent
 
         for voice in 0..<3 {
             drawVoice(voice,
@@ -175,7 +191,7 @@ struct OscilloscopeView: View {
 
         // Stummgeschaltete Stimmen gedimmt zeichnen: die Emulation laeuft weiter,
         // nur ihr Beitrag zum Mix fehlt.
-        let isMuted = coordinator.voiceMuted[voice]
+        let isMuted = coordinator.effectiveChannelMuted[displayedChip * 3 + voice]
         let color = isMuted ? palette.traceColors[voice].opacity(0.25) : palette.traceColors[voice]
         context.stroke(wavePath,
                        with: .color(color),
@@ -200,7 +216,7 @@ struct OscilloscopeView: View {
     }
 
     private func drawHUD(context: inout GraphicsContext, width: CGFloat, height: CGFloat) {
-        let model = coordinator.prefModel == 8580 ? "8580" : "6581"
+        let model = coordinator.modelForChip(displayedChip) == 8580 ? "8580" : "6581"
         // Ueber eine String-Variable statt direkt als Literal: `Text` mit einem
         // Literal wuerde den Text als Uebersetzungsschluessel behandeln, und
         // Chipbezeichnungen uebersetzt man nicht.

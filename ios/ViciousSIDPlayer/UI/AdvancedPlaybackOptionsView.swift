@@ -13,13 +13,13 @@ struct AdvancedPlaybackOptionsView: View {
             Form {
                 if let error = controller.storageError { Section { Text(error) } }
                 Section("Wiedergabe") {
-                    Picker("Wiederholen", selection: Binding(get: { controller.document.repeatMode }, set: controller.setRepeatMode)) {
+                    Picker("Wiederholen", selection: Binding(get: { controller.document.repeatMode }, set: { controller.setRepeatMode($0) })) {
                         Text("Aus").tag(PlaybackRepeatMode.off)
                         Text("Subtune").tag(PlaybackRepeatMode.subtune)
                         Text("Datei").tag(PlaybackRepeatMode.file)
                         Text("Hörfolge").tag(PlaybackRepeatMode.sequence)
                     }.accessibilityIdentifier("playback-repeat")
-                    Stepper("Fadeout: \(Int(controller.document.fadeOutSeconds)) s", value: Binding(get: { controller.document.fadeOutSeconds }, set: controller.setFadeOutSeconds), in: 0...30, step: 1)
+                    Stepper("Fadeout: \(Int(controller.document.fadeOutSeconds)) s", value: Binding(get: { controller.document.fadeOutSeconds }, set: { controller.setFadeOutSeconds($0) }), in: 0...30, step: 1)
                         .accessibilityIdentifier("playback-fade")
                 }
                 Section("Eigene Endzeit") {
@@ -34,7 +34,7 @@ struct AdvancedPlaybackOptionsView: View {
                     Text("Eigene Endzeit vor HVSC und Berechnung. Maximal 60 Minuten; leer löscht die Vorgabe.").font(.caption).foregroundStyle(.secondary)
                 }
                 Section("Einschlaftimer") {
-                    Stepper("\(controller.document.sleepMinutes) Minuten", value: Binding(get: { controller.document.sleepMinutes }, set: controller.setSleepMinutes), in: 1...180)
+                    Stepper("\(controller.document.sleepMinutes) Minuten", value: Binding(get: { controller.document.sleepMinutes }, set: { controller.setSleepMinutes($0) }), in: 1...180)
                     Button("Timer starten") { try? controller.startSleepTimer(seconds: Double(controller.document.sleepMinutes) * 60) }
                     Button("Nach diesem Subtune") { controller.stopAtSubtuneEnd() }
                     if controller.hasSleepTimer { Text("Noch \(LibraryMetadata.durationDescription(controller.remainingSleepSeconds))") }

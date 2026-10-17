@@ -10,6 +10,8 @@ const historySource = await readFile(new URL('../src/history.js', import.meta.ur
 const collectionSource = await readFile(new URL('../src/collection.js', import.meta.url), 'utf8');
 const storageSource = await readFile(new URL('../src/personal-storage.js', import.meta.url), 'utf8');
 const collectionUI = await readFile(new URL('../src/collection-ui.js', import.meta.url), 'utf8');
+const analysisSource = await readFile(new URL('../src/analysis.js', import.meta.url), 'utf8');
+const analysisUI = await readFile(new URL('../src/analysis-ui.js', import.meta.url), 'utf8');
 const historyUI = await readFile(new URL('../src/history-ui.js', import.meta.url), 'utf8');
 const listeningUI = await readFile(new URL('../src/listening-ui.js', import.meta.url), 'utf8');
 const appSource = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
@@ -113,7 +115,7 @@ async function ui() {
     navigator: { locks: { request: (_name, _options, action) => Promise.resolve().then(action) } },
     document: { getElementById(id) { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); },
       createElement() { return new Element(); }, createTextNode(value) { return value; } },
-    window: { addEventListener() {}, matchMedia() { return { matches: true }; }, AudioContext: class {
+    window: { addEventListener() {}, confirm() { return true; }, matchMedia() { return { matches: true }; }, AudioContext: class {
       state = 'running'; destination = {}; audioWorklet = { addModule: () => module };
       createBuffer() { return {}; } createBufferSource() { return { connect() {}, start() {}, disconnect() {} }; }
     } },
@@ -129,6 +131,8 @@ async function ui() {
   vm.runInContext(historyUI, context);
   vm.runInContext(listeningUI, context);
   vm.runInContext(collectionUI, context);
+  vm.runInContext(analysisSource, context);
+  vm.runInContext(analysisUI, context);
   vm.runInContext(appSource, context);
   await vm.runInContext('webListeningReady', context);
   context.valid = sid();
@@ -385,4 +389,35 @@ test('a delayed close event from the previous dialog cannot invalidate a newly o
   dialog.open = false; dialog.listeners.close();
   assert.equal(page.run('collectionUI.document'), null);
   assert.equal(page.run('collectionUI.generation'), generation + 1);
+});
+
+test('analysis mask is copied and reaches a new audio node before the buffered seek and play', async () => {
+  const mock = audioMock(), player = new SidPlayer(), mask = Array(9).fill(false); mask[4] = true;
+  assert.equal(player.setMutedChannels(mask), true); mask[4] = false;
+  await player.loadBuffer(sid()); player.seek(12);
+  const pending = player.play('fixture'); mock.release(); await pending;
+  const messages = mock.nodes[0].messages, mute = messages.findIndex(m => m.type === 'setMutedChannels');
+  assert.equal(messages[mute].muted[4], true);
+  assert(mute < messages.findIndex(m => m.type === 'seek'));
+  assert(mute < messages.findIndex(m => m.type === 'play'));
+});
+test('clearing and reselecting the library keeps analysis callbacks and ignores an invisible solo', async () => {
+  const page = await ui();
+  page.run(`valid[5]=4;valid[0x7a]=0x42;valid[0x7b]=0x44;
+    trackList=[{id:'one',name:'One',buffer:valid,isUser:true}];
+    webListeningStore.document.catalog=[{id:'one',path:'One.sid',name:'One',fingerprint:'123456789abcdef0',size:valid.length,subtunesCount:1}];
+    webListeningStore.document.libraryIDs=['one'];`);
+  await page.run('loadTrack(0,false)');
+  assert.deepEqual(Array.from(page.run('activeWebSIDChips()')), [0, 1, 2]);
+  page.run('webAnalysisMix.toggleSolo(8);applyWebAnalysisMix()');
+  page.elements.get('clear-library').listeners.click();
+  page.run(`valid[5]=2;valid[0x7a]=0;valid[0x7b]=0;
+    trackList=[{id:'two',name:'Two',buffer:valid,isUser:true}];
+    webListeningStore.document.catalog.push({id:'two',path:'Two.sid',name:'Two',fingerprint:'abcdef0123456789',size:valid.length,subtunesCount:1});
+    webListeningStore.document.libraryIDs=['two'];`);
+  await page.run('loadTrack(0,false)');
+  assert.deepEqual(Array.from(page.run('activeWebSIDChips()')), [0]);
+  assert.deepEqual(Array.from(page.run('player.mutedChannels.slice(0,3)')), [false, false, false]);
+  assert.equal(page.run('webAnalysisMix.soloChannels.has(8)'), true);
+  assert.equal(page.run('typeof player.visualCallback'), 'function');
 });

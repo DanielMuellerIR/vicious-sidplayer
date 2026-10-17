@@ -40,7 +40,13 @@ export function parseSidHeader(data) {
   const prefModel = version >= 2 && (data[0x77] & 0x30) >= 0x20 ? 8580 : 6581;
 
   const clockPreference = ['unknown', 'pal', 'ntsc', 'both'][version >= 2 ? (data[0x77] >> 2) & 3 : 0];
-  return { title, author, info, subtunesCount, prefModel, clockPreference };
+  const sidAddress = value => value >= 0x42 && (value < 0x80 || value >= 0xe0) ? 0xd000 + value * 16 : 0;
+  const addresses = [0xd400, version >= 3 ? sidAddress(data[0x7a]) : 0, version >= 4 ? sidAddress(data[0x7b]) : 0];
+  const model = bits => bits >= 2 ? 8580 : bits === 1 ? 6581 : prefModel;
+  const chipModels = [prefModel, version >= 3 ? model((data[0x77] >> 6) & 3) : prefModel,
+    version >= 4 ? model(data[0x76] & 3) : prefModel];
+  return { title, author, info, subtunesCount, prefModel, clockPreference, chipModels,
+    activeSIDChips: [0, 1, 2].filter(chip => addresses[chip] !== 0) };
 }
 
 export class SidPlayer {
@@ -49,6 +55,7 @@ export class SidPlayer {
     this.workletNode = null;
     this.volume = 0.3;
     this.clockMode = 'auto';
+    this.mutedChannels = Array(9).fill(false);
     this.visualCallback = null;
     this.loadedCallback = null;
     this.loaded = false;
@@ -150,6 +157,7 @@ export class SidPlayer {
 
     this.workletNode.port.postMessage({ type: 'setVolume', volume: this.volume });
     this.workletNode.port.postMessage({ type: 'setClockMode', mode: this.clockMode });
+    this.workletNode.port.postMessage({ type: 'setMutedChannels', muted: this.mutedChannels });
   }
 
   /**
@@ -251,6 +259,13 @@ export class SidPlayer {
     this.playGen++;
     if (this.workletNode) this.workletNode.port.postMessage({ type: 'stop' });
     this.playing = false;
+  }
+
+  setMutedChannels(muted) {
+    if (!Array.isArray(muted) || muted.length !== 9 || !muted.every(value => typeof value === 'boolean')) return false;
+    this.mutedChannels = [...muted];
+    this.workletNode?.port.postMessage({ type: 'setMutedChannels', muted: this.mutedChannels });
+    return true;
   }
 
   setSubtune(subtune) {

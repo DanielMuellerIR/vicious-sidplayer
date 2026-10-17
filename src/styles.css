@@ -397,7 +397,14 @@ select {
   background: var(--bg-panel);
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
+.scope-toolbar { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 10px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); font-size: 12px; }
+.scope-toolbar label { display: flex; align-items: center; gap: 6px; }
+.scope-toolbar button { margin-left: auto; }
+.scope-toolbar select { width: auto; }
+.scope-canvas { flex: 1; min-height: 120px; overflow: hidden; }
 #oscilloscope {
   display: block;
   width: 100%;
@@ -542,3 +549,18 @@ body:has(.player.theme-light) #collection-dialog { --bg-secondary: #fff; --text-
 .collection-row pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 6px 0 16px; }
 .collection-pagination { justify-content: space-between; }
 @media (max-width: 480px) { #collection-dialog { padding: 14px; } .collection-layout label:has(input[type="file"]), .collection-layout label:has(select) { flex-direction: column; } }
+
+#analysis-dialog { width: min(600px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; font: 14px/1.45 var(--font-main); }
+body:has(.player.theme-dark) #analysis-dialog { --bg-secondary: #2d2d2d; --text-primary: #fff; --text-secondary: #a5a5a5; --border: #3c3c3e; --accent: #0a84ff; }
+body:has(.player.theme-light) #analysis-dialog { --bg-secondary: #fff; --text-primary: #1d1d1f; --text-secondary: #68686d; --border: #d3d3d3; --accent: #007aff; }
+.analysis-layout, #analysis-groups { display: flex; flex-direction: column; gap: 18px; }
+.analysis-layout h2, .analysis-layout p { margin: 0; }
+.analysis-layout p { color: var(--text-secondary); }
+.analysis-chip { display: flex; flex-direction: column; gap: 10px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.analysis-chip-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.analysis-voices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.analysis-voice { display: flex; flex-direction: column; gap: 6px; text-align: center; }
+.analysis-voice-actions { display: flex; gap: 4px; }
+.analysis-voice-actions button { flex: 1; min-width: 0; padding: 6px 3px; }
+.analysis-layout button { min-height: 44px; }
+.analysis-layout button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }

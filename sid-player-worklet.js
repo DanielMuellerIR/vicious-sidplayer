@@ -72,6 +72,7 @@ class SidPlayerProcessor {
     let CPUtime = 0;
     let pPC = 0;
     let SIDamount = 1;
+    const voiceMuted = Array(9).fill(false);
     let mix = 0;
     
     // CPU Registers
@@ -494,7 +495,10 @@ class SidPlayerProcessor {
         prevaccu[channel] = phaseaccu[channel];
         sourceMSB[num] = MSB;
 
-        if (memory[SIDaddr + 0x17] & FILTSW[channel]) {
+        // Mute entfernt nur den Mixbeitrag nach Oszillator und Hüllkurve.
+        // Readbacks, CPU und alle Chips laufen unverändert weiter.
+        if (voiceMuted[channel]) {
+        } else if (memory[SIDaddr + 0x17] & FILTSW[channel]) {
           filtin += (wfout - 0x8000) * (envcnt[channel] / 256);
         } else if ((channel % SID_CHANNEL_AMOUNT) != 2 || !(memory[SIDaddr + 0x18] & OFF3_BITMASK)) {
           output += (wfout - 0x8000) * (envcnt[channel] / 256);
@@ -696,6 +700,12 @@ class SidPlayerProcessor {
       volume = vol;
     };
 
+    this.setMutedChannels = function(muted) {
+      if (!Array.isArray(muted) || muted.length !== 9 || !muted.every(value => typeof value === 'boolean')) return false;
+      for (let channel = 0; channel < 9; channel++) voiceMuted[channel] = muted[channel];
+      return true;
+    };
+
     // ENV3/OSC3 wirken auf die CPU zurueck; Seek rekonstruiert echte Samples.
     // Das Worklet arbeitet in begrenzten Portionen, damit neue Befehle auch
     // waehrend eines langen Sprungs bearbeitet werden koennen.
@@ -721,37 +731,20 @@ class SidPlayerProcessor {
     };
 
     this.getChannelsData = function() {
-      // Returns current envelope levels, frequencies, gate signals, the selected
-      // waveform + pulse-width per voice, and elapsed playtime (seconds) so the
-      // UI can draw the real waveform shapes on the scope and drive the scrubber.
-      // waveform = the upper nibble of each voice's control register (bit 4 TRI,
-      // 5 SAW, 6 PULSE, 7 NOISE). pulsewidth is the 12-bit duty cycle as 0..1.
-      return {
-        envelopes: [envcnt[0] / 255.0, envcnt[1] / 255.0, envcnt[2] / 255.0],
-        frequencies: [
-          (memory[0xD400] + memory[0xD401] * 256),
-          (memory[0xD407] + memory[0xD408] * 256),
-          (memory[0xD40E] + memory[0xD40F] * 256)
-        ],
-        gates: [
-          memory[0xD404] & 1,
-          memory[0xD40B] & 1,
-          memory[0xD412] & 1
-        ],
-        waveforms: [
-          memory[0xD404] & 0xF0,
-          memory[0xD40B] & 0xF0,
-          memory[0xD412] & 0xF0
-        ],
-        pulsewidths: [
-          (memory[0xD402] + (memory[0xD403] & 0x0F) * 256) / 4096,
-          (memory[0xD409] + (memory[0xD40A] & 0x0F) * 256) / 4096,
-          (memory[0xD410] + (memory[0xD411] & 0x0F) * 256) / 4096
-        ],
-        playtime: playtime,
-        clock: clock
-      };
+      const chips = SID_address.map((base, chip) => {
+        if (!base) return null;
+        const channels = [0, 1, 2];
+        return {
+          envelopes: channels.map(voice => envcnt[chip * 3 + voice] / 255),
+          frequencies: channels.map(voice => memory[base + voice * 7] + memory[base + voice * 7 + 1] * 256),
+          gates: channels.map(voice => memory[base + voice * 7 + 4] & 1),
+          waveforms: channels.map(voice => memory[base + voice * 7 + 4] & 0xf0),
+          pulsewidths: channels.map(voice => (memory[base + voice * 7 + 2] + (memory[base + voice * 7 + 3] & 0x0f) * 256) / 4096)
+        };
+      });
+      return { ...chips[0], chips, playtime, clock };
     };
+
   }
 }
 
@@ -786,6 +779,8 @@ class SidPlayerWorklet extends AudioWorkletProcessor {
         this.engine.initSubtune(data.subtune);
       } else if (data.type === 'setVolume') {
         this.engine.setVolume(data.volume);
+      } else if (data.type === 'setMutedChannels') {
+        this.engine.setMutedChannels(data.muted);
       } else if (data.type === 'setClockMode') {
         this.seekRequest = data.request;
         this.engine.setClockMode(data.mode);

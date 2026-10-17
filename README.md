@@ -39,7 +39,7 @@ not tracked. It opens directly in the browser without a web server.
 ## Features
 
 - **Drag & drop**: Drop single `.sid` files or entire folders onto the player. Playback starts immediately.
-- **Real-time oscilloscope**: Shows the waveforms of the three SID voices (triangle, sawtooth, pulse, noise) along with frequencies, gate status, and ADSR envelopes.
+- **Real-time oscilloscope**: Shows three voices of the selected SID chip (triangle, sawtooth, pulse, noise), with frequencies, gate status, ADSR envelopes and the chip model.
 - **SID model selection (macOS app)**: Picker with `Auto`, `6581`, and `8580`. `Auto` follows the preference stored in the SID file; a fixed choice forces the respective chip model and applies live to the running song (many tunes only sound right on the chip they were originally written for).
 - **PAL/NTSC clock selection**: Automatically follows the SID header, with explicit PAL and NTSC overrides in the native and HTML5 players. Unknown or dual-standard files use PAL in Auto mode. The selected clock also applies to seeking and WAV export; calculated song lengths are cached separately for each clock mode.
 - **Quick Look preview (macOS app)**: Select a `.sid` file in Finder and press Space — the tune plays instantly, with title, composer, and copyright plus subtune switching for multi-song files. Setup: see [Quick Look preview](#quick-look-preview-for-sid-files-macos).
@@ -66,7 +66,7 @@ Track paths are relative to the autoplay folder. Absolute paths, `..` and anythi
 - **Collection transfer (macOS, iPhone and HTML5)**: Exchange favorites, ordered lists, favorite subtunes, bookmarks and notes as local JSON. History and heard status are optional and off by default. Preview content matches and concrete conflicts before merging; confirm skipped favorite/list entries. Music, the active queue and playback position are preserved. On Mac, choose “Sammlungsdaten …”; on iPhone, “Persönliche Sammlungsdaten …”; in HTML5, “Import / export personal collection”. Native apps also exchange custom end times; HTML5 explicitly excludes them. Older browser FNV data stays local until selected music supplies verified MD5 identities. Safe browser writes require Web Locks support. See [format and merge rules](docs/personal-collection.md).
 - **Metadata search (macOS and iPhone)**: The library appears from its file index immediately; SID titles, authors, release information and chip models are added in the background. Search words include file names, folders and header metadata. Combine fields such as `author:"Rob Hubbard" chips:3 model:8580` or `min:1:00 max:3:00`; duration refers to subtune 1 and uses custom end times before known HVSC/cache values. `duration:unknown`, `model:unknown` and `metadata:unknown` keep missing information explicit. Save, recall, rename and delete search views, including the favorites filter. Later filter changes leave the listening sequence unchanged.
 - **Favorites**: A persistent star per track with a favorites-only filter.
-- **Voice muting & filter toggle**: Mute each of the three SID voices individually and bypass the SID filter — directly in the oscilloscope view, useful for analyzing how a tune is built.
+- **Solo, voice/chip muting and filter bypass**: Control all nine voices in a 3SID tune separately on Mac, iPhone and HTML5. Multiple solos play together; voice and chip mutes take priority. Clearing solos keeps your mutes. Analysis choices last for the session, and emulation continues while muted.
 - **WAV export**: Render the current tune to a WAV file faster than real time — from the GUI (⌘E) or headless from the command line (see [Headless / CLI](#headless--cli-for-scripts-and-ai-agents)).
 - **Dark / light mode**: Follows the system setting automatically (default); a fixed light or dark appearance can be chosen in the settings (⌘,) or toggled with ⌘T.
 - **Local browser listening data**: Named lists, favorite subtunes, queue order and position are saved in browser storage. After reloading, select the same SID files or folder again to restore access; music is never stored in the page. An unambiguous content match can reconnect a moved file. Restoration prepares playback without starting it. Unreadable data stays untouched; unavailable or full storage is reported.
@@ -100,6 +100,7 @@ Every control in the app has a tooltip: rest the pointer on it for a moment and 
 | Position slider | Seek — works even while paused or stopped; pressing Play then starts from that point. |
 | Volume slider | Playback volume. |
 | Speaker icons (oscilloscope, right edge) | Mute or unmute each SID voice individually — the emulation keeps running, only the audio contribution is removed. |
+| SID chip selector / Mischung … | Choose the displayed chip or open grouped mute and solo controls. A fixed model override applies to all chips. |
 | FILTER: ON / OFF (oscilloscope, bottom left) | Bypass the SID filter; filtered voices then play unfiltered. |
 | Musik / Listen / Folge | Switch between the library, saved listening lists, and the active queue. |
 | Auswahl (library) | Start or save a deliberate selection; searching alone leaves playback unchanged. |

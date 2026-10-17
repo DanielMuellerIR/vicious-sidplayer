@@ -113,7 +113,8 @@
 
     <!-- Visualizer Container -->
     <div class="visualizer-container" id="visualizer-container">
-      <canvas id="oscilloscope"></canvas>
+      <div class="scope-toolbar"><label id="scope-chip-label">Scope <select id="scope-chip" aria-label="Displayed SID chip"></select></label><span id="scope-model"></span><button id="analysis-open">Mix / Solo</button></div>
+      <div class="scope-canvas" id="scope-canvas"><canvas id="oscilloscope"></canvas></div>
     </div>
   </div>
 
@@ -149,6 +150,15 @@
     <textarea id="history-editor-text" rows="7" maxlength="16000"></textarea>
     <div class="tool-row"><button type="button" id="history-editor-cancel">Cancel</button><button type="submit">Save</button></div>
   </form>
+</dialog>
+
+<dialog id="analysis-dialog" aria-labelledby="analysis-heading">
+  <div class="analysis-layout">
+    <div class="analysis-chip-header"><h2 id="analysis-heading">SID mix</h2><button id="analysis-close">Close</button></div>
+    <div id="analysis-groups"></div>
+    <button id="analysis-clear-solo">Clear solos</button>
+    <p>Multiple solos play together. Voice and chip mutes stay active and take priority. Solos on inactive chips do not silence the current tune.</p>
+  </div>
 </dialog>
 
 <dialog id="collection-dialog" aria-labelledby="collection-heading">

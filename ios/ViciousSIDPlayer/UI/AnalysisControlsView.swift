@@ -2,7 +2,7 @@ import SwiftUI
 import ViciousSIDPlayerCore
 
 // Analysewerkzeuge: einzelne Stimmen stummschalten, den SID-Filter ueberbruecken
-// und das Chipmodell erzwingen. Dieselben drei Schalter hat auch die Mac-App.
+// und das Chipmodell erzwingen. Mute und Solo gelten getrennt je Chip/Stimme.
 //
 // Zwei Dinge, die man dabei wissen sollte (beides steht so in AGENTS.md):
 //
@@ -24,15 +24,36 @@ struct AnalysisControlsView: View {
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            HStack(spacing: 8) {
-                ForEach(0..<3, id: \.self) { voice in
-                    voiceButton(voice)
+            ForEach(coordinator.activeSIDChips, id: \.self) { chip in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(verbatim: "SID \(chip + 1) · \(coordinator.modelForChip(chip))")
+                            .font(.footnote.weight(.semibold))
+                        Spacer()
+                        Button { coordinator.toggleChipMuted(chip) } label: {
+                            Label("Chip stumm", systemImage: coordinator.analysisMix.chipMuted[chip] ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                                .font(.footnote).frame(minHeight: 44)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(coordinator.analysisMix.chipMuted[chip] ? .red : .accentColor)
+                        .accessibilityLabel(Text("SID \(chip + 1) Chip stumm"))
+                        .accessibilityValue(coordinator.analysisMix.chipMuted[chip] ? Text("An") : Text("Aus"))
+                    }
+                    HStack(spacing: 6) {
+                        ForEach(0..<3, id: \.self) { voice in voiceControls(chip: chip, voice: voice) }
+                    }
                 }
             }
+            Button { coordinator.clearSolos() } label: {
+                Text("Solos aufheben").frame(minHeight: 32)
+            }
+                .buttonStyle(.bordered)
+                .frame(minHeight: 44)
+                .disabled(coordinator.analysisMix.soloChannels.isEmpty)
+            Text("Mehrere Solos wirken gemeinsam. Stimmen- und Chip-Mute haben Vorrang.")
+                .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
 
-            // Der Filterschalter steht bewusst in einer eigenen Zeile: neben den
-            // drei Stimmknoepfen bliebe fuer „Filter aus" so wenig Platz, dass
-            // die Beschriftung umbricht.
+            // Der globale Filter-Bypass bleibt außerhalb der Chipgruppen.
             HStack {
                 Button {
                     coordinator.toggleFilterEnabled()
@@ -49,7 +70,7 @@ struct AnalysisControlsView: View {
                         }
                     }
                     .font(.footnote)
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .buttonStyle(.bordered)
                 .tint(coordinator.filterEnabled ? .accentColor : .orange)
@@ -92,24 +113,29 @@ struct AnalysisControlsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Ein Knopf je SID-Stimme, eingefaerbt wie ihre Kurve im Oszilloskop —
-    /// so ist auf einen Blick klar, welcher Knopf zu welcher Linie gehoert.
-    private func voiceButton(_ voice: Int) -> some View {
-        let isMuted = coordinator.voiceMuted[voice]
-        return Button {
-            coordinator.toggleVoiceMuted(voice)
-        } label: {
-            VStack(spacing: 2) {
-                Image(systemName: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                    .font(.footnote)
-                Text(verbatim: "V\(voice + 1)")
-                    .font(.caption2.monospaced())
+    private func voiceControls(chip: Int, voice: Int) -> some View {
+        let channel = chip * 3 + voice
+        let muted = coordinator.analysisMix.channelMuted[channel]
+        let solo = coordinator.analysisMix.soloChannels.contains(channel)
+        return VStack(spacing: 5) {
+            Text(verbatim: "V\(voice + 1)").font(.caption.monospaced())
+                .foregroundStyle(coordinator.effectiveChannelMuted[channel] ? Color.secondary : palette.traceColors[voice])
+            HStack(spacing: 4) {
+                Button { coordinator.toggleChannelMuted(channel) } label: {
+                    Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill").frame(maxWidth: .infinity, minHeight: 32)
+                }
+                .frame(minWidth: 44, minHeight: 44)
+                .tint(muted ? .red : palette.traceColors[voice])
+                .accessibilityLabel(Text("SID \(chip + 1), Stimme \(voice + 1) stummschalten"))
+                .accessibilityValue(muted ? Text("An") : Text("Aus"))
+                Button { coordinator.toggleChannelSolo(channel) } label: { Text("S").frame(maxWidth: .infinity, minHeight: 32) }
+                    .frame(minWidth: 44, minHeight: 44)
+                    .tint(solo ? .orange : .secondary)
+                    .accessibilityLabel(Text("SID \(chip + 1), Stimme \(voice + 1) Solo"))
+                    .accessibilityValue(solo ? Text("An") : Text("Aus"))
             }
-            .frame(maxWidth: .infinity)
+            .buttonStyle(.bordered)
         }
-        .buttonStyle(.bordered)
-        .tint(isMuted ? .red : palette.traceColors[voice])
-        .accessibilityLabel(Text("Stimme \(voice + 1)"))
-        .accessibilityValue(isMuted ? Text("Stumm") : Text("Hörbar"))
+        .frame(maxWidth: .infinity)
     }
 }

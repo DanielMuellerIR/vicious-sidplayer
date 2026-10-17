@@ -6,6 +6,7 @@ async function initializeListeningUI() {
   webListeningStore = webPersonalStorage.stores[0];
   initializeWebHistory(storage, webPersonalStorage.stores[1]);
   initializeCollectionUI();
+  initializeWebAnalysisUI();
   listeningQueue = webListeningStore.document.queue ? ListeningSequence.fromJSON(webListeningStore.document.queue) : null;
   pendingWebRestore = !!(listeningQueue || webListeningStore.document.session);
   if (listeningQueue && webListeningStore.document.shuffle) listeningQueue.restart(true, true);
@@ -41,7 +42,8 @@ async function initializeListeningUI() {
   $('clear-library').addEventListener('click', () => {
     if (!window.confirm('Clear the library and queue? Saved lists and music files are kept.')) return;
     observeWebHistory(false, true);
-    player.unload(); currentIdx = -1; trackList = []; listeningQueue = null; pendingWebRestore = false;
+    player.unload(); bindWebPlayerCallbacks(); currentIdx = -1; trackList = []; listeningQueue = null; pendingWebRestore = false;
+    currentMetadata = null; applyWebAnalysisMix();
     webListeningStore.document.libraryIDs = []; webListeningStore.document.session = null;
     playBtn.disabled = true; positionScrubber.disabled = true; setPlayingUI(false);
     persistWebListening(); renderListeningUI();

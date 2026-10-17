@@ -3232,6 +3232,118 @@
           }
         }
       }
+    },
+    "Angezeigter SID-Chip": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Angezeigter SID-Chip"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Displayed SID chip"
+          }
+        }
+      }
+    },
+    "Chip stumm": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chip stumm"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mute chip"
+          }
+        }
+      }
+    },
+    "Solos aufheben": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solos aufheben"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear solos"
+          }
+        }
+      }
+    },
+    "Mehrere Solos wirken gemeinsam. Stimmen- und Chip-Mute haben Vorrang.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mehrere Solos wirken gemeinsam. Stimmen- und Chip-Mute haben Vorrang."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Multiple solos play together. Voice and chip mutes take priority."
+          }
+        }
+      }
+    },
+    "SID %lld Chip stumm": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SID %lld Chip stumm"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SID %lld mute chip"
+          }
+        }
+      }
+    },
+    "SID %lld, Stimme %lld stummschalten": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SID %lld, Stimme %lld stummschalten"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SID %lld, voice %lld mute"
+          }
+        }
+      }
+    },
+    "SID %lld, Stimme %lld Solo": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SID %lld, Stimme %lld Solo"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SID %lld, voice %lld solo"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
