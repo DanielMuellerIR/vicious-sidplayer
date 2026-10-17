@@ -1,4 +1,5 @@
 const listeningUI = { page: 'library', offset: 0, pageSize: 100, selectedListID: null, nameAction: null, editingEntryID: null };
+let webQueueGeneration = 0;
 async function initializeListeningUI() {
   let storage;
   try { storage = localStorage; } catch (_) {}
@@ -41,6 +42,7 @@ async function initializeListeningUI() {
   $('end-queue').addEventListener('click', () => { stopWebSequence(); listeningQueue = null; persistWebListening(); renderListeningUI(); });
   $('clear-library').addEventListener('click', () => {
     if (!window.confirm('Clear the library and queue? Saved lists and music files are kept.')) return;
+    ++webQueueGeneration;
     observeWebHistory(false, true);
     player.unload(); bindWebPlayerCallbacks(); currentIdx = -1; trackList = []; listeningQueue = null; pendingWebRestore = false;
     currentMetadata = null; applyWebAnalysisMix();
@@ -133,10 +135,13 @@ async function startWebList(list, entryID = null) {
   await startWebSequence(new ListeningSequence({ name: list.name, kind: 'savedList', entries: list.entries, startingAt: start, shuffled }));
 }
 async function startWebSequence(queue) {
+  const generation = ++webQueueGeneration;
   if (!queue.items.length) { showError('This selection is empty.'); return; }
   let skipped = 0;
   for (let i = 0; i < queue.items.length; i++) {
-    if (await playWebEntry(queue.current, true)) {
+    const played = await playWebEntry(queue.current, true);
+    if (generation !== webQueueGeneration) return;
+    if (played) {
       listeningQueue = queue; pendingWebRestore = false; persistWebListening(); switchListeningPage('queue');
       if (skipped) showError(`${skipped} unavailable entries skipped. Select their files again to restore access.`);
       return;
@@ -155,12 +160,15 @@ async function playWebEntry(entry, autoplay) {
 }
 async function advanceWebQueue(forward, autoplay) {
   if (!listeningQueue) return;
+  const generation = ++webQueueGeneration, original = listeningQueue;
   const queue = ListeningSequence.fromJSON(listeningQueue);
   let skipped = 0;
   for (let i = 0; i < Math.max(1, queue.items.length); i++) {
     const entry = forward ? queue.next() : queue.previous();
     if (!entry) { if (forward) stopWebSequence(); else seekWebPlayback(0); return; }
-    if (await playWebEntry(entry, autoplay)) {
+    const played = await playWebEntry(entry, autoplay);
+    if (generation !== webQueueGeneration || listeningQueue !== original) return;
+    if (played) {
       listeningQueue = queue; listeningUI.offset = Math.floor(queue.currentIndex / listeningUI.pageSize) * listeningUI.pageSize;
       persistWebListening(); renderListeningUI(); if (skipped) showError(`${skipped} unavailable entries skipped.`); return;
     }
@@ -177,8 +185,9 @@ async function enqueueWebEntry(entry) {
   }
   persistWebListening(); renderListeningUI();
 }
-function stopWebSequence() { observeWebHistory(false, true); player.stop(); seekWebPlayback(0); lastVisuals.playtime = 0; setPlayingUI(false); persistWebListening(); }
+function stopWebSequence() { ++webQueueGeneration; observeWebHistory(false, true); player.stop(); seekWebPlayback(0); lastVisuals.playtime = 0; setPlayingUI(false); persistWebListening(); }
 function makeDefaultWebQueue(index) {
+  ++webQueueGeneration;
   const entries = webScopeEntries('library');
   const start = entries.findIndex(e => e.trackID === trackList[index]?.id);
   listeningQueue = new ListeningSequence({ name: 'Library', kind: 'library', entries, startingAt: Math.max(0, start),

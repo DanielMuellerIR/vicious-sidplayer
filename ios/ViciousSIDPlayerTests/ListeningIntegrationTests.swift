@@ -7,18 +7,23 @@ final class ListeningIntegrationTests: XCTestCase {
     private var directory: URL!
     private var defaults: UserDefaults!
     private var models: [AppModel] = []
-    private let suite = "vsp-listening-integration"
+    private var suite = ""
 
     override func setUp() async throws {
         directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        suite = "vsp-listening-integration." + UUID().uuidString
         defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
     }
 
     override func tearDown() async throws {
         for model in models {
-            model.coordinator.stop(); model.stopPlaybackLoop(); model.listening.flush(); model.savedSearches.flush(); model.playbackOptions.cancelSleepTimer(); model.playbackOptions.flush()
+            let estimate = model.lengthEstimateTask
+            model.coordinator.stop(); model.stopPlaybackLoop(); model.cancelLengthEstimate()
+            model.listening.flush(); model.savedSearches.flush(); model.playbackOptions.cancelSleepTimer(); model.playbackOptions.flush()
             await model.metadataIndex.suspend()
+            await estimate?.value
+            _ = await model.history.flush()
         }
         models = []
         defaults.removePersistentDomain(forName: suite)
@@ -51,7 +56,10 @@ final class ListeningIntegrationTests: XCTestCase {
         model.services = PlayerServices(library: library)
         model.applyLibrary(tracks: library.entries.map { LibraryTrack(id: $0.id, name: $0.displayName, folderPath: $0.folderPath) },
                            folderTree: MusicLibrary.folderTree(for: library.entries))
-        for _ in 0..<100 where !model.listening.isLoaded || !model.playbackOptions.isLoaded { try await Task.sleep(nanoseconds: 10_000_000) }
+        await model.listening.ready()
+        await model.playbackOptions.ready()
+        await model.history.ready()
+        XCTAssertTrue(model.listening.isLoaded && model.playbackOptions.isLoaded)
         model.activateListeningLibrary()
         models.append(model)
         return model
@@ -98,9 +106,8 @@ final class ListeningIntegrationTests: XCTestCase {
         restored.services = PlayerServices(library: second.services.library)
         restored.applyLibrary(tracks: second.tracks, folderTree: second.folderTree)
         models.append(restored)
-        for _ in 0..<100 where !restored.listening.isLoaded || !restored.playbackOptions.isLoaded {
-            try await Task.sleep(nanoseconds: 10_000_000)
-        }
+        await restored.listening.ready()
+        await restored.playbackOptions.ready()
         XCTAssertTrue(restored.listening.isLoaded && restored.playbackOptions.isLoaded)
         restored.restoreSessionIfPossible()
         XCTAssertEqual(restored.currentTrackID, "Alpha/A.sid")
@@ -191,6 +198,35 @@ final class ListeningIntegrationTests: XCTestCase {
         XCTAssertFalse(model.coordinator.isPlaying)
         try model.playbackOptions.setEndTime("", target: target)
         XCTAssertEqual(model.currentDuration, 30)
+    }
+
+    func testPlayingSubtuneChangeCountsTheFirstNewObservationInterval() async throws {
+        let model = try await makeModel()
+        await model.history.ready()
+        model.select(trackID: "Alpha/A.sid")
+        model.currentTrackLengths = [2, 2, 2]
+        model.coordinator.isPlaying = true
+        let uptime = ProcessInfo.processInfo.systemUptime
+        model.observeHistory(force: true, uptime: uptime)
+        model.setSubtune(1)
+        model.observeHistory(force: true, uptime: uptime + 1.25)
+        XCTAssertEqual(model.history.document.events.last?.reference.subtune, 1)
+        XCTAssertGreaterThan(model.history.document.events.last?.heardSeconds ?? 0, 1)
+    }
+
+    func testEndQueueClosesHistoryBeforeAnIdleInterval() async throws {
+        let model = try await makeModel()
+        await model.history.ready()
+        model.select(trackID: "Alpha/A.sid")
+        model.currentTrackLengths = [2, 2, 2]
+        model.coordinator.isPlaying = true
+        let uptime = ProcessInfo.processInfo.systemUptime
+        model.observeHistory(force: true, uptime: uptime - 5)
+        model.endListeningQueue()
+        XCTAssertNil(model.listening.queue)
+        XCTAssertFalse(model.coordinator.isPlaying)
+        model.observeHistory(force: true, playing: true, uptime: uptime + 10)
+        XCTAssertLessThan(model.history.document.events.map(\.heardSeconds).max() ?? 0, 5.5)
     }
 
     func testFileRepeatPreservesTheFixedEntryAndRestoresTheActualSubtune() async throws {

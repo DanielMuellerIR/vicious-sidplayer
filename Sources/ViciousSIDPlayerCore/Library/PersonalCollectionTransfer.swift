@@ -79,6 +79,8 @@ public struct PersonalCollectionConflict: Equatable, Identifiable, Sendable {
     public let existingValue: String
     public let importedValue: String
     public let explanation: String?
+    fileprivate let existingList: SavedListeningList?
+    fileprivate let importedList: SavedListeningList?
 }
 public struct PersonalCollectionUnresolved: Equatable, Hashable, Sendable {
     public let reference: PersonalCollectionReference
@@ -97,6 +99,14 @@ public struct PersonalCollectionMergeResult: Sendable {
 }
 
 public enum PersonalCollectionMerge {
+    private static func listValue(_ list: SavedListeningList) -> String {
+        let entries = list.entries.enumerated().map { index, entry in
+            let subtune = entry.subtune.map { "Subtune \($0 + 1)" } ?? "Dateieintrag"
+            return "\(index + 1). \(entry.trackID) · \(subtune)"
+        }
+        return (["\(list.name) · \(list.entries.count) Einträge"] + entries).joined(separator: "\n")
+    }
+
     public static func preview(_ document: PersonalCollectionDocument, into source: PersonalCollectionSnapshot,
                                libraryID: String, resolver: PersonalCollectionResolver,
                                choices: [String: PersonalCollectionMergeChoice] = [:],
@@ -108,9 +118,11 @@ public enum PersonalCollectionMerge {
         var knownUnresolved: Set<PersonalCollectionUnresolved> = []
         var listIndices = Dictionary(uniqueKeysWithValues: result.listening.lists.enumerated().map { ($0.element.id, $0.offset) })
         var additions = 0, duplicates = 0, updates = 0, skippedPathEntries = 0
-        func useImport(_ id: String, _ label: String, existing: String, imported: String, allowed: Bool = true) -> Bool {
+        func useImport(_ id: String, _ label: String, existing: String, imported: String, allowed: Bool = true,
+                       existingList: SavedListeningList? = nil, importedList: SavedListeningList? = nil) -> Bool {
             conflicts.append(.init(id: id, label: label, canUseImported: allowed, existingValue: existing, importedValue: imported,
-                explanation: allowed ? nil : NSLocalizedString("Eine andere Sammlung oder Listenart verwendet dieselbe Kennung. Der vorhandene Eintrag bleibt erhalten.", comment: "")))
+                explanation: allowed ? nil : NSLocalizedString("Eine andere Sammlung oder Listenart verwendet dieselbe Kennung. Der vorhandene Eintrag bleibt erhalten.", comment: ""),
+                existingList: existingList, importedList: importedList))
             return allowed && choices[id] == .useImported
         }
         func resolvedPath(_ ref: PersonalCollectionReference, required: Bool) throws -> String? {
@@ -153,9 +165,9 @@ public enum PersonalCollectionMerge {
             if let index = listIndices[list.id] {
                 if result.listening.lists[index] == mapped { duplicates += 1 }
                 else if useImport("list:\(list.id)", list.name,
-                                  existing: "\(result.listening.lists[index].name) · \(result.listening.lists[index].entries.count) Einträge",
-                                  imported: "\(mapped.name) · \(mapped.entries.count) Einträge",
-                                  allowed: result.listening.lists[index].libraryID == libraryID && result.listening.lists[index].kind == list.kind) {
+                                  existing: listValue(result.listening.lists[index]), imported: listValue(mapped),
+                                  allowed: result.listening.lists[index].libraryID == libraryID && result.listening.lists[index].kind == list.kind,
+                                  existingList: result.listening.lists[index], importedList: mapped) {
                     result.listening.lists[index] = mapped
                     updates += 1
                 }

@@ -25,6 +25,10 @@ public final class PlaybackOptionsController: ObservableObject {
     private let writer = DispatchQueue(label: "ViciousSIDPlayer.playback-options", qos: .utility)
     private var pending: DispatchWorkItem?
     private var revision = 0
+    private var savedDocument = PlaybackSettingsDocument()
+    public var hasUnsavedChanges: Bool {
+        isLoaded && document != savedDocument && (!isReadOnly || document.endTimes != savedDocument.endTimes)
+    }
     private var loadTask: Task<Void, Never>?
     private let writeGeneration = PersonalPersistenceGeneration()
     private var sleepInstant: ContinuousClock.Instant?
@@ -41,7 +45,7 @@ public final class PlaybackOptionsController: ObservableObject {
                 catch { return Result<PlaybackSettingsDocument, Error>.failure(error) }
             }.value
             switch result {
-            case .success(let document): self.document = document
+            case .success(let document): self.document = document; savedDocument = document
             case .failure: isReadOnly = true; storageError = PlaybackOptionError.invalidSettings.localizedDescription
             }
             isLoaded = true
@@ -105,9 +109,10 @@ public final class PlaybackOptionsController: ObservableObject {
     }
 
     public func retrySave() { saveSoon() }
-    public func flush() {
-        guard !isPersistenceSuspended else { return }
+    @discardableResult public func flush() -> Bool {
+        guard !isPersistenceSuspended else { return !hasUnsavedChanges }
         flushPending()
+        return !hasUnsavedChanges
     }
     private func flushPending() {
         guard isLoaded, !isReadOnly, let store else { return }
@@ -135,7 +140,7 @@ public final class PlaybackOptionsController: ObservableObject {
     }
     private func receive(_ result: Result<Void, Error>) {
         switch result {
-        case .success: storageError = nil
+        case .success: savedDocument = document; storageError = nil
         case .failure(let error):
             if error is PersonalDataFileError { isReadOnly = true }
             storageError = String(format: NSLocalizedString("Wiedergabeeinstellungen konnten nicht gesichert werden: %@", comment: ""), error.localizedDescription)
@@ -162,7 +167,7 @@ public final class PlaybackOptionsController: ObservableObject {
     }
     public func acceptImportedDocument(_ value: PlaybackSettingsDocument) {
         guard isPersistenceSuspended else { return }
-        document = value; revision += 1; storageError = nil
+        document = value; savedDocument = value; revision += 1; storageError = nil
     }
     public func resumeAfterImport() { isPersistenceSuspended = false }
 }

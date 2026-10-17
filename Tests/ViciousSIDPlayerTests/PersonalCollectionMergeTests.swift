@@ -74,6 +74,21 @@ final class PersonalCollectionMergeTests: XCTestCase {
         XCTAssertEqual(selected.snapshot.playback.endTime(md5: md5, subtune: 2), 125.5)
     }
 
+    func testSameNameAndCountExposeOrderedPathsAndSubtunesAndCompareEntryIdentity() throws {
+        var doc = archive()
+        doc.lists = [doc.lists[0]]
+        var target = try PersonalCollectionMerge.preview(doc, into: empty(), libraryID: "target", resolver: resolver(), now: now).snapshot
+        target.listening.lists[0].entries[0] = .init(id: target.listening.lists[0].entries[0].id, trackID: "Other.sid", subtune: 0)
+        let preview = try PersonalCollectionMerge.preview(doc, into: target, libraryID: "target", resolver: resolver(), now: now)
+        let conflict = try XCTUnwrap(preview.conflicts.first)
+        XCTAssertTrue(conflict.existingValue.contains("1. Other.sid · Subtune 1"))
+        XCTAssertTrue(conflict.importedValue.contains("1. Moved.sid · Subtune 3"))
+        target.listening.lists[0].entries[0] = .init(id: UUID(), trackID: "Other.sid", subtune: 0)
+        let changed = try PersonalCollectionMerge.preview(doc, into: target, libraryID: "target", resolver: resolver(), now: now)
+        XCTAssertEqual(changed.conflicts[0].existingValue, conflict.existingValue)
+        XCTAssertNotEqual(changed.conflicts, preview.conflicts)
+    }
+
     func testMissingReferencesStayPersonalButCannotBecomeWrongPathFavoritesOrListEntries() throws {
         var doc = archive()
         doc.favorites.append(.init(path: "Other.sid"))

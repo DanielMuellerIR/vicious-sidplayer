@@ -76,8 +76,7 @@ struct ListeningView: View {
                     name = queue.name; entriesToSave = queue.items; showName = true
                 }.disabled(controller.isReadOnly)
                 Button("Hörfolge beenden", role: .destructive) {
-                    model.coordinator.stop(); model.syncPlaybackLoop()
-                    model.updateNowPlaying(force: true); controller.setQueue(nil)
+                    model.endListeningQueue()
                 }
             }
             Section {

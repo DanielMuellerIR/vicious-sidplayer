@@ -10,10 +10,14 @@ extension AppModel {
         coordinator.setFadeEnvelope(playbackOptions.fadeEnvelope(duration: currentDuration, elapsed: coordinator.elapsedSeconds,
             autoNext: autoNext, hasPersonalEnd: personalDuration != nil))
     }
-    func stopForPlaybackOptions() {
+    func stopPlayback() {
+        collectionImportMayResume = false
         observeHistory(force: true, playing: false)
         coordinator.stop(); stopPlaybackLoop(); services.lastSessionBucket = -1
         saveSessionState(); updateNowPlaying(force: true)
+    }
+    func endListeningQueue() {
+        stopPlayback(); listening.setQueue(nil)
     }
     func handleConfiguredPlaybackEnd(elapsed: Double) {
         guard let action = PlaybackCompletionPolicy.action(isPlaying: coordinator.isPlaying, elapsed: elapsed, duration: currentDuration,
@@ -23,7 +27,7 @@ extension AppModel {
             stopAfterSubtune: playbackOptions.stopAfterSubtune) else { return }
         switch action {
         case .stop:
-            if playbackOptions.stopAfterSubtune { playbackOptions.finishSubtuneStop() } else { stopForPlaybackOptions() }
+            if playbackOptions.stopAfterSubtune { playbackOptions.finishSubtuneStop() } else { stopPlayback() }
         case .subtune(let index): setSubtune(index, updateListeningQueue: false); applyPlaybackOptions()
         case .advanceEntry(let repeatSequence):
             ensureListeningQueue(); advanceListeningQueue(forward: true, autoplay: true, repeatSequence: repeatSequence)

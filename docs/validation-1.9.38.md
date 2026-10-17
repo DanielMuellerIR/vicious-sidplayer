@@ -1,0 +1,15 @@
+# Prüfstand v1.9.38
+
+Stand: 2026-10-18. Diese Fassung korrigiert Wiederherstellung und Sicherung persönlicher Daten, Hörintervalle und verspätete Hörfolgenaktionen. Alle Musikbeispiele wurden synthetisch erzeugt; keine SID-Musikdatei wurde aufgenommen.
+
+- Swift: 356 Tests, vier Skips, keine Fehler. Linux: 322 Tests, 14 Skips, keine Fehler. Node: 80 Tests, keine Fehler. Plattform-Skips bleiben ausdrücklich Skips.
+- iOS: 57 tatsächlich ausgeführte Simulator-Tests ohne Fehler aus lokal gebauten Produkten. Generic-Simulator-Build bestanden. Die Testvorbereitung wartet auf geladene Controller; der Testabschluss beendet eigene Längenberechnungen. Frühere fehlgeschlagene Restore-Läufe gelten nicht als Abnahme.
+- Fleet-Quellprüfung und Python-Buildprüfung bestanden. Minifizierte und unminifizierte HTML5-Einzeldateien sind jeweils bytegleich reproduzierbar.
+- Regressionen decken leeres Alt-Staging und geschützte fremde Inhalte, fehlgeschlagene Endzeitsicherung mit erfolgreichem Retry, geordnete Listenkonflikte samt vollständiger Inhaltsidentität, native Hörintervalle und verspätete Web-Queue-Starts ab. Drei Queuefälle und der Listenkonflikt schlagen am Vorgängerstand fehl.
+- Mac: notarisiertes Bundle mit angeheftetem Ticket und Gatekeeper-Akzeptanz. Der Start nach leerem Alt-Staging funktioniert. Vollständige Listenwerte wurden sichtbar verglichen und die gewählte Reihenfolge gespeichert. Ein Ordnerwechsel lag nachweislich innerhalb der laufenden Datenübernahme; danach wurde die neue Sammlung geladen. Nach Subtunewechsel stehen 11,08 Sekunden Hörzeit einer Position von 11,00 Sekunden gegenüber.
+- Mac-Sicherung: Eine tatsächlich eingegebene Endzeit von 90 Sekunden blieb bei gesperrtem Schreibzugriff ungesichert. Der Beenden-Dialog bot die Rückkehr zur App an. Nach Wiederherstellung des Zugriffs wurde die Endzeit gespeichert und die App regulär beendet. Die Warnung wurde auch visuell geprüft.
+- iPhone: „Hörfolge beenden“ schließt die Beobachtung ab. Nach sechs Sekunden Unterbrechung kamen nur 1,91 Sekunden tatsächliche Wiedergabe hinzu. Nach Subtunewechsel stimmen 11,04 Sekunden Hörzeit und 11,01 Sekunden Position überein. Geordnete Listenwerte in Hell und Dunkel selbst angesehen; die Importwahl wurde gespeichert. Nach Import und anschließendem Reset blieben die Musikdateien entfernt und die Bibliothek auch nach weiterer Wartezeit leer.
+- HTML5: tatsächlicher Chromium-155-Lauf unter file://. Beenden während Start beziehungsweise Navigation und tatsächliches Leeren samt Persistenz geprüft. Gleichnamige Listen gleicher Länge zeigen beide geordneten Pfad-/Subtune-Werte; die bewusste Importwahl wird gespeichert. Helle und dunkle 390-Pixel-Ansichten selbst angesehen, kein horizontaler Überlauf und keine JavaScript-Ausnahmen.
+- Native Testdaten und Präferenzen wurden bytegleich restauriert. Eigene Simulatoren sind heruntergefahren; ihre Audioassertions wurden geprüft und freigegeben.
+
+Die A/B-Schleife und Piano-/Registeransicht gehören zur nächsten Erweiterungsstufe. Hintergrund-Audio, Sperrbildschirm, AirPods, Anruf und Kopfhörerabziehen auf echter iPhone-Hardware bleiben Teil von [GERAETETEST](../ios/GERAETETEST.md).

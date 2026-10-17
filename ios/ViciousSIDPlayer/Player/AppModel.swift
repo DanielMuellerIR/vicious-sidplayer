@@ -275,7 +275,7 @@ final class AppModel: ObservableObject {
         self.savedSearches = SavedLibrarySearchController(fileURL: listeningFileURL?.deletingLastPathComponent().appendingPathComponent("saved-searches.json"))
         self.playbackOptions = PlaybackOptionsController(fileURL: listeningFileURL?.deletingLastPathComponent().appendingPathComponent(PlaybackSettingsStore.fileName), startup: startup)
         loadSettings()
-        playbackOptions.onStopRequested = { [weak self] in self?.stopForPlaybackOptions() }
+        playbackOptions.onStopRequested = { [weak self] in self?.stopPlayback() }
         playbackOptions.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &listeningSubscriptions)
         playbackOptions.$document.dropFirst().sink { [weak self] _ in
             Task { @MainActor [weak self] in
@@ -378,12 +378,9 @@ final class AppModel: ObservableObject {
     private func didImportCollection() {
         favorites = collectionFavorites.read()
         resolveComputedLengthIfNeeded(); applyPlaybackOptions(); updateNowPlaying(force: true)
-        if let library = services.library {
-            Task { [weak self] in
-                let snapshot = await Task.detached(priority: .utility) { LibrarySnapshot(entries: library.entries) }.value
-                self?.applyLibrary(tracks: snapshot.tracks, folderTree: snapshot.folderTree, preservingListeningQueue: true)
-            }
-        }
+        // Persönlicher Sammlungsaustausch ändert keine Musikdateien. Der
+        // vorhandene Bibliotheksstand bleibt gültig; ein freier Snapshot-Task
+        // könnte nach einem anschließenden Reset alte Titel zurückbringen.
     }
 
     /// Favoritenstatus eines Titels umschalten.

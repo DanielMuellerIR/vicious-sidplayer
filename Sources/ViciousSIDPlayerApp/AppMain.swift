@@ -74,7 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !saved {
                 let alert = NSAlert()
                 alert.messageText = "Persönliche Daten konnten nicht gesichert werden."
-                alert.informativeText = "Die vorhandene Datei bleibt erhalten. Beim Beenden können die letzten Änderungen an Verlauf, Lesezeichen oder Notizen verloren gehen."
+                alert.informativeText = "Die vorhandenen Dateien bleiben erhalten. Beim Beenden können die letzten Änderungen an Verlauf, Lesezeichen, Notizen oder persönlichen Endzeiten verloren gehen."
                 alert.addButton(withTitle: "Zurück zur App")
                 alert.addButton(withTitle: "Trotzdem beenden")
                 terminate = alert.runModal() == .alertSecondButtonReturn

@@ -1,3 +1,12 @@
+Vicious SID Player 1.9.38 fixes import recovery, personal data saving and queue control.
+
+- An interrupted import no longer leaves an empty staging folder that blocks startup. macOS warns before quitting if custom end times could not be saved and allows a retry.
+- Ending an iPhone queue closes its listening interval. Native subtune changes include the first interval in listening history.
+- A personal data import no longer brings back old iPhone library entries after a reset. macOS applies an autoplay folder change made during an import when the merge finishes.
+- List conflicts show the complete ordered paths and subtunes, including changes with the same name and entry count. In HTML5, delayed loading cannot restore an ended queue or a cleared library.
+
+See [validation](docs/validation-1.9.38.md).
+
 Vicious SID Player 1.9.37 adds separate mute and solo controls for up to three SID chips on Mac, iPhone and HTML5.
 
 - Select the chip shown in the oscilloscope, with its model. Control each of nine voices or mute a whole chip. Multiple solos form a combined selection; mutes retain priority, and clearing solos keeps existing mutes.

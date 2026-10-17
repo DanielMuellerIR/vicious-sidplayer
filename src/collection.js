@@ -246,10 +246,15 @@ function exportWebCollection(listening, history, tracks, includeHistory = false,
   validateCollectionDocument(doc);
   return { document: doc, omittedLegacy, unverified };
 }
+function collectionListValue(list, pathsByID) {
+  return [`${list.name} · ${list.entries.length} entries`, ...list.entries.map((entry, index) =>
+    `${index + 1}. ${pathsByID.get(entry.trackID) || entry.trackID} · ${entry.subtune == null ? 'File entry' : `Subtune ${entry.subtune + 1}`}`)].join('\n');
+}
 function mergeWebCollection(document, source, tracks, { areas = new Set(collectionAreas.filter(a => a !== 'history')),
   choices = new Map(), acceptedPaths = new Set(), now = Date.now() } = {}) {
   validateCollectionDocument(document); validateListeningV2(source[0]); validateHistoryV2(source[1]);
   const result = collectionClone(source), [listening, history] = result, resolver = new CollectionResolver(tracks);
+  const pathsByID = new Map([...listening.catalog, ...tracks].map(track => [track.id, track.path]));
   const favorites = new Set(listening.favorites), listIDs = collectionIDs(listening.lists.map(l => l.id), 'list');
   const listIndices = new Map(listening.lists.map((l, i) => [listIDs.get(l.id), i]));
   const bookmarkIDs = collectionIDs(history.bookmarks.map(e => e.id), 'bookmark');
@@ -260,8 +265,9 @@ function mergeWebCollection(document, source, tracks, { areas = new Set(collecti
   const eventIndices = new Map(history.events.map((e, i) => [eventIDs.get(e.id), i]));
   const conflicts = [], unresolved = [], seenUnresolved = new Set();
   let additions = 0, duplicates = 0, updates = 0, skippedPathEntries = 0;
-  const useImported = (id, label, existingValue, importedValue, allowed = true) => {
-    conflicts.push({ id, label, existingValue, importedValue, allowed });
+  const useImported = (id, label, existingValue, importedValue, allowed = true,
+    existingIdentity = existingValue, importedIdentity = importedValue) => {
+    conflicts.push({ id, label, existingValue, importedValue, allowed, existingIdentity, importedIdentity });
     return allowed && choices.get(id) === 'useImported';
   };
   const mapped = (ref, required) => {
@@ -303,7 +309,8 @@ function mergeWebCollection(document, source, tracks, { areas = new Set(collecti
         return { name: l.name, kind: l.kind, entries: l.entries.map(e => ({ ...e, id: ids.get(e.id) })) };
       };
       if (collectionEqual(canonical(old), canonical(incoming))) duplicates++;
-      else if (useImported(`list:${list.id}`, list.name, `${old.name} · ${old.entries.length} entries`, `${incoming.name} · ${entries.length} entries`, old.kind === list.kind)) {
+      else if (useImported(`list:${list.id}`, list.name, collectionListValue(old, pathsByID), collectionListValue(incoming, pathsByID),
+        old.kind === list.kind, canonical(old), canonical(incoming))) {
         listening.lists[index] = incoming; updates++;
       }
     }

@@ -1,4 +1,9 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 public enum PersonalCollectionFile: String, Codable, CaseIterable, Sendable {
     case listeningLibrary = "listening-library.json"
@@ -72,17 +77,20 @@ public struct PersonalCollectionTransaction: Sendable {
         let journalBytes = try JSONEncoder().encode(journal)
         guard journalBytes.count <= PersonalDataFile.maximumBytes else { throw PersonalDataFileError.capacityExceeded }
         try FileManager.default.createDirectory(at: supportURL, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: stagingURL, withIntermediateDirectories: false)
+        let preparingURL = supportURL.appendingPathComponent(".personal-collection-prepare-" + UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: preparingURL, withIntermediateDirectories: false)
         do {
-            try Data("vicioussid.personal-collection:1".utf8).write(to: stagingURL.appendingPathComponent("owner"), options: .atomic)
+            try Data("vicioussid.personal-collection:1".utf8).write(to: preparingURL.appendingPathComponent("owner"), options: .atomic)
             for change in changes {
-                if let original = change.expected { try original.write(to: staged(change.file, "before"), options: .atomic) }
-                try change.replacement.write(to: staged(change.file, "after"), options: .atomic)
+                if let original = change.expected { try original.write(to: preparingURL.appendingPathComponent(change.file.rawValue + ".before"), options: .atomic) }
+                try change.replacement.write(to: preparingURL.appendingPathComponent(change.file.rawValue + ".after"), options: .atomic)
             }
-            // Erst nach diesem atomaren Schritt darf eine Originaldatei wechseln.
-            try journalBytes.write(to: journalURL, options: .atomic)
+            try journalBytes.write(to: preparingURL.appendingPathComponent("journal.json"), options: .atomic)
+            // Recovery sieht erst den vollständigen Ordner. Ein Prozessende
+            // während der Vorbereitung darf den nächsten Appstart nicht sperren.
+            try FileManager.default.moveItem(at: preparingURL, to: stagingURL)
         } catch {
-            try? FileManager.default.removeItem(at: stagingURL)
+            try? FileManager.default.removeItem(at: preparingURL)
             throw error
         }
     }
@@ -133,6 +141,10 @@ public struct PersonalCollectionTransaction: Sendable {
     public func recover(currentFavorites: Set<String>) throws -> PersonalCollectionRecovery {
         guard FileManager.default.fileExists(atPath: stagingURL.path) else { return .none }
         guard FileManager.default.fileExists(atPath: journalURL.path) else {
+            // Ältere Versionen konnten vor dem owner-Schreiben einen leeren
+            // Ordner hinterlassen. rmdir schützt inzwischen abgelegte Inhalte
+            // und Symlinks, statt sie rekursiv zu entfernen.
+            if rmdir(stagingURL.path) == 0 { return .rolledBack }
             let owner = try Data(contentsOf: stagingURL.appendingPathComponent("owner"))
             guard owner == Data("vicioussid.personal-collection:1".utf8) else { throw PersonalCollectionTransactionError.invalidJournal }
             try FileManager.default.removeItem(at: stagingURL)

@@ -45,6 +45,30 @@ final class PersonalCollectionTransactionTests: XCTestCase {
         }
     }
 
+    func testRestartBeforeOwnershipWasWrittenRecoversOnlyAnEmptyLegacyDirectory() throws {
+        let f = try fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        try FileManager.default.createDirectory(at: f.transaction.stagingURL, withIntermediateDirectories: false)
+        XCTAssertEqual(try f.transaction.recover(currentFavorites: []), .rolledBack)
+        try assertOriginals(f)
+        try f.transaction.prepare(f.changes, oldFavorites: [], newFavorites: [])
+        XCTAssertEqual(try f.transaction.recover(currentFavorites: []), .rolledBack)
+        try assertOriginals(f)
+    }
+
+    func testOwnerlessContentsAndUnpublishedPreparationRemainProtected() throws {
+        let f = try fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
+        let preparing = f.root.appendingPathComponent(".personal-collection-prepare-interrupted")
+        try FileManager.default.createDirectory(at: preparing, withIntermediateDirectories: false)
+        XCTAssertEqual(try f.transaction.recover(currentFavorites: []), .none)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: preparing.path))
+        try FileManager.default.createDirectory(at: f.transaction.stagingURL, withIntermediateDirectories: false)
+        let unknown = f.transaction.stagingURL.appendingPathComponent("unknown"), bytes = Data("preserve".utf8)
+        try bytes.write(to: unknown)
+        XCTAssertThrowsError(try f.transaction.recover(currentFavorites: []))
+        XCTAssertEqual(try Data(contentsOf: unknown), bytes)
+        try assertOriginals(f)
+    }
+
     func testRestartBetweenFileReplacementsRollsBackWithoutChangingFavorites() throws {
         let f = try fixture(); defer { try? FileManager.default.removeItem(at: f.root) }
         try f.transaction.prepare(f.changes, oldFavorites: ["Old.sid"], newFavorites: ["Imported.sid"])

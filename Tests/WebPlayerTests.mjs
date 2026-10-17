@@ -421,3 +421,35 @@ test('clearing and reselecting the library keeps analysis callbacks and ignores 
   assert.equal(page.run('webAnalysisMix.soloChannels.has(8)'), true);
   assert.equal(page.run('typeof player.visualCallback'), 'function');
 });
+
+function seedSequenceFiles(page) {
+  page.run(`trackList=[{id:'one',name:'One',buffer:valid,isUser:true},{id:'two',name:'Two',buffer:valid,isUser:true}];
+    webListeningStore.document.catalog=trackList.map(t=>({id:t.id,path:t.name+'.sid',name:t.name,fingerprint:'123456789abcdef0',size:valid.length,subtunesCount:1}));
+    webListeningStore.document.libraryIDs=['one','two'];`);
+}
+test('ending a queue during its pending start prevents late queue restoration', async () => {
+  const page = await ui(); seedSequenceFiles(page);
+  const pending = page.run('startWebScope("library")');
+  for (let i=0;i<4;i++) await Promise.resolve();
+  page.elements.get('end-queue').listeners.click(); page.release(); await pending;
+  assert.equal(page.run('listeningQueue'), null);
+  assert.equal(page.run('webListeningStore.document.queue'), null);
+  assert.equal(page.run('player.playing'), false);
+});
+test('ending a queue during pending navigation prevents copying the old queue back', async () => {
+  const page = await ui(); seedSequenceFiles(page); await page.run('loadTrack(0,false)');
+  const pending = page.run('advanceWebQueue(true,true)');
+  for (let i=0;i<4;i++) await Promise.resolve();
+  page.elements.get('end-queue').listeners.click(); page.release(); await pending;
+  assert.equal(page.run('listeningQueue'), null);
+  assert.equal(page.run('webListeningStore.document.queue'), null);
+});
+test('clearing the library invalidates a pending queue start and its saved queue', async () => {
+  const page = await ui(); seedSequenceFiles(page);
+  const pending = page.run('startWebScope("library")');
+  for (let i=0;i<4;i++) await Promise.resolve();
+  page.elements.get('clear-library').listeners.click(); page.release(); await pending;
+  assert.equal(page.run('listeningQueue'), null);
+  assert.equal(page.run('webListeningStore.document.queue'), null);
+  assert.equal(page.run('trackList.length'), 0);
+});

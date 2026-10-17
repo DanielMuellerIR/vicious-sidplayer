@@ -19,6 +19,25 @@ final class PlaybackOptionsControllerTests: XCTestCase {
         XCTAssertEqual(restored.document.repeatMode, .file); XCTAssertEqual(restored.document.fadeOutSeconds, 3)
         XCTAssertEqual(restored.document.sleepMinutes, 20); XCTAssertFalse(restored.hasSleepTimer)
     }
+
+    func testFailedFinalEndTimeSaveIsReportedAndCanBeRetried() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let controller = PlaybackOptionsController(fileURL: root.appendingPathComponent("options.json"))
+        await controller.ready()
+        let target = PlaybackEndTimeTarget(md5: String(repeating: "a", count: 32), subtune: 0, title: "Test")
+        try controller.setEndTime("1:30", target: target)
+        try FileManager.default.removeItem(at: root)
+        try Data("temporarily blocked".utf8).write(to: root)
+        XCTAssertFalse(controller.flush())
+        XCTAssertTrue(controller.hasUnsavedChanges)
+        XCTAssertNotNil(controller.storageError)
+        try FileManager.default.removeItem(at: root)
+        XCTAssertTrue(controller.flush())
+        XCTAssertFalse(controller.hasUnsavedChanges)
+        XCTAssertEqual(try PlaybackSettingsStore(fileURL: root.appendingPathComponent("options.json")).load().endTime(md5: target.md5, subtune: 0), 90)
+    }
     func testDebouncedSaveRunsOffTheMainActorWithoutAnExplicitFlush() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

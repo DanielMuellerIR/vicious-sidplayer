@@ -86,6 +86,7 @@ public struct MainView: View {
     // Gleicher UserDefaults-Key wie in SettingsView — Aenderungen dort landen
     // hier sofort (onChange laedt die Playlist neu).
     @AppStorage("autoplayFolderPath") private var autoplayFolderPath = ""
+    @State private var pendingAutoplayFolderChange = false
     // MPRemoteCommandCenter nur einmal verdrahten (onAppear kann mehrfach feuern).
     @State private var mediaCommandsConfigured = false
     // Session-Restore: letzter Track, Subtune und Position werden laufend
@@ -777,7 +778,10 @@ public struct MainView: View {
             if !shown, collectionTransfer?.requiresRestart != true { collectionTransfer = nil; collectionSubscription = nil }
         }
         .onChange(of: isImportApplying) { applying in
-            if !applying { drainPendingOpenURLs(); drainPendingRemoteCommands() }
+            if !applying {
+                if pendingAutoplayFolderChange { pendingAutoplayFolderChange = false; reloadAutoplayFolder() }
+                drainPendingOpenURLs(); drainPendingRemoteCommands()
+            }
         }
         .sheet(isPresented: $showListeningNameSheet) {
             ListeningNameSheet(name: $listeningName, renaming: renamingListeningListID != nil,
@@ -843,9 +847,10 @@ public struct MainView: View {
                     didFinishCollectionStartup = true
                     AppDelegate.prepareTermination = {
                         observeHistory(force: true, playing: false)
-                        listening.flush(); savedSearches.flush(); playbackOptions.flush()
+                        listening.flush(); savedSearches.flush()
+                        let optionsSaved = playbackOptions.flush()
                         let saved = await history.flush()
-                        return saved || !history.hasUnsavedChanges
+                        return optionsSaved && (saved || !history.hasUnsavedChanges)
                     }
                     // Favoriten aus den Einstellungen. Die Umrechnung alter absoluter
                     // Pfade auf relative Titel-IDs passiert erst, wenn die
@@ -887,13 +892,9 @@ public struct MainView: View {
         // Autoplay-Ordner in den Einstellungen geaendert -> Playlist sofort aus
         // dem neuen Ordner aufbauen (statt erst beim naechsten App-Start).
         .onChange(of: autoplayFolderPath) { _ in
-            guard didFinishCollectionStartup, !isImportApplying else { return }
-            clearPlaylist()
-            loadLocalAudioFolder()
-            // Auto-Fund der Songlengths-DB haengt am Autoplay-Ordner -> neu suchen.
-            if songlengthsPath.isEmpty { loadSonglengthDB() }
-            // Fuer die STIL gilt dasselbe.
-            if stilPath.isEmpty { loadSTIL() }
+            guard didFinishCollectionStartup else { return }
+            guard !isImportApplying else { pendingAutoplayFolderChange = true; return }
+            reloadAutoplayFolder()
         }
         // STIL-Datei in den Einstellungen geaendert -> neu laden.
         .onChange(of: stilPath) { _ in loadSTIL() }
@@ -1272,6 +1273,13 @@ public struct MainView: View {
             queue.updateExplicitSubtune(sub, trackID: track.id); listening.setQueue(queue)
         }
         resolveComputedLengthIfNeeded(); applyPlaybackOptions()
+        observeHistory(force: true)
+    }
+
+    private func reloadAutoplayFolder() {
+        clearPlaylist(); loadLocalAudioFolder()
+        if songlengthsPath.isEmpty { loadSonglengthDB() }
+        if stilPath.isEmpty { loadSTIL() }
     }
     private func handleConfiguredPlaybackEnd(elapsed: Double) {
         guard let action = PlaybackCompletionPolicy.action(isPlaying: coordinator.isPlaying, elapsed: elapsed, duration: currentDuration,

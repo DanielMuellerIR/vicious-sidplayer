@@ -1,3 +1,12 @@
+Vicious SID Player 1.9.38 korrigiert Importwiederherstellung, persönliche Datensicherung und Hörfolgensteuerung.
+
+- Ein abgebrochener Import hinterlässt keinen leeren Arbeitsordner mehr, der den Start sperrt. macOS warnt vor dem Beenden, wenn persönliche Endzeiten nicht gesichert werden konnten, und erlaubt einen neuen Versuch.
+- „Hörfolge beenden“ auf dem iPhone schließt das Hörintervall ab. Native Subtunewechsel zählen das erste Intervall im Verlauf mit.
+- Ein persönlicher Datenimport bringt nach dem Zurücksetzen keine alten iPhone-Bibliothekseinträge mehr zurück. macOS zieht einen während des Imports geänderten Autoplay-Ordner nach der Übernahme nach.
+- Listenkonflikte zeigen alle geordneten Pfade und Subtunes, auch bei gleichem Namen und gleicher Eintragszahl. In HTML5 stellt verspätetes Laden weder eine beendete Hörfolge noch eine geleerte Bibliothek wieder her.
+
+Siehe [Prüfstand](docs/validation-1.9.38.md).
+
 Vicious SID Player 1.9.37 ergänzt getrennte Mute- und Solo-Regler für bis zu drei SID-Chips auf Mac, iPhone und in HTML5.
 
 - Angezeigten Oszilloskop-Chip samt Modell wählen, jede der neun Stimmen steuern oder einen ganzen Chip stummschalten. Mehrere Solos wirken gemeinsam; Mutes haben Vorrang und bleiben nach „Solos aufheben“ erhalten.

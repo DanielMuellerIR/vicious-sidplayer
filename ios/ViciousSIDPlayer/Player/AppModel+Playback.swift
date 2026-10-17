@@ -168,6 +168,7 @@ extension AppModel {
         computedLength = nil
         resolveComputedLengthIfNeeded()
         applyPlaybackOptions()
+        observeHistory(force: true)
         services.lastSessionBucket = -1
         saveSessionState()
         updateNowPlaying(force: true)

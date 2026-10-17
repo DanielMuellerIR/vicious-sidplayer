@@ -246,3 +246,15 @@ test('invalid UTF-8 and unpaired surrogates are rejected while a UTF-8 BOM is re
   const doc = decode(golden); doc.notes[0].text = '\ud800'; assert.throws(() => encode(doc));
   assert.throws(() => decode(golden.replace('Importierte Dateinotiz', '\\udc00')));
 });
+
+test('equal list names and counts show ordered file paths and subtunes and compare full entry identity', async () => {
+  const source = await emptySnapshot(), first = api.mergeWebCollection(portable, source, tracks).documents;
+  const old = first[0].lists[0]; old.entries[0] = { ...old.entries[0], trackID: 'current-trust', subtune: 0 };
+  const preview = api.mergeWebCollection(portable, first, tracks), conflict = preview.conflicts.find(c=>c.id.startsWith('list:'));
+  assert.match(conflict.existingValue, /1\. Trust\.sid · Subtune 1/);
+  assert.match(conflict.importedValue, /1\. Web\/PAL\.sid · Subtune 3/);
+  old.entries[0].id = '667151ec-697f-47f7-9619-e64b004c2ba9';
+  const changed = api.mergeWebCollection(portable, first, tracks).conflicts.find(c=>c.id===conflict.id);
+  assert.equal(changed.existingValue, conflict.existingValue);
+  assert.notDeepEqual(changed.existingIdentity, conflict.existingIdentity);
+});
