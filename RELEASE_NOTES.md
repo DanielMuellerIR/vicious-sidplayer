@@ -1,3 +1,10 @@
+Vicious SID Player 1.9.50 simplifies voice controls on iPhone.
+
+- Taller oscilloscope traces use the full width. Tap a waveform to mute or unmute its voice; emulation keeps running.
+- A subtle solo button overlays each waveform at the right edge. Active solos are highlighted and remain independent of muting.
+
+See [validation](docs/validation-1.9.50.md).
+
 Vicious SID Player 1.9.49 improves iPhone selection and makes better use of the screen.
 
 - Selecting a library tune during playback starts the new tune immediately. Selection while paused or stopped, and session restoration, prepare it. Native apps use the filename when the SID header has no title.

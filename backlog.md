@@ -79,6 +79,10 @@ Die Erweiterungen ab v1.9.26 werden im [Erweiterungsplan](docs/feature-roadmap.m
   80 Simulator-Tests bestehen; die normale Wiedergabeansicht passt auch mit
   drei Chips und Subtunes auf beide geprüften iPhone-Größen.
   Siehe [Prüfstand](docs/validation-1.9.49.md).
+- **Oszi-Bedienung in v1.9.50 überarbeitet:** Volle Breite und höhere Kurven;
+  Tippen auf die jeweilige Stimmenzeile schaltet sie stumm oder wieder ein.
+  Solo liegt dezent am rechten Rand über der Kurve. Siehe
+  [Prüfstand](docs/validation-1.9.50.md).
 - **Sporadischer Geräte-Stopp bleibt offen:** Rückkehr nach dem Entsperren und
   ein automatischer Wechsel wurden als Auslöser gemeldet. Mehrere
   Hintergrund-/Shuffle-/Subtune-Ketten bestehen im Simulator. Systemlogs ohne

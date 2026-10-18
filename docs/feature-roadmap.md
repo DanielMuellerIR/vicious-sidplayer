@@ -23,7 +23,7 @@ Dieser Plan setzt die [Erweiterungsanalyse](feature-opportunities.md) um. Jede S
 | 13 | Tastatur, VoiceOver und anpassungsfähiges Layout | 4–8 h | In v1.9.45 auf Mac, HTML5 und iPhone-Simulator abgenommen; iPhone-VoiceOver/externe Tastatur bleiben Geräteabnahme ([Prüfstand](validation-1.9.45.md)) |
 | 14 | Energie und Zeichenlast | 4–8 h | Abgeschlossen in v1.9.46; Akkulaufzeit bleibt Geräteabnahme ([Prüfstand](validation-1.9.46.md)) |
 | 15 | Gezieltes 6581-Filter-Tuning | 6–10 h | Abgeschlossen in v1.9.47: 44,1-kHz-Klang bitgenau erhalten, 48 kHz angeglichen ([Prüfstand](validation-1.9.47.md)) |
-| 16 | Reale iPhone-Geräteabnahme und Abschluss | 4–8 h | Software-Prüfungen und Unterbrechungskorrektur in v1.9.48; Auswahl- und Layoutnacharbeit in v1.9.49. Teilrückmeldung vom Gerät liegt vor, sporadischer Stopp und vollständige Geräteabnahme bleiben offen ([Prüfstand](validation-1.9.49.md)) |
+| 16 | Reale iPhone-Geräteabnahme und Abschluss | 4–8 h | Software-Prüfungen und Unterbrechungskorrektur in v1.9.48; Auswahl- und Layoutnacharbeit in v1.9.49; Oszi-Bedienung in v1.9.50. Teilrückmeldung vom Gerät liegt vor, sporadischer Stopp und vollständige Geräteabnahme bleiben offen ([Auswahl](validation-1.9.49.md), [Oszi-Bedienung](validation-1.9.50.md)) |
 
 18 Pakete, insgesamt 100–170 Stunden geschätzter Aufwand. Der Verlauf erhält einen weiteren Tab an derselben Stelle wie Bibliothek/Playlist. Die App bleibt ein Player mit einem Koordinator. Gemeinsame Wiedergabe- und Sammlungsregeln liegen im Core; HTML5 bleibt als lokale Einzeldatei ohne Server nutzbar.
 

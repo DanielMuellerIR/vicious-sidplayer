@@ -1,3 +1,10 @@
+Vicious SID Player 1.9.50 vereinfacht die Stimmenbedienung auf dem iPhone.
+
+- Die höheren Oszilloskopkurven nutzen die volle Breite. Tippen auf eine Kurve schaltet die jeweilige Stimme stumm oder wieder ein; die Emulation läuft weiter.
+- Solo liegt als dezenter Knopf am rechten Rand über jeder Kurve. Aktive Solos sind hervorgehoben und bleiben unabhängig von der Stummschaltung.
+
+Siehe [Prüfstand](docs/validation-1.9.50.md).
+
 Vicious SID Player 1.9.49 verbessert die iPhone-Auswahl und nutzt den Bildschirm kompakter.
 
 - Eine Bibliotheksauswahl während laufender Musik startet den neuen Titel sofort. Aus Pause oder Stop sowie nach Wiederherstellung bleibt er vorbereitet. Ohne SID-Header-Titel zeigen die nativen Apps den Dateinamen.

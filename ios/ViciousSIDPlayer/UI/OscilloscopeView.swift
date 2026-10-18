@@ -106,28 +106,25 @@ struct OscilloscopeView: View {
     }
 
     private var scope: some View {
-        HStack(spacing: 4) {
-            TimelineView(.animation(minimumInterval: Self.minimumFrameInterval, paused: isPaused)) { timeline in
-                Canvas { context, size in
-                    draw(context: &context,
-                         size: size,
-                         time: timeline.date.timeIntervalSinceReferenceDate)
-                }
+        TimelineView(.animation(minimumInterval: Self.minimumFrameInterval, paused: isPaused)) { timeline in
+            Canvas { context, size in
+                draw(context: &context,
+                     size: size,
+                     time: timeline.date.timeIntervalSinceReferenceDate)
             }
-            .background(palette.scopeBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(palette.scopeBorder, lineWidth: 1)
-            )
-            .accessibilityLabel("Oszilloskop")
-            .accessibilityHint("Zeigt die Wellenform der drei SID-Stimmen.")
+        }
+        .background(palette.scopeBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(palette.scopeBorder, lineWidth: 1)
+        )
+        .overlay {
             VStack(spacing: 0) {
                 ForEach(0..<3, id: \.self) { voice in
                     voiceControls(voice).frame(maxHeight: .infinity)
                 }
             }
-            .frame(width: 88)
         }
     }
 
@@ -137,20 +134,24 @@ struct OscilloscopeView: View {
         let solo = coordinator.analysisMix.soloChannels.contains(channel)
         return HStack(spacing: 0) {
             Button { coordinator.toggleChannelMuted(channel) } label: {
-                Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                    .font(.system(size: 18))
-                    .frame(width: 44, height: 44).contentShape(Rectangle())
+                Color.clear
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
             }
-            .foregroundStyle(muted ? .red : palette.traceColors[voice])
             .accessibilityLabel(Text("SID \(displayedChip + 1), Stimme \(voice + 1) stummschalten"))
             .accessibilityValue(muted ? Text("An") : Text("Aus"))
             .accessibilityIdentifier("channel-\(channel)-mute")
             Button { coordinator.toggleChannelSolo(channel) } label: {
-                Text(verbatim: "S").font(.footnote.weight(.semibold))
-                    .frame(width: 44, height: 44).contentShape(Rectangle())
-                    .background(solo ? Color.orange.opacity(0.18) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+                Text(verbatim: "S").font(.system(size: 12, weight: .semibold))
+                    .frame(width: 28, height: 28)
+                    .background(palette.scopeBackground.opacity(0.85), in: Circle())
+                    .overlay {
+                        if solo { Circle().stroke(Color.orange, lineWidth: 1.5) }
+                    }
+                    .frame(width: 44).frame(maxHeight: .infinity)
+                    .contentShape(Rectangle())
             }
-            .foregroundStyle(solo ? Color.orange : Color.secondary)
+            .foregroundStyle(solo ? Color.orange : Color.secondary.opacity(0.65))
             .accessibilityLabel(Text("SID \(displayedChip + 1), Stimme \(voice + 1) Solo"))
             .accessibilityValue(solo ? Text("An") : Text("Aus"))
             .accessibilityIdentifier("channel-\(channel)-solo")

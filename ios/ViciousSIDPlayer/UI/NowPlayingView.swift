@@ -25,7 +25,7 @@ struct NowPlayingView: View {
         NavigationStack {
             GeometryReader { geometry in
                 ScrollView {
-                    VStack(spacing: 8) {
+                    VStack(spacing: 4) {
                         TrackHeaderView(coordinator: model.coordinator)
                         OscilloscopeView(coordinator: model.coordinator, palette: palette,
                                          isSceneActive: model.isSceneActive && isVisible)
@@ -75,11 +75,11 @@ struct NowPlayingView: View {
         }
     }
     private func scopeHeight(available: CGFloat) -> CGFloat {
-        // Drei 44-pt-Stimmenzeilen plus Analysewahl; Multi-SID braucht die Chipwahl darüber.
-        let controlsHeight: CGFloat = 3 * 44 + 44 + 6
+        // Die Kurven sind zugleich die Mute-Flächen; Solo liegt am rechten Rand darüber.
+        let controlsHeight: CGFloat = 3 * 60 + 44 + 6
         let minimum = controlsHeight + (model.coordinator.activeSIDChips.count > 1 ? 44 : 0)
         if verticalSizeClass == .compact { return minimum }
-        return min(250, max(minimum, available * 0.34 - (model.coordinator.subtunesCount > 1 ? 44 : 0)))
+        return min(320, max(minimum, available * 0.43 - (model.coordinator.subtunesCount > 1 ? 24 : 0)))
     }
 
 }
