@@ -52,6 +52,12 @@ Die Erweiterungen ab v1.9.26 werden im [Erweiterungsplan](docs/feature-roadmap.m
   Bis dahin gelten Hintergrundwiedergabe, Sperrbildschirm, AirPods, Anrufverhalten,
   Kopfhörerabziehen und der File-Provider-Import aus Nextcloud/iCloud als **unbelegt** —
   nicht als kaputt, aber eben auch nicht als geprüft.
+- **Software-Vorbereitung in v1.9.48 geprüft:** Ausdrückliche Remote-Pause
+  während einer Audio-Unterbrechung und eine neue Prepare-only-Titelauswahl
+  verhindern das spätere automatische Starten. Sechs gezielte Fälle und
+  die gesamte Suite mit 74 Simulator-Tests bestehen; Simulator- und
+  unsignierter Geräte-Build sind grün ([Prüfstand](docs/validation-1.9.48.md)).
+  Das ersetzt die oben offene Hardware-Abnahme nicht.
 - `setPreferredIOBufferDuration(10 ms)` ist ein Startwert aus dem Plan, kein
   Messergebnis. Auf dem Gerät nachmessen und gegebenenfalls anpassen.
 - ~~Media-Services-Reset~~ **behoben am 2026-08-23 (v1.9.16).**

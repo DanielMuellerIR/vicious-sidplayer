@@ -1,3 +1,9 @@
+Vicious SID Player 1.9.48 beachtet ausdrückliche Pause-Befehle während iPhone-Audio-Unterbrechungen.
+
+- Ein Pause-Befehl während Siri oder einer anderen Audio-Unterbrechung widerruft das spätere automatische Fortsetzen, auch wenn die Unterbrechung den Player bereits pausiert hat.
+- Die bloße Vorbereitung eines anderen Bibliothekstitels widerruft ebenfalls die alte Freigabe. Fehlende, beschädigte oder ungültige Auswahlen erhalten den bisherigen Titel und seinen Fortsetzungszustand.
+- Gerätestart erklären und diese Fälle in der [iPhone-Prüfliste](ios/GERAETETEST.md) ergänzen. Die echte Geräteabnahme bleibt offen; siehe [Prüfstand](docs/validation-1.9.48.md).
+
 Vicious SID Player 1.9.47 gleicht den 6581-Filter zwischen Ausgaberaten an.
 
 - Die bisherige 44,1-kHz-Ausgabe bitgenau erhalten und ihre Integratorkoeffizienten in nativer und HTML5-Wiedergabe an andere Ausgaberaten anpassen. Der niedrige Cutoff-Übergang verursacht bei 48 kHz keinen großen Pegelabfall mehr.

@@ -1,4 +1,5 @@
 import XCTest
+import AVFoundation
 import ViciousSIDPlayerCore
 @testable import ViciousSIDPlayer
 
@@ -292,6 +293,94 @@ final class ListeningIntegrationTests: XCTestCase {
         XCTAssertFalse(model.playbackOptions.didExpire)
         XCTAssertTrue(model.coordinator.isPlaying)
         XCTAssertEqual(model.currentTrackID, entry.trackID)
+    }
+
+    private func postInterruption(_ type: AVAudioSession.InterruptionType, shouldResume: Bool = false) {
+        NotificationCenter.default.post(name: AVAudioSession.interruptionNotification,
+                                        object: AVAudioSession.sharedInstance(),
+                                        userInfo: [AVAudioSessionInterruptionTypeKey: type.rawValue,
+                                                   AVAudioSessionInterruptionOptionKey: shouldResume ? AVAudioSession.InterruptionOptions.shouldResume.rawValue : 0])
+    }
+
+    func testRemotePauseDuringInterruptionPreventsAutomaticResume() async throws {
+        let model = try await makeModel(); model.select(trackID: "Alpha/A.sid")
+        model.configureSystemPlayback(); model.coordinator.isPlaying = true
+        var resumes = 0
+        model.services.audioSession.resumeHandler = { resumes += 1 }
+        postInterruption(.began)
+        XCTAssertFalse(model.coordinator.isPlaying)
+        model.services.nowPlaying.pauseHandler?()
+        postInterruption(.ended, shouldResume: true)
+        XCTAssertEqual(resumes, 0, "Ein ausdrücklicher Pause-Befehl während der Unterbrechung hat Vorrang.")
+        XCTAssertFalse(model.coordinator.isPlaying)
+    }
+
+    func testPreparedReplacementDuringInterruptionDoesNotAutoplay() async throws {
+        let model = try await makeModel(); model.select(trackID: "Alpha/A.sid")
+        model.configureSystemPlayback(); model.coordinator.isPlaying = true
+        var resumes = 0
+        model.services.audioSession.resumeHandler = { resumes += 1 }
+        postInterruption(.began)
+        model.select(trackID: "B.sid")
+        XCTAssertEqual(model.currentTrackID, "B.sid")
+        XCTAssertFalse(model.coordinator.isPlaying)
+        postInterruption(.ended, shouldResume: true)
+        XCTAssertEqual(resumes, 0, "Ein nur vorbereiteter neuer Titel darf nicht vom alten Anruf-Merker starten.")
+    }
+
+    func testInterruptedPlaybackResumesOnlyOnceWhenSystemAllows() async throws {
+        let model = try await makeModel(); model.select(trackID: "Alpha/A.sid")
+        model.configureSystemPlayback(); model.coordinator.isPlaying = true
+        var resumes = 0
+        model.services.audioSession.resumeHandler = { resumes += 1 }
+        postInterruption(.began)
+        XCTAssertFalse(model.coordinator.isPlaying)
+        postInterruption(.ended, shouldResume: true)
+        XCTAssertEqual(resumes, 1)
+        postInterruption(.ended, shouldResume: true)
+        XCTAssertEqual(resumes, 1)
+    }
+
+    func testInterruptionWithoutPermissionAndAlreadyPausedPlaybackStayPaused() async throws {
+        let model = try await makeModel(); model.select(trackID: "Alpha/A.sid")
+        model.configureSystemPlayback(); model.coordinator.isPlaying = true
+        var resumes = 0
+        model.services.audioSession.resumeHandler = { resumes += 1 }
+        postInterruption(.began)
+        postInterruption(.ended)
+        XCTAssertEqual(resumes, 0)
+        postInterruption(.began)
+        postInterruption(.ended, shouldResume: true)
+        XCTAssertEqual(resumes, 0)
+    }
+
+    func testHeadphoneRemovalCancelsPendingInterruptionResume() async throws {
+        let model = try await makeModel(); model.select(trackID: "Alpha/A.sid")
+        model.configureSystemPlayback(); model.coordinator.isPlaying = true
+        var resumes = 0
+        model.services.audioSession.resumeHandler = { resumes += 1 }
+        postInterruption(.began)
+        NotificationCenter.default.post(name: AVAudioSession.routeChangeNotification,
+                                        object: AVAudioSession.sharedInstance(),
+                                        userInfo: [AVAudioSessionRouteChangeReasonKey: AVAudioSession.RouteChangeReason.oldDeviceUnavailable.rawValue])
+        postInterruption(.ended, shouldResume: true)
+        XCTAssertEqual(resumes, 0)
+    }
+
+    func testInvalidReplacementDuringInterruptionKeepsResumePermission() async throws {
+        let model = try await makeModel(); model.select(trackID: "Alpha/A.sid")
+        model.configureSystemPlayback(); model.coordinator.isPlaying = true
+        var resumes = 0
+        model.services.audioSession.resumeHandler = { resumes += 1 }
+        postInterruption(.began)
+        model.select(trackID: "missing.sid")
+        XCTAssertFalse(model.loadTrack(id: "B.sid", autoplay: false, subtune: 99))
+        let corrupt = try XCTUnwrap(model.trackURL(for: "C.sid"))
+        try Data([1, 2, 3]).write(to: corrupt)
+        model.select(trackID: "C.sid")
+        XCTAssertEqual(model.currentTrackID, "Alpha/A.sid")
+        postInterruption(.ended, shouldResume: true)
+        XCTAssertEqual(resumes, 1)
     }
 
     func testInvalidSubtuneCannotReplaceThePreparedTitle() async throws {

@@ -61,8 +61,8 @@ final class AudioSessionController {
     private var didConfigure = false
 
     /// Haben WIR wegen einer Unterbrechung pausiert? Nur dann darf `.shouldResume`
-    /// die Wiedergabe wieder anwerfen. Hatte der Nutzer vorher selbst pausiert,
-    /// bleibt es pausiert.
+    /// die Wiedergabe wieder anwerfen. Ausdrückliche Pause oder eine neue
+    /// vorbereitete Titelauswahl widerrufen diese Freigabe auch währenddessen.
     private var didPauseForInterruption = false
 
     /// Die Beobachter-Marken bleiben liegen, solange die App laeuft. Ein
@@ -108,6 +108,10 @@ final class AudioSessionController {
         } catch {
             print("AudioSession-Aktivierung fehlgeschlagen: \(error.localizedDescription)")
         }
+    }
+
+    func cancelAutomaticResume() {
+        didPauseForInterruption = false
     }
 
     // MARK: - Systembenachrichtigungen

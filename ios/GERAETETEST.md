@@ -13,33 +13,33 @@ VoiceOver nicht im iOS-Simulator](https://developer.apple.com/documentation/acce
 - 10–20 Minuten gesperrt spielen: keine Aussetzer, Auto-Next; Wärme/Akku beobachten.
 - Sperrbildschirm und AirPods: Play/Pause, Titelsprung und Positionssprung.
 - Kopfhörer trennen: pausiert, kein Ton aus dem Lautsprecher.
-- Anruf: pausiert; danach wieder normal weiterhören.
+- Anruf/Siri: pausiert; ein ausdrückliches „Pause“ verhindert späteres Autostart.
 - Ordner importieren, App neu starten; VoiceOver-Controls kurz prüfen.
 
 Die vollständige Abnahme unten bleibt einzeln offen, bis Ergebnisse vorliegen.
 
 ## Vorbereitung
 
-```bash
-cp ios/env.example ios/.env
-```
+Für den direkten Xcode-Lauf `ios/ViciousSIDPlayer.xcodeproj` öffnen, das iPhone
+anstecken und als Ziel wählen. Unter „Signing & Capabilities“ das passende
+Apple-Team prüfen, dann die App mit dem Play-Knopf starten. Team und Bundle-ID
+stehen im App-Target; bei einem fremden Clone müssen diese Werte dort angepasst
+werden. Beim ersten Mal kann iOS nach Vertrauen für das Entwicklerzertifikat
+fragen: Einstellungen → Allgemein → VPN & Geräteverwaltung.
 
-Dann `DEVELOPMENT_TEAM` in `ios/.env` eintragen (Apple-Developer-Team-ID,
-zehn Zeichen) und die Konfiguration erzeugen:
+Alternativ liest der Skript-Build `ios/.env`. Eine vorhandene Datei erhalten;
+nur falls sie fehlt, `ios/env.example` dorthin kopieren. `DEVELOPMENT_TEAM`
+eintragen und dann bauen:
 
 ```bash
 bash ios/scripts/apply-env.sh
-```
-
-App für das Gerät bauen:
-
-```bash
 bash ios/scripts/build-device.sh
 ```
 
-Danach das iPhone anstecken und die App aus Xcode heraus starten (Play-Knopf mit
-dem Gerät als Ziel). Beim ersten Mal fragt iOS nach Vertrauen für das
-Entwicklerzertifikat: Einstellungen → Allgemein → VPN & Geräteverwaltung.
+Das fertige Bundle lässt sich über Xcode → Window → Devices and Simulators
+einspielen. Die `.env`-Werte werden beim Skript-Build als Argumente übergeben;
+sie überschreiben **nicht** die Target-Werte beim Start aus der Xcode-GUI.
+Die Reihenfolge steht in [`Config/Signing.xcconfig`](Config/Signing.xcconfig).
 
 Zum Testen ein paar `.sid`-Dateien in die App bekommen — beide Wege einmal gehen:
 
@@ -86,6 +86,10 @@ Jeder Punkt ist einzeln zu quittieren. Ein „läuft schon irgendwie“ zählt n
 - [ ] Anruf annehmen und wieder auflegen: gleiches Verhalten, kein doppeltes
       Starten, keine zwei gleichzeitig laufenden Wiedergaben.
 - [ ] Dasselbe mit einer Sprachnachricht oder Siri.
+- [ ] Während Siri unterbricht ausdrücklich „Pause“ anfordern. Danach bleibt
+      die Musik pausiert, auch wenn iOS automatisches Fortsetzen erlauben würde.
+- [ ] Während einer Unterbrechung einen anderen Titel in der Bibliothek nur
+      vorbereiten. Nach deren Ende bleibt er gestoppt, bis bewusst Play folgt.
 
 ### 5. Kopfhörer abziehen
 

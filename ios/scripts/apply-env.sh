@@ -3,11 +3,10 @@
 #
 #     bash ios/scripts/apply-env.sh
 #
-# Warum der Umweg ueber eine xcconfig: die Buildskripte koennten die Team-ID
-# auch direkt an xcodebuild reichen (tun sie auch), aber die Xcode-GUI liest
-# keine Umgebungsvariablen. Damit „Projekt oeffnen und auf Start druecken"
-# ebenfalls funktioniert, landet der Wert zusaetzlich in einer xcconfig, die
-# `ios/Config/Signing.xcconfig` optional einbindet.
+# Die xcconfig wird von `ios/Config/Signing.xcconfig` optional eingebunden.
+# In der Xcode-GUI gewinnen die eingecheckten Target-Werte der pbxproj;
+# fuer ein anderes Team muessen diese dort angepasst werden. Der Skript-Build
+# reicht die Werte aus `.env` direkt an xcodebuild weiter und ueberschreibt sie.
 #
 # Beide Dateien — `ios/.env` und `ios/Config/Local.xcconfig` — sind gitignoriert.
 

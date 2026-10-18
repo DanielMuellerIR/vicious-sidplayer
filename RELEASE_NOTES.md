@@ -1,3 +1,9 @@
+Vicious SID Player 1.9.48 respects explicit pause commands during iPhone audio interruptions.
+
+- A Pause command received during Siri or another audio interruption cancels the pending automatic resume, even when the interruption has already paused the player.
+- Preparing a different library tune also cancels that old resume permission. Missing, malformed or invalid selections preserve the previous tune and its resume state.
+- Clarify real-device setup and add these cases to the [iPhone checklist](ios/GERAETETEST.md). Hardware acceptance remains open; see [validation](docs/validation-1.9.48.md).
+
 Vicious SID Player 1.9.47 aligns the 6581 filter across output sample rates.
 
 - Keep the existing 44.1 kHz output bit for bit and adapt its integrator coefficients to other output rates in native and HTML5 playback. The low-cutoff transition at 48 kHz no longer causes a large level drop.

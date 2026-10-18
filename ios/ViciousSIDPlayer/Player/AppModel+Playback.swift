@@ -51,6 +51,7 @@ extension AppModel {
                 return false
             }
 
+            services.audioSession.cancelAutomaticResume()
             cancelLengthEstimate()
             observeHistory(force: true, playing: false)
             coordinator.stop()
@@ -97,6 +98,7 @@ extension AppModel {
     func togglePlayPause() {
         guard !collectionTransfer.isApplying else { collectionImportMayResume = false; return }
         if coordinator.isPlaying {
+            services.audioSession.cancelAutomaticResume()
             observeHistory(force: true, playing: false)
             coordinator.pause()
         } else if currentTrackID != nil {
@@ -305,6 +307,9 @@ extension AppModel {
         }
         nowPlaying.pauseHandler = { [weak self] in
             guard let self else { return }
+            // Siri kann Pause anfordern, obwohl die Unterbrechung bereits
+            // pausiert hat. Auch dann muss die spätere Freigabe entfallen.
+            self.services.audioSession.cancelAutomaticResume()
             if self.collectionTransfer.isApplying { self.collectionImportMayResume = false; return }
             guard self.coordinator.isPlaying else { return }
             self.togglePlayPause()
