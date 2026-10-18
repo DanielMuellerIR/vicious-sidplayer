@@ -10,6 +10,8 @@ const historySource = await readFile(new URL('../src/history.js', import.meta.ur
 const collectionSource = await readFile(new URL('../src/collection.js', import.meta.url), 'utf8');
 const storageSource = await readFile(new URL('../src/personal-storage.js', import.meta.url), 'utf8');
 const collectionUI = await readFile(new URL('../src/collection-ui.js', import.meta.url), 'utf8');
+const auditSource = await readFile(new URL('../src/collection-audit.js', import.meta.url), 'utf8');
+const auditUI = await readFile(new URL('../src/collection-audit-ui.js', import.meta.url), 'utf8');
 const analysisSource = await readFile(new URL('../src/analysis.js', import.meta.url), 'utf8');
 const analysisUI = await readFile(new URL('../src/analysis-ui.js', import.meta.url), 'utf8');
 const historyUI = await readFile(new URL('../src/history-ui.js', import.meta.url), 'utf8');
@@ -111,7 +113,7 @@ async function ui() {
   const module = new Promise(resolve => { release = resolve; });
   const elements = new Map();
   const storageValues = new Map();
-  const context = vm.createContext({ console, Uint8Array, WeakMap, setTimeout, clearTimeout, performance, TextEncoder, AbortController,
+  const context = vm.createContext({ console, Uint8Array, WeakMap, setTimeout, clearTimeout, queueMicrotask, performance, TextEncoder, AbortController, DOMException,
     navigator: { locks: { request: (_name, _options, action) => Promise.resolve().then(action) } },
     document: { getElementById(id) { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); },
       createElement() { return new Element(); }, createTextNode(value) { return value; } },
@@ -128,9 +130,11 @@ async function ui() {
   vm.runInContext(historySource, context);
   vm.runInContext(collectionSource, context);
   vm.runInContext(storageSource, context);
+  vm.runInContext(auditSource, context);
   vm.runInContext(historyUI, context);
   vm.runInContext(listeningUI, context);
   vm.runInContext(collectionUI, context);
+  vm.runInContext(auditUI, context);
   vm.runInContext(analysisSource, context);
   vm.runInContext(analysisUI, context);
   vm.runInContext(appSource, context);
@@ -311,7 +315,7 @@ test('explicit search selection is stable after the visible filter changes', asy
   page.elements.get('library-search').value = 'Beta'; page.run('refreshPlaylistUI()');
   assert.match(page.run('listeningQueue.current.trackID'), /Alpha/);
 });
-test('reselecting one moved file reconnects its saved identity without autoplay', async () => {
+test('reselecting one moved file keeps the old identity until the user accepts its audit preview', async () => {
   const page = await ui(); page.release();
   page.run(`trackList=[];currentIdx=-1;files=[{name:'A.sid',webkitRelativePath:'Old/A.sid',arrayBuffer:async()=>valid.buffer}]`);
   await page.run('importUserFiles(files,false);');
@@ -319,8 +323,9 @@ test('reselecting one moved file reconnects its saved identity without autoplay'
   const id = page.run('trackList[0].id');
   page.run(`trackList=[];currentIdx=-1;pendingWebRestore=true;files=[{name:'A.sid',webkitRelativePath:'Moved/A.sid',arrayBuffer:async()=>valid.buffer}]`);
   await page.run('importUserFiles(files,true)');
-  assert.equal(page.run('trackList[0].id'), id);
-  assert.equal(page.run('webListeningStore.document.catalog[0].path'), 'Moved/A.sid');
+  assert.notEqual(page.run('trackList[0].id'), id);
+  assert.equal(page.run('webListeningStore.document.catalog[0].path'), 'Old/A.sid');
+  assert.equal(page.run('webListeningStore.document.catalog[1].path'), 'Moved/A.sid');
   assert.equal(page.run('playingState'), false);
 });
 test('two incoming identical copies cannot both relink to one old identity', async () => {
@@ -334,6 +339,23 @@ test('two incoming identical copies cannot both relink to one old identity', asy
   assert.notEqual(page.run('trackList[0].id'), old);
   assert.notEqual(page.run('trackList[1].id'), old);
   assert.notEqual(page.run('trackList[0].id'), page.run('trackList[1].id'));
+});
+
+test('file drops retain readable files when legacy entry URLs fail after the drag store closes', async () => {
+  const page = await ui();
+  const result = await page.run(`(async()=>{const file={name:'Fallback.sid',arrayBuffer:async()=>valid.buffer};
+    const dt={files:[file],items:[{kind:'file',getAsFile:()=>file,webkitGetAsEntry:()=>({isFile:true,fullPath:'/Folder/Fallback.sid',file:(_ok,fail)=>queueMicrotask(()=>{dt.files=[];fail(Error('Malformed legacy URI'));})})}]};
+    const result=await collectDroppedFiles(dt);return{count:result.length,same:result[0]===file,path:droppedPaths.get(file)};})()`);
+  assert.equal(result.count,1);assert.equal(result.same,true);assert.equal(result.path,'Folder/Fallback.sid');
+});
+
+test('directory drop handles are captured before awaiting and retain relative nested paths', async () => {
+  const page = await ui();
+  const result = await page.run(`(async()=>{const file={name:'Nested.sid',arrayBuffer:async()=>valid.buffer};
+    const leaf={kind:'file',name:'Nested.sid',getFile:async()=>file},folder={kind:'directory',name:'Folder',async *values(){yield leaf;}};
+    let captured=0;const dt={files:[],items:[{kind:'file',getAsFileSystemHandle:()=>{captured++;return Promise.resolve(folder);}}]};
+    const task=collectDroppedFiles(dt);const immediate=captured;const result=await task;return{immediate,count:result.length,path:droppedPaths.get(file)};})()`);
+  assert.equal(result.immediate,1);assert.equal(result.count,1);assert.equal(result.path,'Folder/Nested.sid');
 });
 
 test('only the latest seek completion can resume the listening clock', async () => {

@@ -29,6 +29,12 @@ public final class PersonalCollectionController: ObservableObject {
     @Published public private(set) var requiresRestart = false
     @Published public private(set) var error: String?
     @Published public private(set) var completion: String?
+    @Published public private(set) var auditReport: CollectionAuditReport?
+    @Published public private(set) var auditProgress = 0
+    @Published public private(set) var auditTotal = 0
+    @Published public private(set) var isAuditing = false
+    @Published public private(set) var auditCancelled = false
+    @Published public private(set) var auditSelection: Set<String> = []
     private let listening: ListeningLibraryController
     private let history: ListeningHistoryController
     private let playback: PlaybackOptionsController
@@ -38,6 +44,9 @@ public final class PersonalCollectionController: ObservableObject {
     private let pause: @MainActor () -> Bool
     private let resume: @MainActor () -> Void
     private let didApply: @MainActor () -> Void
+    private let auditMetadata: @MainActor () -> CollectionAuditMetadata
+    private var auditTask: Task<Void, Never>?
+    private var auditWorker: Task<CollectionAuditReport, Error>?
     private var catalog: PersonalCollectionCatalog?
     private var baseline: PersonalCollectionSnapshot?
     private var generation = 0
@@ -46,9 +55,11 @@ public final class PersonalCollectionController: ObservableObject {
                 favorites: PersonalCollectionFavoritesStore, supportURL: URL?,
                 context: @escaping @MainActor () throws -> PersonalCollectionContext,
                 pause: @escaping @MainActor () -> Bool, resume: @escaping @MainActor () -> Void,
-                didApply: @escaping @MainActor () -> Void) {
+                didApply: @escaping @MainActor () -> Void,
+                auditMetadata: @escaping @MainActor () -> CollectionAuditMetadata = { .init() }) {
         self.listening = listening; self.history = history; self.playback = playback; self.favorites = favorites
         self.supportURL = supportURL; self.context = context; self.pause = pause; self.resume = resume; self.didApply = didApply
+        self.auditMetadata = auditMetadata
     }
 
     public var availableAreas: Set<PersonalCollectionArea> {
@@ -84,11 +95,112 @@ public final class PersonalCollectionController: ObservableObject {
     }
     public func reset() {
         guard !isApplying, !requiresRestart else { return }
+        cancelAudit()
+        auditReport = nil; auditSelection = []; auditCancelled = false
         generation += 1; importedDocument = nil; preview = nil; baseline = nil; catalog = nil
         exportData = nil; exportReport = nil; choices = [:]; acceptedPaths = []; confirmedSkippedEntries = false
         areas = PersonalCollectionArea.standard.intersection(availableAreas); error = nil; completion = nil; isBusy = false
     }
     public func report(_ error: Error) { self.error = error.localizedDescription }
+
+    public func selectAuditRepair(_ id: String, enabled: Bool) {
+        guard !isBusy, !isApplying, auditReport?.repairs.contains(where: { $0.id == id }) == true else { return }
+        if enabled { auditSelection.insert(id) } else { auditSelection.remove(id) }
+    }
+    public func cancelAudit() {
+        auditTask?.cancel(); auditWorker?.cancel(); auditTask = nil; auditWorker = nil
+        if isAuditing { auditCancelled = true; isAuditing = false; isBusy = false; generation += 1 }
+    }
+    public func startAudit() {
+        guard !isBusy, !isApplying, !requiresRestart else { return }
+        generation += 1; let current = generation
+        auditReport = nil; auditSelection = []; auditProgress = 0; auditTotal = 0
+        auditCancelled = false; error = nil; completion = nil; isAuditing = true; isBusy = true
+        auditTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                await ready()
+                try Task.checkCancellation()
+                let context = try context(), source = snapshot(), metadata = auditMetadata()
+                let worker = Task.detached(priority: .utility) { [self] in
+                    try CollectionAudit.run(context: context, snapshot: source, metadata: metadata) { count, total in
+                        Task { @MainActor [self] in
+                            guard self.generation == current, self.isAuditing else { return }
+                            self.auditProgress = count; self.auditTotal = total
+                        }
+                    }
+                }
+                auditWorker = worker
+                let result = try await worker.value
+                guard generation == current, !Task.isCancelled else { return }
+                auditReport = result
+            } catch is CancellationError {
+                if generation == current { auditCancelled = true }
+            } catch { if generation == current { report(error) } }
+            if generation == current {
+                isAuditing = false; isBusy = false; auditTask = nil; auditWorker = nil
+            }
+        }
+    }
+
+    public func applyAuditRepairs() async {
+        guard !isBusy, !isApplying, !requiresRestart, let report = auditReport, !auditSelection.isEmpty,
+              availableAreas.isSuperset(of: [.favorites, .lists, .bookmarks, .notes, .history]), let supportURL else { return }
+        let selected = auditSelection
+        isBusy = true; error = nil; completion = nil
+        var suspended: Set<PersonalCollectionFile> = [], wasPlaying = false, didPause = false, committed = false
+        do {
+            let catalog = try await readCatalog(), active = try context()
+            guard catalog.libraryID == report.catalog.libraryID, catalog.root == report.catalog.root,
+                  catalog.tracks == report.catalog.tracks, active.libraryID == catalog.libraryID,
+                  active.library.root.resolvingSymlinksInPath().standardizedFileURL == catalog.root else {
+                throw PersonalCollectionImportError.changedPreview
+            }
+            isApplying = true; wasPlaying = pause(); didPause = true
+            try await listening.suspendForImport(); suspended.insert(.listeningLibrary)
+            try await history.suspendForImport(); suspended.insert(.listeningHistory)
+            let current = snapshot()
+            let repaired = try CollectionAuditRepair.preview(current, report: report, selected: selected)
+            guard repaired != current else { throw PersonalCollectionImportError.changedPreview }
+            var changes: [PersonalCollectionFileChange] = []
+            if repaired.listening != current.listening {
+                changes.append(.init(file: .listeningLibrary, expected: try await listening.importSnapshotBytes(),
+                    replacement: try JSONEncoder().encode(repaired.listening)))
+            }
+            if repaired.history != current.history {
+                changes.append(.init(file: .listeningHistory, expected: try await history.importSnapshotBytes(),
+                    replacement: try JSONEncoder().encode(repaired.history)))
+            }
+            let transaction = PersonalCollectionTransaction(supportURL: supportURL)
+            guard favorites.read() == current.favorites else { throw PersonalCollectionImportError.changedPreview }
+            try await Task.detached(priority: .utility) {
+                try transaction.prepare(changes, oldFavorites: current.favorites, newFavorites: repaired.favorites)
+                _ = try transaction.commit(currentFavorites: current.favorites)
+            }.value
+            committed = true
+            try favorites.replace(current.favorites, with: repaired.favorites)
+            if repaired.listening != current.listening { try await listening.verifyImportedDocument(repaired.listening) }
+            if repaired.history != current.history { try await history.verifyImportedDocument(repaired.history) }
+            if repaired.listening != current.listening { listening.acceptImportedDocument(repaired.listening) }
+            if repaired.history != current.history { history.acceptImportedDocument(repaired.history) }
+            let saved = favorites.read()
+            try await Task.detached(priority: .utility) { try transaction.finish(currentFavorites: saved) }.value
+            completion = NSLocalizedString("Die ausgewählten persönlichen Verweise wurden aktualisiert. Musikdateien bleiben unverändert.", comment: "")
+            auditReport = nil; auditSelection = []
+        } catch {
+            requiresRestart = committed || error as? PersonalCollectionTransactionError == .recoveryRequired
+            self.error = requiresRestart ? PersonalCollectionImportError.restartRequired.localizedDescription : error.localizedDescription
+        }
+        if !requiresRestart {
+            if suspended.contains(.listeningLibrary) { listening.resumeAfterImport() }
+            if suspended.contains(.listeningHistory) { history.resumeAfterImport() }
+            if committed { didApply() }
+            playback.refreshSleepTimer()
+            if didPause && wasPlaying && !playback.didExpire { resume() }
+            isApplying = false
+        }
+        isBusy = false
+    }
 
     public func prepareExport() async {
         guard !isBusy, !isApplying, !requiresRestart else { return }

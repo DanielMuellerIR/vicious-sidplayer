@@ -71,7 +71,7 @@
         <button id="tab-history" role="tab">History</button>
       </div>
       <div id="listening-status" class="listening-status" role="status"></div>
-      <div class="sidebar-tools"><button id="collection-open">Import / export personal collection</button></div>
+      <div class="sidebar-tools"><button id="collection-open">Import / export personal collection</button><button id="audit-open">Check collection / find missing files</button></div>
       <div class="sidebar-tools" id="library-tools">
         <input id="library-search" type="search" placeholder="Search titles or folders" aria-label="Search titles or folders">
         <label><input type="checkbox" id="favorites-only"> Favorites only</label>
@@ -163,6 +163,21 @@
   </div>
 </dialog>
 
+<dialog id="audit-dialog" aria-labelledby="audit-heading">
+  <div class="collection-layout">
+    <div class="collection-heading"><h2 id="audit-heading">Check collection</h2><button id="audit-close" type="button">Close</button></div>
+    <p>Checks the files selected in this session. Reopen files or a folder to find saved references again. A browser cannot prove that an unselected file was deleted. Music files are never modified or deleted.</p>
+    <p>STIL and native song-length databases are unavailable in the web player.</p>
+    <div class="tool-row"><button id="audit-start" type="button">Check selected files</button><button id="audit-cancel" type="button" hidden>Cancel check</button><button id="audit-export" type="button" disabled>Save report</button></div>
+    <progress id="audit-progress" hidden value="0" max="1"></progress>
+    <p id="audit-status" role="status" aria-live="polite"></p>
+    <label>Findings <select id="audit-filter"><option value="">All findings</option><option value="damaged">Damaged or unreadable</option><option value="unsupported">Unsupported</option><option value="duplicate">Identical contents</option><option value="missingLength">Unknown duration</option><option value="missing">Unavailable reference</option><option value="moved">Found again</option><option value="ambiguous">Ambiguous association</option><option value="changed">Changed contents</option><option value="unverified">Unknown identity</option></select></label>
+    <div id="audit-rows"></div>
+    <div class="tool-row collection-pagination"><button id="audit-previous" type="button">Previous</button><span id="audit-page"></span><button id="audit-next" type="button">Next</button></div>
+    <p id="audit-selection"></p>
+    <button id="audit-apply" type="button" disabled>Update selected references</button>
+  </div>
+</dialog>
 <dialog id="collection-dialog" aria-labelledby="collection-heading">
   <div class="collection-layout">
     <div class="collection-heading"><h2 id="collection-heading">Personal collection</h2><button id="collection-close" type="button">Close</button></div>

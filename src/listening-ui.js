@@ -7,6 +7,7 @@ async function initializeListeningUI() {
   webListeningStore = webPersonalStorage.stores[0];
   initializeWebHistory(storage, webPersonalStorage.stores[1]);
   initializeCollectionUI();
+  initializeAuditUI();
   initializeWebAnalysisUI();
   listeningQueue = webListeningStore.document.queue ? ListeningSequence.fromJSON(webListeningStore.document.queue) : null;
   pendingWebRestore = !!(listeningQueue || webListeningStore.document.session);

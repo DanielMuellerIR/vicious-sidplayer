@@ -15,6 +15,9 @@ struct PersonalCollectionView: View {
     @State private var conflictPage = 0
     @State private var issuePage = 0
     @State private var expandedConflicts: Set<String> = []
+    @State private var auditPage = 0
+    @State private var auditKind: CollectionAuditKind?
+    @State private var exportName = "Sammlungsdaten.vicious-collection"
     private let pageSize = 20
 
     var body: some View {
@@ -26,10 +29,12 @@ struct PersonalCollectionView: View {
     }
     private func resetMode() {
         controller.reset(); conflictPage = 0; issuePage = 0; expandedConflicts = []; exportSaved = false
+        auditPage = 0; auditKind = nil; exportName = "Sammlungsdaten.vicious-collection"
     }
     private var configuredPresentation: some View {
         presentation
             .task { await controller.ready() }
+            .onDisappear { controller.cancelAudit() }
             .interactiveDismissDisabled(controller.isApplying)
             .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
                 switch result {
@@ -38,7 +43,7 @@ struct PersonalCollectionView: View {
                 }
             }
             .fileExporter(isPresented: $showExporter, document: exportFile, contentType: .json,
-                          defaultFilename: "Sammlungsdaten.vicious-collection") { result in
+                          defaultFilename: exportName) { result in
                 switch result {
                 case .success: exportSaved = true
                 case .failure(let error): if (error as? CocoaError)?.code != .userCancelled { controller.report(error) }
@@ -75,7 +80,7 @@ struct PersonalCollectionView: View {
                 Text("Favoriten, Hörlisten, Lesezeichen, Notizen und Endzeiten in eine andere Sammlung übernehmen. Musikdateien werden nicht mitkopiert.")
                     .font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 Picker("Aktion", selection: $mode) {
-                    Text("Exportieren").tag(0); Text("Importieren").tag(1)
+                    Text("Exportieren").tag(0); Text("Importieren").tag(1); Text("Prüfen").tag(2)
                 }.pickerStyle(.segmented).accessibilityIdentifier("collection-mode")
                     .disabled(controller.isBusy || controller.isApplying || controller.requiresRestart)
                 if let error = controller.error {
@@ -83,10 +88,11 @@ struct PersonalCollectionView: View {
                 }
                 if let completion = controller.completion { Label(completion, systemImage: "checkmark.circle").font(.subheadline) }
                 if exportSaved { Label("Die Exportdatei wurde gesichert.", systemImage: "checkmark.circle").font(.subheadline) }
-                if controller.isBusy {
+                if controller.isBusy && !controller.isAuditing {
                     ProgressView(controller.isApplying ? "Daten werden übernommen …" : "Sammlung und Dateiidentitäten werden geprüft …")
                         .font(.subheadline)
                 }
+                if mode == 2 { auditContent }
                 if mode == 1 {
                     Button("Sammlungsdatei auswählen …") { showImporter = true }
                         .accessibilityIdentifier("collection-import-file")
@@ -101,11 +107,98 @@ struct PersonalCollectionView: View {
                             .font(.subheadline).foregroundStyle(.secondary)
                     }
                 }
-                if mode == 0 || controller.importedDocument != nil {
+                if mode == 0 || mode == 1 && controller.importedDocument != nil {
                     areaSelection
                     if mode == 0 { exportActions } else { importPreview }
                 }
             }.padding(20)
+        }
+    }
+    private var auditContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Dateien prüfen und persönliche Verweise wiederfinden. Musikdateien werden weder verändert noch gelöscht. Die laufende Hörfolge bleibt erhalten.")
+                .font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if controller.isAuditing {
+                ProgressView(value: Double(controller.auditProgress), total: Double(max(1, controller.auditTotal)))
+                Text("Geprüft: \(controller.auditProgress) von \(controller.auditTotal)")
+                Button("Prüfung abbrechen") { controller.cancelAudit() }
+                    .auditActionStyle().accessibilityIdentifier("audit-cancel")
+            } else {
+                Button(controller.auditReport == nil ? NSLocalizedString("Sammlung prüfen", comment: "") : NSLocalizedString("Erneut prüfen", comment: "")) {
+                    auditPage = 0; controller.startAudit()
+                }.auditActionStyle().disabled(controller.isBusy || controller.requiresRestart).accessibilityIdentifier("audit-start")
+            }
+            if controller.auditCancelled { Text("Die Prüfung wurde abgebrochen. Persönliche Daten und Musikdateien bleiben unverändert.") }
+            if let report = controller.auditReport {
+                Text("\(report.fileCount) Dateien geprüft, \(report.validCount) lesbare SID-Titel, \(report.issues.count) Hinweise")
+                    .font(.headline).accessibilityIdentifier("audit-summary")
+                if !report.hasSTIL { Text("STIL ist nicht geladen. Fehlende STIL-Zuordnungen wurden nicht geprüft.").font(.caption) }
+                if !report.hasLengths { Text("Songlengths.md5 ist nicht geladen. Persönliche und berechnete Längen werden berücksichtigt.").font(.caption) }
+                if let warning = report.inventoryWarning { Label(warning, systemImage: "exclamationmark.triangle").font(.caption) }
+                Picker("Hinweise", selection: Binding(get: { auditKind }, set: { auditKind = $0; auditPage = 0 })) {
+                    Text("Alle Hinweise").tag(nil as CollectionAuditKind?)
+                    ForEach(CollectionAuditKind.allCases) { kind in
+                        Text(verbatim: "\(kind.title) (\(report.issues.filter { $0.kind == kind }.count))").tag(Optional(kind))
+                    }
+                }.accessibilityIdentifier("audit-filter")
+                auditRows(report)
+                Button("Prüfbericht sichern …") {
+                    do {
+                        exportFile = CollectionTransferFile(bytes: try CollectionAudit.exportReport(report))
+                        exportName = "Sammlungsprüfung.vicious-audit"; showExporter = true
+                    } catch { controller.report(error) }
+                }.auditActionStyle().disabled(controller.isBusy).accessibilityIdentifier("audit-export")
+                if !report.repairs.isEmpty {
+                    GroupBox("Vorschau der Zuordnungen") {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Nur ausdrücklich gewählte, eindeutige Dateiidentitäten werden übernommen. Favoriten und Listen ohne bekannte Prüfsumme können nicht sicher wiedergefunden werden.")
+                                .font(.caption).fixedSize(horizontal: false, vertical: true)
+                            Text("Ausgewählte Zuordnungen: \(controller.auditSelection.count)")
+                            if !controller.availableAreas.isSuperset(of: [.favorites, .lists, .bookmarks, .notes, .history]) {
+                                Text("Persönliche Daten sind schreibgeschützt oder noch nicht geladen. Die Zuordnung kann nicht übernommen werden.")
+                                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            }
+                            Button("Ausgewählte Verweise aktualisieren") { Task { await controller.applyAuditRepairs() } }
+                                .auditActionStyle()
+                                .disabled(controller.isBusy || controller.requiresRestart || controller.auditSelection.isEmpty
+                                    || !controller.availableAreas.isSuperset(of: [.favorites, .lists, .bookmarks, .notes, .history]))
+                                .accessibilityIdentifier("audit-apply")
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        }
+    }
+    private func auditRows(_ report: CollectionAuditReport) -> some View {
+        let values = report.issues.filter { auditKind == nil || $0.kind == auditKind }
+        let offset = min(auditPage * pageSize, max(0, values.count - 1) / pageSize * pageSize)
+        let page = Array(values.dropFirst(offset).prefix(pageSize))
+        return VStack(alignment: .leading, spacing: 12) {
+            if values.isEmpty { Text("Keine Hinweise in dieser Auswahl.").foregroundStyle(.secondary) }
+            ForEach(page) { issue in
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(verbatim: issue.kind.title).font(.headline)
+                        ForEach(Array(issue.paths.prefix(3).enumerated()), id: \.offset) { _, path in
+                            Text(verbatim: path).font(.subheadline).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                        }
+                        if issue.paths.count > 3 { Text("Weitere Pfade im Prüfbericht: \(issue.paths.count - 3)").font(.caption) }
+                        if let subtune = issue.reference?.subtune { Text("Subtune \(subtune + 1)").font(.caption) }
+                        Text(verbatim: issue.detail).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        if issue.canRepair {
+                            Toggle("Diese Zuordnung übernehmen", isOn: Binding(get: { controller.auditSelection.contains(issue.id) }, set: {
+                                controller.selectAuditRepair(issue.id, enabled: $0)
+                            })).disabled(controller.isBusy || controller.requiresRestart)
+                                .accessibilityIdentifier("audit-repair-\(issue.id)")
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            HStack {
+                Button("Zurück") { auditPage = max(0, auditPage - 1) }.auditActionStyle().disabled(offset == 0)
+                Text(verbatim: "\(values.isEmpty ? 0 : offset + 1)–\(offset + page.count) / \(values.count)").font(.caption)
+                Button("Weiter") { auditPage += 1 }.auditActionStyle().disabled(offset + page.count >= values.count)
+            }
         }
     }
     private var areaSelection: some View {
@@ -272,6 +365,31 @@ struct PersonalCollectionView: View {
         }
     }
 }
+
+private extension View {
+    @ViewBuilder func auditActionStyle() -> some View {
+        #if os(iOS)
+        buttonStyle(AuditActionButtonStyle())
+        #else
+        self
+        #endif
+    }
+}
+
+#if os(iOS)
+private struct AuditActionButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 12)
+            .frame(minHeight: 44)
+            .foregroundStyle(isEnabled ? Color.accentColor : Color.secondary)
+            .background(Color.accentColor.opacity(isEnabled ? (configuration.isPressed ? 0.2 : 0.1) : 0.04),
+                        in: RoundedRectangle(cornerRadius: 8))
+            .contentShape(Rectangle())
+    }
+}
+#endif
 
 private struct CollectionTransferFile: FileDocument {
     static var readableContentTypes: [UTType] { [.json] }

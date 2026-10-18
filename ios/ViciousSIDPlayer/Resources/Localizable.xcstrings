@@ -4560,6 +4560,710 @@
           }
         }
       }
+    },
+    "Prüfen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prüfen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check"
+          }
+        }
+      }
+    },
+    "Sammlung prüfen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sammlung prüfen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check collection"
+          }
+        }
+      }
+    },
+    "Erneut prüfen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut prüfen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check again"
+          }
+        }
+      }
+    },
+    "Beschädigt oder nicht lesbar": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beschädigt oder nicht lesbar"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Damaged or unreadable"
+          }
+        }
+      }
+    },
+    "Nicht unterstützt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht unterstützt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unsupported"
+          }
+        }
+      }
+    },
+    "Identischer Dateiinhalt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identischer Dateiinhalt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identical file contents"
+          }
+        }
+      }
+    },
+    "Keine STIL-Zuordnung": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine STIL-Zuordnung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No STIL association"
+          }
+        }
+      }
+    },
+    "Unbekannte Spieldauer": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unbekannte Spieldauer"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown duration"
+          }
+        }
+      }
+    },
+    "Nicht wiedergefunden": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht wiedergefunden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not found again"
+          }
+        }
+      }
+    },
+    "Wiedergefunden": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiedergefunden"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Found again"
+          }
+        }
+      }
+    },
+    "Mehrdeutige Zuordnung": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mehrdeutige Zuordnung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ambiguous association"
+          }
+        }
+      }
+    },
+    "Dateiinhalt geändert": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dateiinhalt geändert"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File contents changed"
+          }
+        }
+      }
+    },
+    "Dateiidentität unbekannt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dateiidentität unbekannt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown file identity"
+          }
+        }
+      }
+    },
+    "Der Sammlungsordner ist nicht erreichbar.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Sammlungsordner ist nicht erreichbar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The collection folder is unavailable."
+          }
+        }
+      }
+    },
+    "Die frühere Prüfinventur ist nicht lesbar und bleibt erhalten. Wiederfinden nutzt nur belegte Dateiidentitäten.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die frühere Prüfinventur ist nicht lesbar und bleibt erhalten. Wiederfinden nutzt nur belegte Dateiidentitäten."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The previous check inventory is unreadable and will be kept. Finding files again uses verified identities only."
+          }
+        }
+      }
+    },
+    "Kein eindeutiger STIL-Pfad gefunden. Anmerkungen sind nicht für jeden Titel vorhanden.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein eindeutiger STIL-Pfad gefunden. Anmerkungen sind nicht für jeden Titel vorhanden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No unique STIL path was found. Not every tune has annotations."
+          }
+        }
+      }
+    },
+    "Für %d von %d Subtunes ist nur die Fallback-Dauer verfügbar.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für %d von %d Subtunes ist nur die Fallback-Dauer verfügbar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only the fallback duration is available for %d of %d subtunes."
+          }
+        }
+      }
+    },
+    "Diese PSID-/RSID-Version wird vom Player nicht unterstützt.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese PSID-/RSID-Version wird vom Player nicht unterstützt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This PSID/RSID version is unsupported by the player."
+          }
+        }
+      }
+    },
+    "SID-Dateien über 32 MiB werden nicht eingelesen.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SID-Dateien über 32 MiB werden nicht eingelesen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SID files larger than 32 MiB are not read."
+          }
+        }
+      }
+    },
+    "Die Datei ist kein lesbarer SID-Titel oder wurde während der Prüfung geändert.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Datei ist kein lesbarer SID-Titel oder wurde während der Prüfung geändert."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file is not a readable SID tune or was changed during the check."
+          }
+        }
+      }
+    },
+    "Die vollständigen Dateiinhalte sind identisch. Alle Dateien bleiben erhalten.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die vollständigen Dateiinhalte sind identisch. Alle Dateien bleiben erhalten."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Complete file contents are identical. All files are kept."
+          }
+        }
+      }
+    },
+    "Identischer Dateiinhalt gefunden: ": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identischer Dateiinhalt gefunden: "
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identical file contents found: "
+          }
+        }
+      }
+    },
+    "Persönlicher Verweis oder frühere Inventur; keine automatische Zuordnung.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Persönlicher Verweis oder frühere Inventur; keine automatische Zuordnung."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personal reference or previous inventory; no automatic association."
+          }
+        }
+      }
+    },
+    "Die Prüfinventur konnte nicht gespeichert werden. Der Bericht ist vollständig; Musikdateien bleiben erhalten.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Prüfinventur konnte nicht gespeichert werden. Der Bericht ist vollständig; Musikdateien bleiben erhalten."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The check inventory could not be saved. The report is complete; music files are kept."
+          }
+        }
+      }
+    },
+    "Persönliche Verweise wurden seit der Vorschau geändert. Bitte die Sammlung erneut prüfen.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Persönliche Verweise wurden seit der Vorschau geändert. Bitte die Sammlung erneut prüfen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personal references changed since the preview. Please check the collection again."
+          }
+        }
+      }
+    },
+    "Die ausgewählten persönlichen Verweise wurden aktualisiert. Musikdateien bleiben unverändert.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die ausgewählten persönlichen Verweise wurden aktualisiert. Musikdateien bleiben unverändert."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The selected personal references were updated. Music files are unchanged."
+          }
+        }
+      }
+    },
+    "Dateien prüfen und persönliche Verweise wiederfinden. Musikdateien werden weder verändert noch gelöscht. Die laufende Hörfolge bleibt erhalten.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dateien prüfen und persönliche Verweise wiederfinden. Musikdateien werden weder verändert noch gelöscht. Die laufende Hörfolge bleibt erhalten."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check files and find personal references again. Music files are never changed or deleted. The active queue is preserved."
+          }
+        }
+      }
+    },
+    "Geprüft: %lld von %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geprüft: %lld von %lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Checked: %1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "Prüfung abbrechen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prüfung abbrechen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel check"
+          }
+        }
+      }
+    },
+    "Die Prüfung wurde abgebrochen. Persönliche Daten und Musikdateien bleiben unverändert.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Prüfung wurde abgebrochen. Persönliche Daten und Musikdateien bleiben unverändert."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The check was cancelled. Personal data and music files are unchanged."
+          }
+        }
+      }
+    },
+    "%lld Dateien geprüft, %lld lesbare SID-Titel, %lld Hinweise": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Dateien geprüft, %lld lesbare SID-Titel, %lld Hinweise"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld files checked, %2$lld readable SID tunes, %3$lld findings"
+          }
+        }
+      }
+    },
+    "STIL ist nicht geladen. Fehlende STIL-Zuordnungen wurden nicht geprüft.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "STIL ist nicht geladen. Fehlende STIL-Zuordnungen wurden nicht geprüft."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "STIL is not loaded. Missing STIL associations were not checked."
+          }
+        }
+      }
+    },
+    "Songlengths.md5 ist nicht geladen. Persönliche und berechnete Längen werden berücksichtigt.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Songlengths.md5 ist nicht geladen. Persönliche und berechnete Längen werden berücksichtigt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Songlengths.md5 is not loaded. Personal and calculated durations are included."
+          }
+        }
+      }
+    },
+    "Hinweise": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hinweise"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Findings"
+          }
+        }
+      }
+    },
+    "Alle Hinweise": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Hinweise"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All findings"
+          }
+        }
+      }
+    },
+    "Prüfbericht sichern …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prüfbericht sichern …"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save report …"
+          }
+        }
+      }
+    },
+    "Vorschau der Zuordnungen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorschau der Zuordnungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Association preview"
+          }
+        }
+      }
+    },
+    "Nur ausdrücklich gewählte, eindeutige Dateiidentitäten werden übernommen. Favoriten und Listen ohne bekannte Prüfsumme können nicht sicher wiedergefunden werden.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur ausdrücklich gewählte, eindeutige Dateiidentitäten werden übernommen. Favoriten und Listen ohne bekannte Prüfsumme können nicht sicher wiedergefunden werden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only explicitly selected, unique file identities are applied. Favorites and lists without a known checksum cannot be safely found again."
+          }
+        }
+      }
+    },
+    "Ausgewählte Zuordnungen: %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgewählte Zuordnungen: %lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selected associations: %lld"
+          }
+        }
+      }
+    },
+    "Persönliche Daten sind schreibgeschützt oder noch nicht geladen. Die Zuordnung kann nicht übernommen werden.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Persönliche Daten sind schreibgeschützt oder noch nicht geladen. Die Zuordnung kann nicht übernommen werden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personal data is read-only or not loaded yet. Associations cannot be applied."
+          }
+        }
+      }
+    },
+    "Ausgewählte Verweise aktualisieren": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgewählte Verweise aktualisieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update selected references"
+          }
+        }
+      }
+    },
+    "Keine Hinweise in dieser Auswahl.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Hinweise in dieser Auswahl."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No findings in this selection."
+          }
+        }
+      }
+    },
+    "Weitere Pfade im Prüfbericht: %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weitere Pfade im Prüfbericht: %lld"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Further paths in the saved report: %lld"
+          }
+        }
+      }
+    },
+    "Diese Zuordnung übernehmen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Zuordnung übernehmen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use this association"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

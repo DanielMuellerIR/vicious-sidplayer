@@ -104,6 +104,53 @@ final class PersonalCollectionControllerTests: XCTestCase {
         await h.close()
     }
 
+    func testAuditRepairCommitsSelectedReferencesAndRestoresPlaybackWithOriginalFilesIntact() async throws {
+        let h = try Harness(); await h.ready()
+        let reference = ListeningPersonalReference(libraryID: "target", trackID: "Old.sid", md5: h.md5, subtune: 2)
+        h.history.saveBookmark(reference: reference, title: "Keep mark", position: 1.25)
+        h.history.setNote("Keep note", for: reference)
+        let listID = try XCTUnwrap(h.listening.createList(name: "Keep order", entries: [.init(trackID: "Old.sid", subtune: 2)]))
+        try h.favorites.replace([], with: ["Old.sid"])
+        let inventory = h.root.appendingPathComponent("Support/audit-" + h.library.indexFileName)
+        try JSONSerialization.data(withJSONObject: ["version": 1, "contents": ["Old.sid": h.md5]]).write(to: inventory)
+        let queue = ListeningQueue(libraryID: "target", name: "Runtime", entries: [.init(trackID: "Moved.sid", subtune: 0)])
+        h.listening.setQueue(queue)
+        let music = try Data(contentsOf: h.library.root.appendingPathComponent("Moved.sid"))
+        h.transfer.startAudit()
+        for _ in 0..<500 where h.transfer.isAuditing { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertFalse(h.transfer.isAuditing)
+        let report = try XCTUnwrap(h.transfer.auditReport)
+        XCTAssertEqual(report.repairs.count, 2)
+        XCTAssertEqual(h.favorites.read(), ["Old.sid"])
+        for issue in report.repairs { h.transfer.selectAuditRepair(issue.id, enabled: true) }
+        await h.transfer.applyAuditRepairs()
+        XCTAssertNil(h.transfer.error); XCTAssertNotNil(h.transfer.completion)
+        XCTAssertEqual(h.favorites.read(), ["Moved.sid"])
+        XCTAssertEqual(h.listening.document.lists.first { $0.id == listID }?.entries.first?.trackID, "Moved.sid")
+        XCTAssertEqual(h.history.document.bookmarks[0].reference.trackID, "Moved.sid")
+        XCTAssertEqual(h.history.document.bookmarks[0].position, 1.25)
+        XCTAssertEqual(h.history.document.notes[0].text, "Keep note")
+        XCTAssertEqual(h.listening.document.queue, queue); XCTAssertTrue(h.isPlaying); XCTAssertEqual(h.resumes, 1)
+        XCTAssertEqual(try Data(contentsOf: h.library.root.appendingPathComponent("Moved.sid")), music)
+        await h.close()
+    }
+
+    func testAuditRepairRejectsChangedMusicWithoutSuspendingStoresOrPlayback() async throws {
+        let h = try Harness(); await h.ready()
+        let reference = ListeningPersonalReference(libraryID: "target", trackID: "Old.sid", md5: h.md5, subtune: 2)
+        h.history.setNote("Keep note", for: reference)
+        h.transfer.startAudit()
+        for _ in 0..<500 where h.transfer.isAuditing { try await Task.sleep(for: .milliseconds(10)) }
+        let report = try XCTUnwrap(h.transfer.auditReport)
+        for issue in report.repairs { h.transfer.selectAuditRepair(issue.id, enabled: true) }
+        try Data([1, 2, 3]).write(to: h.library.root.appendingPathComponent("Moved.sid"))
+        await h.transfer.applyAuditRepairs()
+        XCTAssertNotNil(h.transfer.error); XCTAssertNil(h.transfer.completion)
+        XCTAssertEqual(h.history.document.notes[0].reference.trackID, "Old.sid")
+        XCTAssertTrue(h.isPlaying); XCTAssertEqual(h.resumes, 0)
+        await h.close()
+    }
+
     func testTimerExpiryDuringImportIsNotAcknowledgedOrResumed() async throws {
         let h = try Harness(); await h.ready(); h.expireDuringPause = true
         await h.transfer.readImport(from: try h.importURL())

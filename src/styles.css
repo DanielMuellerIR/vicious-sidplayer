@@ -528,9 +528,15 @@ body:has(.player.theme-dark) #history-editor { --bg-secondary: #2d2d2d; --text-p
 body:has(.player.theme-light) #history-editor { --bg-secondary: #fff; --text-primary: #1d1d1f; --border: #d3d3d3; }
 
 #collection-dialog { width: min(720px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; font: 14px/1.45 var(--font-main); }
-body:has(.player.theme-dark) #collection-dialog { --bg-secondary: #2d2d2d; --text-primary: #fff; --text-secondary: #a5a5a5; --border: #3c3c3e; --accent: #0a84ff; }
-body:has(.player.theme-light) #collection-dialog { --bg-secondary: #fff; --text-primary: #1d1d1f; --text-secondary: #68686d; --border: #d3d3d3; --accent: #007aff; }
+body:has(.player.theme-dark) #collection-dialog, body:has(.player.theme-dark) #audit-dialog { --bg-secondary: #2d2d2d; --text-primary: #fff; --text-secondary: #a5a5a5; --border: #3c3c3e; --accent: #0a84ff; }
+body:has(.player.theme-light) #collection-dialog, body:has(.player.theme-light) #audit-dialog { --bg-secondary: #fff; --text-primary: #1d1d1f; --text-secondary: #68686d; --border: #d3d3d3; --accent: #007aff; }
 .collection-layout { display: flex; flex-direction: column; gap: 16px; }
+#audit-dialog { width: min(760px, calc(100vw - 32px)); max-height: 85vh; overflow: auto; font: 14px/1.45 var(--font-main); }
+#audit-rows { display: flex; flex-direction: column; gap: 12px; overflow-wrap: anywhere; }
+#audit-rows label { min-height: 44px; align-items: center; }
+#audit-rows input[type="checkbox"] { margin-top: 0; }
+#audit-progress { width: 100%; }
+#audit-status { white-space: pre-wrap; overflow-wrap: anywhere; }
 .collection-layout h2, .collection-layout h4, .collection-layout p { margin: 0; }
 .collection-heading { display: flex; gap: 12px; justify-content: space-between; align-items: center; }
 .collection-heading h2 { font-size: 20px; }
@@ -548,7 +554,7 @@ body:has(.player.theme-light) #collection-dialog { --bg-secondary: #fff; --text-
 .collection-row summary { cursor: pointer; color: var(--accent); }
 .collection-row pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; margin: 6px 0 16px; }
 .collection-pagination { justify-content: space-between; }
-@media (max-width: 480px) { #collection-dialog { padding: 14px; } .collection-layout label:has(input[type="file"]), .collection-layout label:has(select) { flex-direction: column; } }
+@media (max-width: 480px) { #collection-dialog, #audit-dialog { padding: 14px; } .collection-layout label:has(input[type="file"]), .collection-layout label:has(select) { flex-direction: column; } }
 
 #analysis-dialog { width: min(600px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; font: 14px/1.45 var(--font-main); }
 body:has(.player.theme-dark) #analysis-dialog { --bg-secondary: #2d2d2d; --text-primary: #fff; --text-secondary: #a5a5a5; --border: #3c3c3e; --accent: #0a84ff; }

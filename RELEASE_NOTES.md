@@ -1,3 +1,12 @@
+Vicious SID Player 1.9.42 adds collection audits and explicit recovery of moved references on Mac, iPhone and HTML5.
+
+- Check readable SID headers, complete content identities, duplicates, missing files and moved references without changing music. Native checks also report missing matches in loaded STIL and song-length databases.
+- Inspect unique MD5 proposals before updating selected favorites, lists, bookmarks, notes and history. Ambiguous matches and references without a proven identity stay unresolved; the active listening sequence is retained.
+- Cancel a check, filter findings, browse 20 per page and save the complete JSON report. Native inventories retain unresolved identities for a later check and preserve unreadable or newer inventory files.
+- Browser imports retain moved references until an audit proposal is approved. File and folder drops capture their data before asynchronous work and work directly from the generated local HTML file.
+
+See [validation and limits](docs/validation-1.9.42.md).
+
 Vicious SID Player 1.9.41 adds M4A and FLAC to native batch export.
 
 - Choose WAV, lossless 16-bit FLAC, or AAC in M4A at 128, 192, or 256 kbit/s. All formats use the existing duration, mix, filter, fade, naming, and cancellation rules on Mac and iPhone.

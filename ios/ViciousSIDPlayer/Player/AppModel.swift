@@ -83,7 +83,11 @@ final class AppModel: ObservableObject {
                 self.collectionImportMayResume = false
                 self.applyPlaybackOptions(); self.coordinator.play(); self.observeHistory(force: true)
                 self.syncPlaybackLoop(); self.updateNowPlaying(force: true)
-            }, didApply: { [weak self] in self?.didImportCollection() })
+            }, didApply: { [weak self] in self?.didImportCollection() }, auditMetadata: { [weak self] in
+                guard let self else { return .init() }
+                return .init(stil: self.stilDB, lengths: self.songlengthDB, cache: self.lengthCache,
+                    clockMode: self.coordinator.clockMode, knownContents: self.metadataIndex.records.compactMapValues { $0.metadata?.md5 })
+            })
         controller.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &listeningSubscriptions)
         controller.$isApplying.sink { [weak self] applying in
             guard !applying else { return }

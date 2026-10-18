@@ -267,6 +267,7 @@ window.addEventListener('drop', async (e) => {
   dragDepth = 0;
   playerEl.classList.remove('drag-over');
   player.resumeContext();
+  const fallbackFiles = Array.from(e.dataTransfer.files || []);
 
   try {
     const files = await collectDroppedFiles(e.dataTransfer);
@@ -278,27 +279,49 @@ window.addEventListener('drop', async (e) => {
     addUserFiles(sids, true);
   } catch (err) {
     console.error('Drop error:', err);
-    const files = Array.from(e.dataTransfer.files || []);
-    if (files.length) {
-      addUserFiles(files, true);
-    }
+    if (fallbackFiles.some(file => /\.sid$/i.test(file.name))) addUserFiles(fallbackFiles, true);
+    else showError('The dropped folder could not be read. Use Open Folder to select it again.');
   }
 });
 
 async function collectDroppedFiles(dt) {
+  // Der Drag-Datenspeicher ist nur während des Drop-Handlers lesbar. Alle
+  // Zugriffe vor dem ersten await sichern; die alten Entry-URLs scheitern
+  // unter file:// in manchen Browsern, normale File-Objekte bleiben lesbar.
+  const fallback = Array.from(dt.files || []);
+  const captured = Array.from(dt.items || []).filter(item => item.kind === 'file').map(item => ({
+    file: item.getAsFile?.(), entry: item.webkitGetAsEntry?.(),
+    handle: item.getAsFileSystemHandle?.().catch(() => null)
+  }));
+  if (!captured.length) return fallback;
   const out = [];
-  const items = dt.items;
-  if (items && items.length && typeof items[0].webkitGetAsEntry === 'function') {
-    const entries = [];
-    for (let i = 0; i < items.length; i++) {
-      const entry = items[i].webkitGetAsEntry();
-      if (entry) entries.push(entry);
+  for (const item of captured) {
+    const handle = await item.handle;
+    if (handle) {
+      try {
+        const files = []; await walkFileHandle(handle, '', files); for (const file of files) out.push(file); continue;
+      } catch (_) { /* Ältere Browser behalten den Entry-/File-Fallback. */ }
     }
-    for (const entry of entries) await walkEntry(entry, out);
-    return out;
+    if (item.entry) {
+      try {
+        const files = []; await walkEntry(item.entry, files); for (const file of files) out.push(file); continue;
+      } catch (error) { if (item.entry.isDirectory || !item.file) throw error; }
+    }
+    if (item.file) {
+      if (item.entry?.fullPath) droppedPaths.set(item.file,
+        item.entry.fullPath.startsWith('/') ? item.entry.fullPath.slice(1) : item.entry.fullPath);
+      out.push(item.file);
+    }
   }
-  for (let i = 0; i < dt.files.length; i++) out.push(dt.files[i]);
   return out;
+}
+
+async function walkFileHandle(handle, parent, out) {
+  const path = parent ? parent + '/' + handle.name : handle.name;
+  if (handle.kind === 'file') {
+    const file = await handle.getFile(); droppedPaths.set(file, path); out.push(file); return;
+  }
+  for await (const child of handle.values()) await walkFileHandle(child, path, out);
 }
 
 async function walkEntry(entry, out) {
@@ -334,30 +357,36 @@ async function importUserFiles(files, playFirst) {
   const catalog = webListeningStore.document.catalog;
   const catalogByID = new Map(catalog.map(t => [t.id, t]));
   const loaded = new Map(trackList.map((t, index) => [t.id, index]));
-  const byFingerprint = new Map();
-  for (const item of catalog) {
-    const key = item.fingerprint + ':' + item.size;
-    if (!byFingerprint.has(key)) byFingerprint.set(key, []);
-    byFingerprint.get(key).push(item);
-  }
   const libraryIDs = new Set(webListeningStore.document.libraryIDs);
   let firstAddedIdx = -1;
-  const imported = [], incomingCounts = new Map();
+  const imported = [];
   for (const file of sids) {
+    const sourcePath = file.webkitRelativePath || droppedPaths.get(file) || file.name;
     try {
-      const sourcePath = file.webkitRelativePath || droppedPaths.get(file) || file.name;
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      if (!bytes.length) continue;
-      const fingerprint = listeningFileFingerprint(bytes), key = fingerprint + ':' + bytes.length;
-      imported.push({ sourcePath, bytes, fingerprint, md5: collectionMD5(bytes) }); incomingCounts.set(key, (incomingCounts.get(key) || 0) + 1);
-    } catch (_) {}
+      if (file.size > auditMaximumFileBytes) {
+        webAuditImportIssues.push({ id: 'import:' + sourcePath, kind: 'unsupported', paths: [sourcePath], detail: 'SID files larger than 32 MiB are not read.', canRepair: false });
+        continue;
+      }
+      const readable = typeof file.slice === 'function' ? file.slice(0, auditMaximumFileBytes + 1) : file;
+      const bytes = new Uint8Array(await readable.arrayBuffer());
+      if (bytes.byteLength > auditMaximumFileBytes) {
+        webAuditImportIssues.push({ id: 'import:' + sourcePath, kind: 'unsupported', paths: [sourcePath], detail: 'SID files larger than 32 MiB are not read.', canRepair: false });
+        continue;
+      }
+      if (!bytes.length) throw new Error('Empty SID file');
+      webAuditImportIssues = webAuditImportIssues.filter(issue => issue.paths[0] !== sourcePath);
+      const fingerprint = listeningFileFingerprint(bytes);
+      imported.push({ sourcePath, bytes, fingerprint, md5: collectionMD5(bytes) });
+    } catch (_) { webAuditImportIssues.push({ id: 'import:' + sourcePath, kind: 'damaged', paths: [sourcePath], detail: 'This SID file could not be read or is empty.', canRepair: false }); }
   }
+  webAuditImportIssues = [...new Map(webAuditImportIssues.map(issue => [issue.id, issue])).values()].slice(-200000);
   if (webCollectionBusy) return;
   for (const { sourcePath, bytes, fingerprint, md5 } of imported) {
     try {
       const exactID = sourcePath + ':' + fingerprint;
-      const matches = byFingerprint.get(fingerprint + ':' + bytes.length) || [];
-      const old = catalogByID.get(exactID) || (relinking && matches.length === 1 && incomingCounts.get(fingerprint + ':' + bytes.length) === 1 ? matches[0] : null);
+      // Ein anderer Pfad bleibt bis zur ausdrücklichen Prüfbericht-Vorschau
+      // ein neuer Eintrag; ein eindeutiger Fingerabdruck allein reicht nicht.
+      const old = catalogByID.get(exactID);
       const id = old?.id || exactID, metadata = parseSidHeader(bytes);
       const item = { id, path: sourcePath, name: sourcePath.replace(/\.sid$/i, ''), fingerprint, md5, size: bytes.length, subtunesCount: metadata?.subtunesCount || 1 };
       if (old) Object.assign(old, item);

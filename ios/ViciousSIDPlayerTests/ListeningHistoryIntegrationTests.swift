@@ -71,6 +71,40 @@ final class ListeningHistoryIntegrationTests: XCTestCase {
         XCTAssertNil(coordinator.playbackLoop.range)
     }
 
+    func testCollectionAuditRepairsVerifiedBookmarkAfterPreviewWithoutStartingPreparedAudio() async throws {
+        let model = try await makeModel()
+        model.select(trackID: "Tune.sid"); model.setSubtune(2)
+        let digest = try XCTUnwrap(model.currentMD5)
+        let old = ListeningPersonalReference(libraryID: AppModel.listeningCollectionID, trackID: "Missing/Tune.sid", md5: digest, subtune: 2)
+        model.history.saveBookmark(reference: old, title: "Keep mark", position: 1.25)
+        let queue = model.listening.queue, position = model.coordinator.elapsedSeconds
+        let transfer = model.collectionTransfer
+        transfer.startAudit()
+        for _ in 0..<500 where transfer.isAuditing { try await Task.sleep(for: .milliseconds(10)) }
+        let report = try XCTUnwrap(transfer.auditReport)
+        XCTAssertEqual(report.fileCount, 1)
+        let issue = try XCTUnwrap(report.repairs.first { $0.reference?.path == old.trackID })
+        XCTAssertEqual(model.history.document.bookmarks[0].reference.trackID, old.trackID)
+        transfer.selectAuditRepair(issue.id, enabled: true)
+        await transfer.applyAuditRepairs()
+        XCTAssertNil(transfer.error)
+        XCTAssertEqual(model.history.document.bookmarks[0].reference.trackID, "Tune.sid")
+        XCTAssertEqual(model.history.document.bookmarks[0].position, 1.25)
+        XCTAssertEqual(model.currentTrackID, "Tune.sid"); XCTAssertFalse(model.coordinator.isPlaying)
+        XCTAssertEqual(model.coordinator.elapsedSeconds, position); XCTAssertEqual(model.listening.queue, queue)
+    }
+
+    func testCollectionAuditCancellationPreservesPreparedTrackAndPersonalData() async throws {
+        let model = try await makeModel(); model.select(trackID: "Tune.sid")
+        let before = model.history.document, queue = model.listening.queue
+        model.collectionTransfer.startAudit(); model.collectionTransfer.cancelAudit()
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertTrue(model.collectionTransfer.auditCancelled)
+        XCTAssertNil(model.collectionTransfer.auditReport)
+        XCTAssertEqual(model.history.document, before); XCTAssertEqual(model.listening.queue, queue)
+        XCTAssertEqual(model.currentTrackID, "Tune.sid"); XCTAssertFalse(model.coordinator.isPlaying)
+    }
+
     func testExportPresentationKeepsPlaybackQueueHistoryAndLoopUntouched() async throws {
         let model = try await makeModel()
         model.select(trackID: "Tune.sid"); model.setSubtune(2)

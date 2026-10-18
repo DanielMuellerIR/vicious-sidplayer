@@ -2540,6 +2540,9 @@ public struct MainView: View {
                     metadataIndex.refresh(library: library); rebuildFolderTree(from: entries)
                 }
                 resolveComputedLengthIfNeeded(); applyPlaybackOptions(); updateNowPlayingInfo()
+            }, auditMetadata: {
+                .init(stil: stilDB, stilRoot: stilRoot, lengths: songlengthDB, resolver: lengthResolver,
+                    clockMode: coordinator.clockMode, knownContents: metadataIndex.records.compactMapValues { $0.metadata?.md5 })
             })
         collectionTransfer = transfer
         collectionSubscription = transfer.$isApplying.sink { isImportApplying = $0 }

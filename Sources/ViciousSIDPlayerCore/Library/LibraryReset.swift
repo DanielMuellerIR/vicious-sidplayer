@@ -112,7 +112,7 @@ public enum LibraryReset {
             where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError {
             contents = []
         }
-        let supportFiles = ([library.indexFileName, "metadata-" + library.indexFileName] + cacheFileNames).map {
+        let supportFiles = ([library.indexFileName, "metadata-" + library.indexFileName, "audit-" + library.indexFileName] + cacheFileNames).map {
             support.appendingPathComponent($0)
         }.filter { fm.fileExists(atPath: $0.path) }
 

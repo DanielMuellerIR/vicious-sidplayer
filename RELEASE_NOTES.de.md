@@ -1,3 +1,20 @@
+Vicious SID Player 1.9.42 ergänzt Sammlungsprüfung und bewusstes Wiederfinden verschobener Verweise auf Mac, iPhone und in HTML5.
+
+- Lesbare SID-Header, vollständige Inhaltsidentitäten, Duplikate, fehlende Dateien und verschobene Verweise prüfen, ohne Musik zu verändern. Native Prüfungen melden zusätzlich fehlende Treffer in geladenen STIL- und Songlängendatenbanken.
+- Eindeutige MD5-Vorschläge vorab prüfen und nur ausgewählte Favoriten, Listen, Lesezeichen, Notizen und Verlauf neu zuordnen. Mehrdeutige Treffer und Verweise ohne belegte Identität bleiben offen; die aktive Hörfolge bleibt erhalten.
+- Prüfung abbrechen, Hinweise filtern, je 20 durchblättern und den vollständigen JSON-Bericht sichern. Native Inventuren behalten offene Identitäten für spätere Prüfungen und schützen unlesbare oder neuere Inventurdateien.
+- Browserimporte erhalten verschobene Verweise bis zur Bestätigung eines Prüfvorschlags. Datei- und Ordnerdrops sichern ihre Daten vor asynchroner Arbeit und funktionieren direkt in der erzeugten lokalen HTML-Datei.
+
+Siehe [Prüfstand und Grenzen](docs/validation-1.9.42.md).
+
+Vicious SID Player 1.9.41 ergänzt M4A und FLAC im nativen Batch-Export.
+
+- WAV, verlustfreies 16-Bit-FLAC oder AAC in M4A mit 128, 192 oder 256 kbit/s wählen. Alle Formate nutzen dieselben Regeln für Dauer, Mix, Filter, Fade, Dateinamen und Abbruch auf Mac und iPhone.
+- M4A und FLAC enthalten Titel, Autor, SID-Informationen und Subtune-Metadaten. FLAC erhält die gerenderten WAV-Samples exakt. M4A erhält die Angaben zum AAC-Encoder-Vorlauf und prüft die genaue Anzahl nutzbarer Samples.
+- Kurze FLAC-Dateien verwenden eine ausdrückliche Encoder-Blockgröße; Dauern unter 192 Samples erhalten einen verständlichen Fehler. Fehlende Systemencoder werden ebenfalls klar gemeldet, ohne zusätzliche Codec-Abhängigkeit.
+
+Siehe [Prüfstand](docs/validation-1.9.41.md).
+
 Vicious SID Player 1.9.40 ergänzt Batch-WAV-Export mit bewusster Mixwahl auf Mac und iPhone.
 
 - Aktuellen Subtune, alle Subtunes einer Datei, Hörfolge oder sichtbare Bibliothek vorab prüfen; auf dem Mac zusätzlich die ausgewählte gespeicherte Liste. Einträge wählen und aufgelöste Dauerquellen, Dateinamen und Ausgabegröße vor dem Rendern sehen.

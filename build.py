@@ -199,8 +199,8 @@ def build(minify: bool = True) -> Path:
     css_src = (SRC_DIR / 'styles.css').read_text()
     body_src = (SRC_DIR / 'body.html').read_text()
     app_src = '\n'.join((SRC_DIR / name).read_text() for name in (
-        'listening.js', 'history.js', 'collection.js', 'personal-storage.js', 'analysis.js',
-        'history-ui.js', 'listening-ui.js', 'collection-ui.js', 'analysis-ui.js', 'app.js'))
+        'listening.js', 'history.js', 'collection.js', 'personal-storage.js', 'collection-audit.js', 'analysis.js',
+        'history-ui.js', 'listening-ui.js', 'collection-ui.js', 'collection-audit-ui.js', 'analysis-ui.js', 'app.js'))
 
     # Version einpflegen
     version = (HERE / 'VERSION').read_text().strip()

@@ -1,6 +1,6 @@
 # Aktiver Backlog
 
-Die Erweiterungen ab v1.9.26 werden im [Erweiterungsplan](docs/feature-roadmap.md) verfolgt. Piano-/Registeransicht und A/B-Schleifen sind in v1.9.39 auf Mac, iPhone-Simulator und HTML5 abgenommen. Batch-WAV-Export mit Mixwahl ist in v1.9.40 auf Mac und iPhone abgenommen ([Prüfstand](docs/validation-1.9.40.md)). M4A-/FLAC-Export mit Metadaten ist in v1.9.41 auf Mac und iPhone abgenommen ([Prüfstand](docs/validation-1.9.41.md)). Als Nächstes folgt die Sammlungsprüfung.
+Die Erweiterungen ab v1.9.26 werden im [Erweiterungsplan](docs/feature-roadmap.md) verfolgt. Piano-/Registeransicht und A/B-Schleifen sind in v1.9.39 auf Mac, iPhone-Simulator und HTML5 abgenommen. Batch-WAV-Export mit Mixwahl ist in v1.9.40 auf Mac und iPhone abgenommen ([Prüfstand](docs/validation-1.9.40.md)). M4A-/FLAC-Export mit Metadaten ist in v1.9.41 auf Mac und iPhone abgenommen ([Prüfstand](docs/validation-1.9.41.md)). Sammlungsprüfung und bewusstes Wiederfinden sind in v1.9.42 auf Mac, iPhone und HTML5 abgenommen ([Prüfstand](docs/validation-1.9.42.md)). Als Nächstes folgen Formatkompatibilität und klar dokumentierte Grenzen.
 
 1. ~~STIL-Integration~~ **auf dem Mac erledigt am 2026-08-23 (v1.9.12).** Parser,
    Zuordnung über die HVSC-Wurzel und Auto-Fund stehen im Core (`STIL.swift`,
