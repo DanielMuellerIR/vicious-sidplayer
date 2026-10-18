@@ -8,6 +8,16 @@ gehabt zu haben, hat nichts geprüft.
 Auch VoiceOver muss auf einem echten Gerät geprüft werden: [Apple unterstützt
 VoiceOver nicht im iOS-Simulator](https://developer.apple.com/documentation/accessibility/performing-accessibility-testing-for-your-app).
 
+## Kurztest
+
+- 10–20 Minuten gesperrt spielen: keine Aussetzer, Auto-Next; Wärme/Akku beobachten.
+- Sperrbildschirm und AirPods: Play/Pause, Titelsprung und Positionssprung.
+- Kopfhörer trennen: pausiert, kein Ton aus dem Lautsprecher.
+- Anruf: pausiert; danach wieder normal weiterhören.
+- Ordner importieren, App neu starten; VoiceOver-Controls kurz prüfen.
+
+Die vollständige Abnahme unten bleibt einzeln offen, bis Ergebnisse vorliegen.
+
 ## Vorbereitung
 
 ```bash
@@ -70,8 +80,9 @@ Jeder Punkt ist einzeln zu quittieren. Ein „läuft schon irgendwie“ zählt n
 ### 4. Eingehender Anruf
 
 - [ ] Während der Wiedergabe anrufen lassen. **Die Musik pausiert.**
-- [ ] Anruf beenden. **Die Musik setzt von selbst fort** (das ist der
-      `.shouldResume`-Fall der Unterbrechungsbehandlung).
+- [ ] Anruf beenden. Gibt iOS das Fortsetzen frei (`.shouldResume`), setzt
+      die Musik von selbst fort. Andernfalls muss bewusstes Play funktionieren;
+      die App darf die Unterbrechungsentscheidung von iOS nicht übergehen.
 - [ ] Anruf annehmen und wieder auflegen: gleiches Verhalten, kein doppeltes
       Starten, keine zwei gleichzeitig laufenden Wiedergaben.
 - [ ] Dasselbe mit einer Sprachnachricht oder Siri.

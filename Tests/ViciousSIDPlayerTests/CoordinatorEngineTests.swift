@@ -77,6 +77,33 @@ final class CoordinatorEngineTests: XCTestCase {
     }
 
     @MainActor
+    func testSlowerUIRefreshKeepsEmulationRunningAndRecoversOnReturn() async throws {
+        var data = silentSID()
+        data.replaceSubrange(0x7C..<data.count, with: [0x60, 0, 0, 0xEE, 0, 0xD4, 0x60])
+        let coordinator = ViciousCoordinator()
+        coordinator.setSid(try SidParser.parse(data: data)); coordinator.setVolume(0)
+        coordinator.play(); defer { coordinator.stop() }
+        try XCTSkipUnless(coordinator.isPlaying, "Kein nutzbares Audiogeraet")
+        try await Task.sleep(for: .milliseconds(400))
+        let before = coordinator.currentVisuals().frequencies[0]
+        let elapsedBefore = coordinator.elapsedSeconds
+
+        coordinator.setUIUpdateInterval(1)
+        try await Task.sleep(for: .milliseconds(1300))
+        XCTAssertTrue(coordinator.isPlaying)
+        XCTAssertGreaterThan(coordinator.currentVisuals().frequencies[0], before + 40,
+                             "Die Play-Routine muss unabhaengig vom UI-Timer weiterlaufen.")
+        XCTAssertGreaterThan(coordinator.elapsedSeconds, elapsedBefore + 0.7)
+
+        let elapsedHidden = coordinator.elapsedSeconds
+        coordinator.setUIUpdateInterval(0.1)
+        try await Task.sleep(for: .milliseconds(350))
+        XCTAssertTrue(coordinator.isPlaying)
+        XCTAssertGreaterThan(coordinator.elapsedSeconds, elapsedHidden + 0.2)
+        XCTAssertFalse(coordinator.isPaused)
+    }
+
+    @MainActor
     func testPlaybackWorksAgainAfterTheAudioEngineWasRebuilt() throws {
         let coordinator = ViciousCoordinator()
         let file = try SidParser.parse(data: silentSID())

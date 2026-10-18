@@ -184,6 +184,34 @@ final class ListeningIntegrationTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: url), raw)
     }
 
+    func testBackgroundRefreshStillAdvancesSubtunesAndReturnsWithoutRestart() async throws {
+        let model = try await makeModel()
+        model.select(trackID: "Alpha/A.sid")
+        model.currentTrackLengths = [0.3, 30, 30]
+        model.autoNext = true
+        model.setPlaybackViewVisible(true)
+        model.coordinator.setVolume(0)
+        model.coordinator.play(); defer { model.coordinator.stop() }
+        try XCTSkipUnless(model.coordinator.isPlaying, "Kein nutzbares Audiogeraet")
+        model.startPlaybackLoop()
+        model.scenePhaseChanged(to: .background)
+        for _ in 0..<40 where model.coordinator.currentSubtune == 0 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        XCTAssertFalse(model.isSceneActive)
+        XCTAssertEqual(model.coordinator.currentSubtune, 1,
+                       "Der eigene Auto-Next-Lauf muss bei langsamer UI weiterlaufen.")
+        XCTAssertTrue(model.coordinator.isPlaying)
+        model.scenePhaseChanged(to: .active)
+        for _ in 0..<10 where model.coordinator.elapsedSeconds <= 0.2 {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        XCTAssertTrue(model.isSceneActive)
+        XCTAssertTrue(model.coordinator.isPlaying)
+        XCTAssertEqual(model.coordinator.currentSubtune, 1)
+        XCTAssertGreaterThan(model.coordinator.elapsedSeconds, 0.2)
+    }
+
     func testPersonalDurationPrecedesHVSCAndStopsWhenAutoNextIsOff() async throws {
         let model = try await makeModel(); try await awaitMetadata(model)
         model.select(trackID: "Alpha/A.sid")

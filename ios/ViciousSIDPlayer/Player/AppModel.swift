@@ -196,6 +196,7 @@ final class AppModel: ObservableObject {
     /// Im Hintergrund laeuft Audio weiter, die Visualisierung steht still —
     /// das ist der groesste Batteriehebel der App.
     @Published private(set) var isSceneActive: Bool = true
+    private var isPlaybackViewVisible = false
 
     // MARK: - Interne Bausteine
 
@@ -434,11 +435,9 @@ final class AppModel: ObservableObject {
             historyBackgroundSaver.flush(history)
         }
         playbackOptions.refreshSleepTimer()
-        // Den Spiegel-Takt des Koordinators mitziehen: im Vordergrund fluessige
-        // 50 Hz fuers Oszilloskop, im Hintergrund einmal pro Sekunde. Das reicht
-        // dort fuer Auto-Next und die Sperrbildschirm-Anzeige und kostet
-        // praktisch nichts.
-        coordinator.setUIUpdateInterval(active ? 0.02 : 1.0)
+        // Nur Zeit und Scrubber werden gespiegelt. Das Oszilloskop liest seine
+        // schnellen Werte selbst; Auto-Next und Now Playing haben ihren 1-Hz-Lauf.
+        updateUIRefreshInterval()
         if active {
             // Beim Zurueckkommen kann sich die Bibliothek von aussen geaendert
             // haben (Finder-Dateifreigabe), also abgleichen.
@@ -449,6 +448,15 @@ final class AppModel: ObservableObject {
             // bekommt, bevor iOS sie beendet.
             saveSessionState()
         }
+    }
+
+    func setPlaybackViewVisible(_ visible: Bool) {
+        isPlaybackViewVisible = visible
+        updateUIRefreshInterval()
+    }
+
+    private func updateUIRefreshInterval() {
+        coordinator.setUIUpdateInterval(isSceneActive && isPlaybackViewVisible ? 0.1 : 1.0)
     }
 }
 

@@ -175,9 +175,9 @@ public final class ViciousCoordinator: ObservableObject {
     public var isPreparingSeek: Bool { seekTask != nil }
     private let visualsBuffer = RealtimeVisualsBuffer()
     private var uiUpdateTimer: Timer?
-    // Taktrate, mit der Oszilloskop-Daten und Laufzeit aus dem Realtime-Puffer
-    // in die @Published-Felder gespiegelt werden. Siehe setUIUpdateInterval().
-    private var uiUpdateInterval: TimeInterval = 0.02
+    // Nur die Laufzeit wird gespiegelt; schnelle Stimmenwerte liest die
+    // Zeichenansicht direkt. Siehe setUIUpdateInterval().
+    private var uiUpdateInterval: TimeInterval = 0.1
     private var currentVolume: Float = 0.3
     private var fadeEnvelope = PlaybackFadeEnvelope()
     // Zielposition eines Seeks, der im gestoppten Zustand angefordert wurde (dann
@@ -660,15 +660,15 @@ public final class ViciousCoordinator: ObservableObject {
     // von diesem Timer voellig unabhaengig. Der Timer spiegelt nur Messwerte
     // ins UI. Auf iOS spielt die App im gesperrten Zustand weiter — dort waeren
     // 50 Aktualisierungen pro Sekunde fuer einen ausgeschalteten Bildschirm
-    // reine Batterieheizung. Die App schaltet deshalb im Hintergrund auf einen
-    // langsamen Takt (etwa 1 s) und im Vordergrund zurueck auf 0,02 s.
+    // unnoetige Arbeit. Die Frontends schalten deshalb bei unsichtbarer
+    // Oberflaeche auf 1 s. Sichtbar reichen 0,1 s fuer Zeit und Scrubber;
+    // Oszilloskop und Analyse lesen ihre Werte in eigenen Zeichenplaenen.
     //
     // Bewusst nicht "aus": die verstrichene Zeit wird auch im Hintergrund
     // gebraucht — fuer Auto-Next und fuer die Anzeige auf dem Sperrbildschirm.
     //
-    // Die Mac-App ruft das nie auf und behaelt den Standardtakt von 0,02 s.
     public func setUIUpdateInterval(_ seconds: TimeInterval) {
-        let clamped = (seconds.isFinite && seconds > 0) ? seconds : 0.02
+        let clamped = (seconds.isFinite && seconds > 0) ? seconds : 0.1
         guard clamped != uiUpdateInterval else { return }
         uiUpdateInterval = clamped
         // Laeuft gerade ein Timer, mit der neuen Taktrate neu aufsetzen.

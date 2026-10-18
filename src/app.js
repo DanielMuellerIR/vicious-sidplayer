@@ -609,8 +609,21 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-function draw() {
+let lastScopeFrameAt = -Infinity;
+function draw(timestamp) {
   requestAnimationFrame(draw);
+  const frameInterval = playingState ? 1000 / 30 : 100;
+  if (document.hidden || timestamp - lastScopeFrameAt < frameInterval - 0.5) return;
+  const phaseStep = Number.isFinite(lastScopeFrameAt) ? Math.min(0.1, (timestamp - lastScopeFrameAt) / 1000) * 60 : 1;
+  lastScopeFrameAt = timestamp;
+
+  // Zeit und Scrubber gehoeren auch zur Piano-/Registeransicht.
+  const playtime = lastVisuals.playtime || 0;
+  if (!isSeeking && positionScrubber) {
+    positionScrubber.value = String(Math.min(playtime, currentWebDuration()));
+    timeCurrent.textContent = fmtTime(playtime);
+    refreshWebMediaAccessibility();
+  }
   if ($('analysis-view').value !== 'scope') return;
 
   const W = canvas.width;
@@ -650,15 +663,6 @@ function draw() {
   const waveforms = chipVisuals.waveforms;
   const pulsewidths = chipVisuals.pulsewidths;
   const mutedChannels = webAnalysisMix.effectiveMuted(activeWebSIDChips());
-  const playtime = lastVisuals.playtime || 0;
-
-  // Sync scrubber value and text
-  if (!isSeeking && positionScrubber) {
-    positionScrubber.value = String(Math.min(playtime, currentWebDuration()));
-    timeCurrent.textContent = fmtTime(playtime);
-    refreshWebMediaAccessibility();
-  }
-
   const channelH = H / 3;
 
   for (let c = 0; c < 3; c++) {
@@ -673,8 +677,7 @@ function draw() {
 
     // Advance phase
     if (live) {
-      phases[c] += (freqHz * 0.005) + 0.02;
-      if (phases[c] > Math.PI * 2) phases[c] -= Math.PI * 2;
+      phases[c] = (phases[c] + ((freqHz * 0.005) + 0.02) * phaseStep) % (Math.PI * 2);
     }
 
     // Draw baseline

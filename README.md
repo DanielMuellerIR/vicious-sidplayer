@@ -79,6 +79,8 @@ Track paths are relative to the autoplay folder. Absolute paths, `..` and anythi
 
 In HTML5, the collection tabs use Left/Right, Home and End; Tab enters the selected panel. Dialogs keep keyboard focus and return it when closed. Load buttons and sliders have accessible names; focus the metadata panel to read long text in full. On iPhone, transport and subtune buttons have at least 44-point targets; large accessibility text uses vertical control groups. VoiceOver and external-keyboard acceptance on iPhone require the [device checklist](ios/GERAETETEST.md).
 
+The scope uses a 30 Hz animation schedule. Hidden or minimized Mac windows pause visualization; on iPhone it pauses outside the Playback tab or active scene. Playback time uses the slower refresh rate there as well. Playback and song completion continue independently. See the [matched CPU measurements](docs/validation-1.9.46.md); battery life still requires a real-device test.
+
 **Media keys**: Play/pause, stop, and track skipping via F7/F8/F9, the Touch Bar, and AirPods — the app registers as the system's *Now Playing* app.
 - **macOS updates**: Sparkle checks for signed updates in the background; “Nach Updates suchen…” in the app menu checks immediately. Installing an update requires your approval. The first Sparkle-enabled release needs a manual installation.
 - **No external assets**: The entire interface (including macOS window decorations and icons) is drawn procedurally in CSS and SwiftUI Canvas.

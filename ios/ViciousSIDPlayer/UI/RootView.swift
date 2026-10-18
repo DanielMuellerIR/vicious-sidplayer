@@ -42,7 +42,7 @@ struct RootView: View {
                 }
                 .tag(Tab.library)
 
-            NowPlayingView()
+            NowPlayingView(isVisible: selectedTab == .nowPlaying)
                 .tabItem {
                     Label("Wiedergabe", systemImage: "waveform")
                 }
@@ -59,9 +59,13 @@ struct RootView: View {
         // Der Umweg ueber den globalen Schluessel `AppleInterfaceStyle`, den die
         // Mac-App gehen muss, entfaellt hier.
         .preferredColorScheme(model.themeMode.preferredColorScheme)
+        .onChange(of: selectedTab) { _, tab in
+            model.setPlaybackViewVisible(tab == .nowPlaying)
+        }
         .task {
             guard !hasStarted else { return }
             hasStarted = true
+            model.setPlaybackViewVisible(selectedTab == .nowPlaying)
             model.start()
         }
         .alert("Fehler", isPresented: errorAlertBinding) {

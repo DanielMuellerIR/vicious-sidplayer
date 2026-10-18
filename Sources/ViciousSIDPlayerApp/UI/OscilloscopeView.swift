@@ -4,6 +4,7 @@ import ViciousSIDPlayerCore
 public struct OscilloscopeView: View {
     @ObservedObject var coordinator: ViciousCoordinator
     var theme: PlayerTheme
+    var isVisible: Bool
     @State private var selectedChip = 0
     @State private var analysisMode = 0
     @State private var showsMixControls = false
@@ -20,9 +21,10 @@ public struct OscilloscopeView: View {
                Color(red: 0.75, green: 0.10, blue: 0.45)]
     }
 
-    public init(coordinator: ViciousCoordinator, theme: PlayerTheme) {
+    public init(coordinator: ViciousCoordinator, theme: PlayerTheme, isVisible: Bool = true) {
         self.coordinator = coordinator
         self.theme = theme
+        self.isVisible = isVisible
     }
 
     public var body: some View {
@@ -89,7 +91,7 @@ public struct OscilloscopeView: View {
                 }
             }
             } else {
-                SIDAnalysisPanel(coordinator: coordinator, chip: displayedChip, mode: analysisMode)
+                SIDAnalysisPanel(coordinator: coordinator, chip: displayedChip, mode: analysisMode, isSceneActive: isVisible)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
@@ -157,7 +159,7 @@ public struct OscilloscopeView: View {
         // paused: !isPlaying friert die Animation ein — bei Pause bleibt das zuletzt
         // gezeichnete Bild stehen (die Wellenform im Moment des Pausierens), statt
         // weiterzuscrollen. Die Werte selbst bleiben ueber isPaused erhalten (unten).
-        TimelineView(.animation(paused: !coordinator.isPlaying)) { timeline in
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isVisible || !coordinator.isPlaying)) { timeline in
             Canvas { context, size in
                 let time = timeline.date.timeIntervalSinceReferenceDate
                 // Die Anzeigewerte werden hier beim Zeichnen geholt, nicht ueber

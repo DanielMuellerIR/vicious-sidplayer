@@ -130,6 +130,7 @@ public struct MainView: View {
     /// Das AppKit-Fenster, in dem diese Ansicht haengt — gebraucht zum
     /// Umschalten der Fenstergroesse. Wird von `WindowAccessor` gemeldet.
     @State private var hostWindow: NSWindow? = nil
+    @State private var isPlayerWindowVisible = false
     /// Die Fenstergroesse vor dem Wechsel in den Mini-Player.
     @State private var fullWindowFrame: NSRect? = nil
 
@@ -544,7 +545,7 @@ public struct MainView: View {
                     Divider().background(borderCol)
 
                     // Canvas visualizer
-                    OscilloscopeView(coordinator: coordinator, theme: theme)
+                    OscilloscopeView(coordinator: coordinator, theme: theme, isVisible: isPlayerWindowVisible)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .background(isLight ? Color.macLightSurface : Color.macDarkSurface)
@@ -556,6 +557,7 @@ public struct MainView: View {
             WindowAccessor { window in
                 guard hostWindow !== window else { return }
                 hostWindow = window
+                updateWindowVisibility()
                 // Startet die App im Mini-Player, ist das Fenster noch in
                 // voller Groesse — jetzt, wo es bekannt ist, zusammenziehen.
                 if miniPlayer { DispatchQueue.main.async { applyMiniPlayerLayout() } }
@@ -583,6 +585,10 @@ public struct MainView: View {
                 .frame(width: 0, height: 0)
                 .opacity(0)
                 .accessibilityHidden(true)
+        }
+        .onReceive(Self.windowVisibilityEvents) { notification in
+            if let window = notification.object as? NSWindow, window !== hostWindow { return }
+            updateWindowVisibility()
         }
         .fileImporter(
             isPresented: $showFileImporter,
@@ -806,6 +812,21 @@ public struct MainView: View {
         case .missing: errorMessage = "Der Titel wurde in dieser Sammlung noch nicht gefunden. Den Bibliotheksabgleich abwarten."
         case .ambiguous: errorMessage = "Mehrere Dateien haben denselben Inhalt. Den gewünschten Titel in der Bibliothek auswählen."
         }
+    }
+
+    private static let windowVisibilityEvents = Publishers.MergeMany([
+        NSWindow.didChangeOcclusionStateNotification,
+        NSWindow.didMiniaturizeNotification, NSWindow.didDeminiaturizeNotification,
+        NSApplication.didHideNotification, NSApplication.didUnhideNotification
+    ].map { NotificationCenter.default.publisher(for: $0) })
+
+    private func updateWindowVisibility() {
+        // Ein inaktives Fenster kann sichtbar bleiben; entscheidend sind
+        // Verdeckung, Minimierung und Ausblenden, nicht der Tastaturfokus.
+        let visible = hostWindow?.occlusionState.contains(.visible) == true
+            && hostWindow?.isMiniaturized == false && !NSApp.isHidden
+        isPlayerWindowVisible = visible
+        coordinator.setUIUpdateInterval(visible ? 0.1 : 1.0)
     }
 
     // MARK: - Mini-Player

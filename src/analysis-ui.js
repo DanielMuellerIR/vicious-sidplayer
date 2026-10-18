@@ -77,6 +77,7 @@ function renderWebLoop() {
 function clearWebLoopMarkers() { webPlaybackLoop.clear(); applyWebLoop(); }
 let webAnalysisLastPaint = -Infinity;
 function renderWebAnalysisValues(force = false) {
+  if (!force && document.hidden) return;
   const now = performance.now();
   if (!force && now - webAnalysisLastPaint < 100) return;
   webAnalysisLastPaint = now;

@@ -1,3 +1,11 @@
+Vicious SID Player 1.9.46 reduziert unnötige Zeichenarbeit.
+
+- Mac- und HTML5-Oszilloskop auf 30 Bilder pro Sekunde begrenzen. Ausgeblendete oder minimierte Mac-Fenster pausieren ihre Visualisierungen und aktualisieren die Spielzeit einmal pro Sekunde; bei Rückkehr folgt die Anzeige ohne Neustart des Audios.
+- Native Spielzeit bei sichtbarer Wiedergabeansicht mit 10 Hz spiegeln. Das iPhone-Oszilloskop pausiert auch außerhalb des Wiedergabe-Tabs; Audio, Auto-Next und Medienbefehle behalten ihre unabhängigen Abläufe.
+- Die HTML5-Positionsanzeige auch in Piano- und Registeransicht fortschreiben. Verborgene Seiten überspringen Analyse-DOM-Updates; Audio und Songende bleiben aktiv.
+
+Der [Prüfstand](docs/validation-1.9.46.md) enthält vergleichbare Messungen und Hardwaregrenzen.
+
 Vicious SID Player 1.9.45 verbessert Tastaturzugang, angesagte Controlnamen und enge Ansichten.
 
 - Die Mac-Bibliothekssuche mit ⌘F fokussieren und Sammlungsseiten mit ⌘1–4 wählen. Controlgruppen brechen in schmalen Fenstern um; der Mini-Player bleibt dasselbe Fenster.

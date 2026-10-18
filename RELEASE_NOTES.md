@@ -1,3 +1,11 @@
+Vicious SID Player 1.9.46 reduces unnecessary display work.
+
+- Cap the Mac and HTML5 scope at 30 frames per second. Hidden or minimized Mac windows pause their visualizers and update playback time once per second; returning restores the display without restarting audio.
+- Update native playback time at 10 Hz while the playback view is visible. The iPhone scope also pauses outside the Playback tab; audio, Auto-Next and media commands keep their independent paths.
+- Keep the HTML5 position display moving in Piano and Registers views. Hidden pages skip analysis DOM updates; audio and song completion remain active.
+
+See [validation](docs/validation-1.9.46.md) for matched measurements and hardware limits.
+
 Vicious SID Player 1.9.45 improves keyboard access, spoken control names and compact layouts.
 
 - Focus Mac library search with ⌘F and switch collection pages with ⌘1–4. Control groups wrap in narrow windows; the mini player keeps the same window.

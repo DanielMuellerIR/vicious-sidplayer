@@ -10,6 +10,7 @@ import ViciousSIDPlayerCore
 // Die Unteransichten beobachten nur Titel- und Transportzustand; Layout und
 // Bedienung bleiben unabhängig vom Zeichentakt der Kurven.
 struct NowPlayingView: View {
+    let isVisible: Bool
     @EnvironmentObject private var model: AppModel
     @Environment(\.colorScheme) private var systemScheme
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -27,7 +28,7 @@ struct NowPlayingView: View {
 
                     OscilloscopeView(coordinator: model.coordinator,
                                      palette: palette,
-                                     isSceneActive: model.isSceneActive)
+                                     isSceneActive: model.isSceneActive && isVisible)
                         .frame(height: verticalSizeClass == .compact ? 180 : 280)
 
                     SubtuneSelectorView(coordinator: model.coordinator) { index in
@@ -381,6 +382,6 @@ private struct AudioExportButton: View {
 }
 
 #Preview {
-    NowPlayingView()
+    NowPlayingView(isVisible: true)
         .environmentObject(AppModel())
 }

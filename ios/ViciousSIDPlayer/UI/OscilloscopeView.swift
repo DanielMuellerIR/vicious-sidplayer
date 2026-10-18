@@ -12,10 +12,10 @@ import ViciousSIDPlayerCore
 // Groessenordnungen billiger als ein echtes Sample-Fenster und sieht fuer den
 // Zweck — sehen, was die drei Stimmen gerade tun — genauso aus.
 //
-// Zwei iOS-spezifische Unterschiede zur Mac-Fassung:
+// Zeichenplan wie auf dem Mac:
 //
-//  1. Der Takt ist auf 30 Bilder pro Sekunde gedeckelt. Der Mac zeichnet mit
-//     voller Bildwiederholrate; auf dem iPhone waeren das bis zu 120 Hz — viel
+//  1. Der Takt ist auf 30 Bilder pro Sekunde gedeckelt. Auf dem iPhone
+//     waeren sonst bis zu 120 Hz moeglich — viel
 //     Rechenzeit fuer einen Effekt, den niemand sieht.
 //  2. Der Zeichentakt haelt an, sobald die App in den Hintergrund geht
 //     (`isSceneActive == false`). Das Audio laeuft dabei weiter — genau das ist
