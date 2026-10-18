@@ -7,10 +7,11 @@ const source = await readFile(new URL('../sid-player-worklet.js', import.meta.ur
 const Engine = new Function('sampleRate', source.slice(0, source.indexOf('class SidPlayerWorklet')) + ';return SidPlayerProcessor;')(44100);
 const wrapper = await readFile(new URL('../sidplayer.js', import.meta.url), 'utf8');
 const { parseSidHeader } = await import(`data:text/javascript;base64,${Buffer.from(wrapper).toString('base64')}`);
-function sid(chips) {
+function sid(chips, filtered = false, changingRouting = false) {
   const code = [], store = (value, address) => code.push(0xa9, value, 0x8d, address & 255, address >> 8);
   for (let chip = 0; chip < chips; chip++) {
-    const base = 0xd400 + chip * 0x20; store(15, base + 0x18);
+    const base = 0xd400 + chip * 0x20; store(filtered ? 0x1f : 15, base + 0x18);
+    if (filtered) { store(0xf7, base + 0x17); store(0x20, base + 0x16); }
     for (let voice = 0; voice < 3; voice++) {
       const address = base + voice * 7;
       store(37 + voice, address); store(0x10 + (chip * 3 + voice) * 3, address + 1);
@@ -18,9 +19,17 @@ function sid(chips) {
     }
   }
   code.push(0x60);
+  const playOffset = changingRouting ? code.length : code.length - 1;
+  if (changingRouting) {
+    for (let chip = 0; chip < chips; chip++) {
+      const address = 0xd417 + chip * 0x20;
+      code.push(0xad, address & 255, address >> 8, 0x49, 7, 0x8d, address & 255, address >> 8);
+    }
+    code.push(0x60);
+  }
   const data = new Uint8Array(0x7c + code.length); data.set(Buffer.from('PSID'));
   const put = (value, offset) => { data[offset] = value >> 8; data[offset + 1] = value & 255; };
-  put(chips + 1, 4); put(0x7c, 6); put(0x1000, 8); put(0x1000, 10); put(0x1000 + code.length - 1, 12);
+  put(chips + 1, 4); put(0x7c, 6); put(0x1000, 8); put(0x1000, 10); put(0x1000 + playOffset, 12);
   put(1, 14); put(1, 16); put(0x194, 0x76);
   if (chips > 1) data[0x7a] = 0x42;
   if (chips > 2) data[0x7b] = 0x44;
@@ -77,4 +86,37 @@ test('mask survives seek, subtune initialization and a new engine load without h
   b.setMutedChannels(mask); b.seek(0.2);
   assert.equal(a.setMutedChannels(Array(9).fill('false')), false);
   for (let i = 0; i < 256; i++) assert.equal(a.playSample(), b.playSample());
+});
+
+test('filtered mute returns the exact continuously emulated state after unmuting', () => {
+  for (const chips of [1, 2, 3]) {
+    for (const model of [6581, 8580]) {
+      const data = sid(chips, true), flags = model === 6581 ? 0x154 : 0x2a4;
+      data[0x76] = flags >> 8; data[0x77] = flags & 255;
+      const reference = engine(data), muted = engine(data);
+      for (let i = 0; i < 2048; i++) { reference.playSample(); muted.playSample(); }
+      const mask = Array(9).fill(false); mask[chips * 3 - 1] = true; muted.setMutedChannels(mask);
+      for (let i = 0; i < 1024; i++) { reference.playSample(); muted.playSample(); }
+      muted.setMutedChannels(Array(9).fill(false));
+      let difference = 0;
+      for (let i = 0; i < 128; i++) difference = Math.max(difference, Math.abs(reference.playSample() - muted.playSample()));
+      assert.equal(difference, 0, `${chips} SID, model ${model}`);
+    }
+  }
+});
+
+test('filtered contributions remain independent during routing changes and complete mute', () => {
+  const data = sid(3, true, true), full = engine(data), muted = engine(data), isolated = engine(data);
+  for (let i = 0; i < 2048; i++) { full.playSample(); muted.playSample(); isolated.playSample(); }
+  const mask = Array(9).fill(false); mask[4] = true;
+  const solo = Array(9).fill(true); solo[4] = false;
+  muted.setMutedChannels(mask); isolated.setMutedChannels(solo);
+  for (let i = 0; i < 2048; i++) {
+    const a = full.playSample(), b = muted.playSample(), c = isolated.playSample();
+    assert(Math.abs(a - b - c) < 1e-12);
+  }
+  muted.setMutedChannels(Array(9).fill(true));
+  for (let i = 0; i < 1024; i++) { full.playSample(); assert.equal(muted.playSample(), 0); }
+  muted.setMutedChannels(Array(9).fill(false));
+  for (let i = 0; i < 128; i++) assert.equal(muted.playSample(), full.playSample());
 });

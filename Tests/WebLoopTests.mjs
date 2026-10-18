@@ -71,6 +71,8 @@ test('a snapshot from another tune, clock or mix is rejected', () => {
   assert.equal(engine(data, 'ntsc').installLoop(snapshot), false);
   assert.equal(engine(data, 'pal', Array(9).fill(true)).installLoop(snapshot), false);
   const unloaded = new Engine(); unloaded.loadSID(data); assert.equal(unloaded.installLoop(snapshot), false);
+  const incomplete = structuredClone(snapshot); delete incomplete.state.voiceBandpass;
+  assert.equal(engine(data).installLoop(incomplete), false);
 });
 test('the actual Dedicated Worker produces a transferable state matching the live engine', () => {
   let result;

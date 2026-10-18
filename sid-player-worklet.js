@@ -127,6 +127,8 @@ class SidPlayerProcessor {
     let combiwf = 0;
     let prevlowpass = [0, 0, 0];
     let prevbandpass = [0, 0, 0];
+    let voiceLowpass = Array(9).fill(0);
+    let voiceBandpass = Array(9).fill(0);
     
     let cutoff_ratio_8580 = -2 * Math.PI * (12500 / 256) / samplerate;
     let cutoff_ratio_6581 = -2 * Math.PI * (20000 / 256) / samplerate;
@@ -198,6 +200,8 @@ class SidPlayerProcessor {
       sourceMSBrise = [0, 0, 0];
       prevlowpass = [0, 0, 0];
       prevbandpass = [0, 0, 0];
+      voiceLowpass = Array(9).fill(0);
+      voiceBandpass = Array(9).fill(0);
     }
 
     function init(subt) {
@@ -372,6 +376,18 @@ class SidPlayerProcessor {
       SID_model = preferred_SID_model[num];
       filtin = 0;
       output = 0;
+      let mutedFilterOutput = 0, allMuted = true;
+
+      // Gemeinsame Filterparameter aller Stimmen dieses Chips.
+      cutoff = (memory[SIDaddr + 0x15] & 7) / 8 + memory[SIDaddr + 0x16] + 0.2;
+      if (SID_model == 8580.0) {
+        cutoff = 1 - Math.exp(cutoff * cutoff_ratio_8580);
+        resonance = Math.pow(2, ((4 - (memory[SIDaddr + 0x17] >> 4)) / 8));
+      } else {
+        if (cutoff < 24) cutoff = 0.035;
+        else cutoff = 1 - 1.263 * Math.exp(cutoff * cutoff_ratio_6581);
+        resonance = (memory[SIDaddr + 0x17] > 0x5F) ? 8 / (memory[SIDaddr + 0x17] >> 4) : 1.41;
+      }
 
       for (let channel = num * SID_CHANNEL_AMOUNT; channel < (num + 1) * SID_CHANNEL_AMOUNT; channel++) {
         prevgate = (ADSRstate[channel] & GATE_BITMASK);
@@ -499,13 +515,24 @@ class SidPlayerProcessor {
         prevaccu[channel] = phaseaccu[channel];
         sourceMSB[num] = MSB;
 
-        // Mute entfernt nur den Mixbeitrag nach Oszillator und Hüllkurve.
-        // Readbacks, CPU und alle Chips laufen unverändert weiter.
+        const signal = (wfout - 0x8000) * (envcnt[channel] / 256);
+        const routed = !!(memory[SIDaddr + 0x17] & FILTSW[channel]);
+        const input = routed ? signal : 0;
+        filtin += input;
+        // Lineare Filterbeiträge bleiben auch bei Mute und Routingwechsel warm.
+        // Der volle Chipfilter rechnet unverändert; Mute zieht erst am Ausgang ab.
+        const voiceHighpass = input + voiceBandpass[channel] * resonance + voiceLowpass[channel];
+        const voiceNextBandpass = voiceBandpass[channel] - voiceHighpass * cutoff;
+        const voiceNextLowpass = voiceLowpass[channel] + voiceNextBandpass * cutoff;
+        voiceBandpass[channel] = voiceNextBandpass;
+        voiceLowpass[channel] = voiceNextLowpass;
         if (voiceMuted[channel]) {
-        } else if (memory[SIDaddr + 0x17] & FILTSW[channel]) {
-          filtin += (wfout - 0x8000) * (envcnt[channel] / 256);
-        } else if ((channel % SID_CHANNEL_AMOUNT) != 2 || !(memory[SIDaddr + 0x18] & OFF3_BITMASK)) {
-          output += (wfout - 0x8000) * (envcnt[channel] / 256);
+          if (memory[SIDaddr + 0x18] & HIGHPASS_BITMASK) mutedFilterOutput -= voiceHighpass;
+          if (memory[SIDaddr + 0x18] & BANDPASS_BITMASK) mutedFilterOutput -= voiceNextBandpass;
+          if (memory[SIDaddr + 0x18] & LOWPASS_BITMASK) mutedFilterOutput += voiceNextLowpass;
+        } else {
+          allMuted = false;
+          if (!routed && ((channel % SID_CHANNEL_AMOUNT) != 2 || !(memory[SIDaddr + 0x18] & OFF3_BITMASK))) output += signal;
         }
       }
 
@@ -520,17 +547,6 @@ class SidPlayerProcessor {
       // SIDs: startChannel + 2 (envcnt[2]/[5]/[8]), analog zum Swift-Port.
       memory[SIDaddr + 0x1C] = envcnt[num * SID_CHANNEL_AMOUNT + 2];
 
-      // Filter processing
-      cutoff = (memory[SIDaddr + 0x15] & 7) / 8 + memory[SIDaddr + 0x16] + 0.2;
-      if (SID_model == 8580.0) {
-        cutoff = 1 - Math.exp(cutoff * cutoff_ratio_8580);
-        resonance = Math.pow(2, ((4 - (memory[SIDaddr + 0x17] >> 4)) / 8));
-      } else {
-        if (cutoff < 24) cutoff = 0.035;
-        else cutoff = 1 - 1.263 * Math.exp(cutoff * cutoff_ratio_6581);
-        resonance = (memory[SIDaddr + 0x17] > 0x5F) ? 8 / (memory[SIDaddr + 0x17] >> 4) : 1.41;
-      }
-
       tmp = filtin + prevbandpass[num] * resonance + prevlowpass[num];
       if (memory[SIDaddr + 0x18] & HIGHPASS_BITMASK) output -= tmp;
       tmp = prevbandpass[num] - tmp * cutoff;
@@ -540,6 +556,9 @@ class SidPlayerProcessor {
       prevlowpass[num] = tmp;
       if (memory[SIDaddr + 0x18] & LOWPASS_BITMASK) output += tmp;
 
+      output -= mutedFilterOutput;
+      // Vollständiges Mute entfernt auch mögliche Rundungsreste.
+      if (allMuted) output = 0;
       return (output / OUTPUT_SCALEDOWN) * (memory[SIDaddr + 0x18] & 0xF);
     }
 
@@ -745,7 +764,7 @@ class SidPlayerProcessor {
         timermode: timermode.slice(), addresses: SID_address.slice(), models: preferred_SID_model.slice(),
         muted: voiceMuted.slice(), loadedMemory: loadedMemory.slice() },
       endSample: Math.floor(end * samplerate),
-      state: {initialized, finished, playtime, renderedSamples, framecnt, CPUtime, pPC, mix, PC, A, T, X, Y, SP, IR, addr, ST, cycles, storadd, SID_model, playaddr, frame_sampleperiod, usesCIATimer, combiwf, prevgate, chnadd, ctrl, wf, test, period, step, SR, accuadd, MSB, tmp, pw, lim, wfout, cutoff, resonance, filtin, output, memory: memory.slice(), ADSRstate: ADSRstate.slice(), ratecnt: ratecnt.slice(), envcnt: envcnt.slice(), expcnt: expcnt.slice(), prevSR: prevSR.slice(), phaseaccu: phaseaccu.slice(), prevaccu: prevaccu.slice(), sourceMSBrise: sourceMSBrise.slice(), sourceMSB: sourceMSB.slice(), noise_LFSR: noise_LFSR.slice(), prevwfout: prevwfout.slice(), prevwavdata: prevwavdata.slice(), prevlowpass: prevlowpass.slice(), prevbandpass: prevbandpass.slice()}
+      state: {initialized, finished, playtime, renderedSamples, framecnt, CPUtime, pPC, mix, PC, A, T, X, Y, SP, IR, addr, ST, cycles, storadd, SID_model, playaddr, frame_sampleperiod, usesCIATimer, combiwf, prevgate, chnadd, ctrl, wf, test, period, step, SR, accuadd, MSB, tmp, pw, lim, wfout, cutoff, resonance, filtin, output, memory: memory.slice(), ADSRstate: ADSRstate.slice(), ratecnt: ratecnt.slice(), envcnt: envcnt.slice(), expcnt: expcnt.slice(), prevSR: prevSR.slice(), phaseaccu: phaseaccu.slice(), prevaccu: prevaccu.slice(), sourceMSBrise: sourceMSBrise.slice(), sourceMSB: sourceMSB.slice(), noise_LFSR: noise_LFSR.slice(), prevwfout: prevwfout.slice(), prevwavdata: prevwavdata.slice(), prevlowpass: prevlowpass.slice(), prevbandpass: prevbandpass.slice(), voiceLowpass: voiceLowpass.slice(), voiceBandpass: voiceBandpass.slice()}
     });
     function restoreSnapshot(state) {
       initialized = state.initialized;
@@ -805,6 +824,8 @@ class SidPlayerProcessor {
       for (let i = 0; i < prevwavdata.length; i++) prevwavdata[i] = state.prevwavdata[i];
       for (let i = 0; i < prevlowpass.length; i++) prevlowpass[i] = state.prevlowpass[i];
       for (let i = 0; i < prevbandpass.length; i++) prevbandpass[i] = state.prevbandpass[i];
+      for (let i = 0; i < voiceLowpass.length; i++) voiceLowpass[i] = state.voiceLowpass[i];
+      for (let i = 0; i < voiceBandpass.length; i++) voiceBandpass[i] = state.voiceBandpass[i];
     }
     this.installLoop = snapshot => {
       const equal = (a, b) => a && b && a.length === b.length && a.every((value, i) => value === b[i]);
@@ -813,6 +834,8 @@ class SidPlayerProcessor {
           || c.loadaddr !== loadaddr || c.initaddr !== initaddr || c.playaddf !== playaddf
           || !equal(c.timermode, timermode) || !equal(c.addresses, SID_address)
           || !equal(c.models, preferred_SID_model) || !equal(c.muted, voiceMuted)
+          || !Array.isArray(state.voiceLowpass) || state.voiceLowpass.length !== 9 || !state.voiceLowpass.every(Number.isFinite)
+          || !Array.isArray(state.voiceBandpass) || state.voiceBandpass.length !== 9 || !state.voiceBandpass.every(Number.isFinite)
           || !equal(c.loadedMemory, loadedMemory) || !Number.isSafeInteger(snapshot.endSample)
           || snapshot.endSample - state.renderedSamples < Math.floor(0.25 * samplerate)) return false;
       preparedLoop = snapshot;

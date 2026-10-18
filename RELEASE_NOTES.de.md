@@ -1,3 +1,10 @@
+Vicious SID Player 1.9.43 erhält den Filterzustand stummer Stimmen.
+
+- Stimmen- und Chip-Mute entfernen gefilterte Beiträge erst am Ausgang und erhalten den durchgehend emulierten gemeinsamen Filterzustand. Beim Entmuten entsteht kein Einschwingen durch den zuvor fehlenden Filtereingang mehr.
+- Eigene Stimmenbeiträge folgen auch Routingwechseln und nativem Filter-Bypass. Vorbereitete A/B-Schleifen erhalten diese Zustände; ein vollständig stummer Chip liefert exakte Stille.
+
+Siehe [Prüfstand](docs/validation-1.9.43.md).
+
 Vicious SID Player 1.9.42 ergänzt Sammlungsprüfung und bewusstes Wiederfinden verschobener Verweise auf Mac, iPhone und in HTML5.
 
 - Lesbare SID-Header, vollständige Inhaltsidentitäten, Duplikate, fehlende Dateien und verschobene Verweise prüfen, ohne Musik zu verändern. Native Prüfungen melden zusätzlich fehlende Treffer in geladenen STIL- und Songlängendatenbanken.

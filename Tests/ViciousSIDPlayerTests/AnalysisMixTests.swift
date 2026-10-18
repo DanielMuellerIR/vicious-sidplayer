@@ -35,7 +35,7 @@ final class AnalysisMixTests: XCTestCase {
         XCTAssertEqual(mix, original)
     }
 
-    private func syntheticSID(chips: Int, filtered: Bool = false) throws -> SidFileData {
+    private func syntheticSID(chips: Int, filtered: Bool = false, changingRouting: Bool = false) throws -> SidFileData {
         var code: [UInt8] = []
         func store(_ value: UInt8, _ address: Int) {
             code += [0xA9, value, 0x8D, UInt8(address & 255), UInt8(address >> 8)]
@@ -52,11 +52,20 @@ final class AnalysisMixTests: XCTestCase {
             }
         }
         code.append(0x60)
+        let playOffset = changingRouting ? code.count : code.count - 1
+        if changingRouting {
+            for chip in 0..<chips {
+                let address = 0xD417 + chip * 0x20
+                code += [0xAD, UInt8(address & 255), UInt8(address >> 8), 0x49, 7,
+                         0x8D, UInt8(address & 255), UInt8(address >> 8)]
+            }
+            code.append(0x60)
+        }
         var data = Data(count: 0x7C)
         data.replaceSubrange(0..<4, with: Array("PSID".utf8))
         func put(_ value: Int, _ offset: Int) { data[offset] = UInt8(value >> 8); data[offset + 1] = UInt8(value & 255) }
         put(chips + 1, 4); put(0x7C, 6); put(0x1000, 8); put(0x1000, 10)
-        put(0x1000 + code.count - 1, 12); put(1, 14); put(1, 16); put(0x194, 0x76)
+        put(0x1000 + playOffset, 12); put(1, 14); put(1, 16); put(0x194, 0x76)
         if chips > 1 { data[0x7A] = 0x42 }
         if chips > 2 { data[0x7B] = 0x44 }
         return try SidParser.parse(data: data + Data(code))
@@ -111,6 +120,54 @@ final class AnalysisMixTests: XCTestCase {
         XCTAssertEqual(buffer.readVisuals().chip(2).frequencies.0, visuals.chip(2).frequencies.0)
         XCTAssertEqual(visuals.chip(-1).frequencies.0, 0)
         XCTAssertEqual(processor(try syntheticSID(chips: 1)).getChannelsData().chip(1).frequencies.0, 0)
+    }
+
+    func testFilteredMuteDoesNotChangeTheStateAfterUnmuting() throws {
+        for chips in [1, 2, 3] {
+            for model in [6581, 8580] {
+                let file = try syntheticSID(chips: chips, filtered: true)
+                let reference = processor(file), muted = processor(file)
+                reference.setModelOverride(Double(model)); muted.setModelOverride(Double(model))
+                for _ in 0..<2048 { _ = reference.playStereo(); _ = muted.playStereo() }
+                muted.setChannelMuted(channel: chips * 3 - 1, muted: true)
+                for _ in 0..<1024 { _ = reference.playStereo(); _ = muted.playStereo() }
+                muted.setChannelMuted(channel: chips * 3 - 1, muted: false)
+                var difference = 0.0
+                for _ in 0..<128 {
+                    let a = reference.playStereo(), b = muted.playStereo()
+                    difference = max(difference, abs(a.left - b.left), abs(a.right - b.right))
+                }
+                XCTAssertEqual(difference, 0, "\(chips) SID, Modell \(model)")
+            }
+        }
+    }
+
+    func testFilteredContributionsStayIndependentAcrossRoutingMuteAndBypass() throws {
+        for model in [6581, 8580] {
+            let file = try syntheticSID(chips: 3, filtered: true, changingRouting: true)
+            let full = processor(file), muted = processor(file), isolated = processor(file)
+            for p in [full, muted, isolated] { p.setModelOverride(Double(model)) }
+            for _ in 0..<2048 { _ = full.playStereo(); _ = muted.playStereo(); _ = isolated.playStereo() }
+            muted.setChannelMuted(channel: 4, muted: true)
+            var solo = [Bool](repeating: true, count: 9); solo[4] = false
+            isolated.setMutedChannels(solo)
+            for _ in 0..<2048 {
+                let a = full.playStereo(), b = muted.playStereo(), c = isolated.playStereo()
+                XCTAssertEqual(a.left - b.left, c.left, accuracy: 1e-12)
+                XCTAssertEqual(a.right - b.right, c.right, accuracy: 1e-12)
+            }
+            muted.setMutedChannels([Bool](repeating: true, count: 9)); muted.setFilterEnabled(false)
+            for _ in 0..<1024 {
+                _ = full.playStereo()
+                let sample = muted.playStereo()
+                XCTAssertEqual(sample.left, 0); XCTAssertEqual(sample.right, 0)
+            }
+            muted.setMutedChannels([Bool](repeating: false, count: 9)); muted.setFilterEnabled(true)
+            for _ in 0..<128 {
+                let a = full.playStereo(), b = muted.playStereo()
+                XCTAssertEqual(a.left, b.left); XCTAssertEqual(a.right, b.right)
+            }
+        }
     }
 
     #if canImport(AVFoundation)

@@ -142,6 +142,8 @@ public final class ViciousProcessor: Sendable {
     nonisolated(unsafe) private var prevwavdata = [Double](repeating: 0.0, count: 9)
     nonisolated(unsafe) private var prevlowpass = [Double](repeating: 0.0, count: 3)
     nonisolated(unsafe) private var prevbandpass = [Double](repeating: 0.0, count: 3)
+    nonisolated(unsafe) private var voiceLowpass = [Double](repeating: 0.0, count: 9)
+    nonisolated(unsafe) private var voiceBandpass = [Double](repeating: 0.0, count: 9)
 
     nonisolated(unsafe) private var cutoff_ratio_8580: Double = 0.0
     nonisolated(unsafe) private var cutoff_ratio_6581: Double = 0.0
@@ -245,6 +247,8 @@ public final class ViciousProcessor: Sendable {
         sourceMSBrise = [0, 0, 0]
         prevlowpass = [0.0, 0.0, 0.0]
         prevbandpass = [0.0, 0.0, 0.0]
+        voiceLowpass = [Double](repeating: 0.0, count: 9)
+        voiceBandpass = [Double](repeating: 0.0, count: 9)
     }
 
     // PSID-Spec: Hat ein Tune mehr als 32 Subtunes, gilt fuer Subtune 33+ dasselbe
@@ -740,6 +744,25 @@ public final class ViciousProcessor: Sendable {
         SID_model = preferred_SID_model[num]
         var filtin = 0.0
         var output = 0.0
+        var audibleFilterInput = 0.0
+        var mutedFilterOutput = 0.0
+        var allMuted = true
+
+        // Alle Stimmen verwenden dieselben Filterparameter des Chips.
+        var cutoff = Double(memory[SIDaddr + 0x15] & 7) / 8.0 + Double(memory[SIDaddr + 0x16]) + 0.2
+        var resonance = 1.0
+        if SID_model == 8580.0 {
+            cutoff = 1.0 - exp(cutoff * cutoff_ratio_8580)
+            // 4 - (nibble) muss signed gerechnet werden (Ergebnis kann negativ
+            // sein). In UInt8 wuerde 4 - 15 underflowen und trappen; in C wird
+            // der uint8-Ausdruck zu int promotet. Daher explizit ueber Int.
+            resonance = pow(2.0, Double(4 - Int(memory[SIDaddr + 0x17] >> 4)) / 8.0)
+        } else {
+            if cutoff < 24.0 { cutoff = 0.035 }
+            else { cutoff = 1.0 - 1.263 * exp(cutoff * cutoff_ratio_6581) }
+            let resNibble = memory[SIDaddr + 0x17]
+            resonance = (resNibble > 0x5F) ? 8.0 / Double(resNibble >> 4) : 1.41
+        }
 
         let startChannel = num * SID_CHANNEL_AMOUNT
         for channel in startChannel..<(startChannel + SID_CHANNEL_AMOUNT) {
@@ -938,14 +961,29 @@ public final class ViciousProcessor: Sendable {
             prevaccu[channel] = phaseaccu[channel]
             sourceMSB[num] = MSB
 
-            // Stummgeschaltete Stimmen liefern keinen Mix-Beitrag; alles davor
-            // (Envelope, Oszillator, Readbacks) ist bereits normal gelaufen.
+            let signal = (wfout - 32768.0) * (envcnt[channel] / 256.0)
+            let routed = (memory[SIDaddr + 0x17] & FILTSW[channel]) != 0
+            let input = routed ? signal : 0.0
+            filtin += input
+
+            // Das gemeinsame Filtermodell ist linear. Eigene warme Beiträge
+            // erlauben Mute erst am Ausgang, auch nach einem Routingwechsel.
+            // Der volle Chipfilter behält dadurch seine bisherige Rechnung.
+            let voiceHighpass = input + voiceBandpass[channel] * resonance + voiceLowpass[channel]
+            let voiceNextBandpass = voiceBandpass[channel] - voiceHighpass * cutoff
+            let voiceNextLowpass = voiceLowpass[channel] + voiceNextBandpass * cutoff
+            voiceBandpass[channel] = voiceNextBandpass
+            voiceLowpass[channel] = voiceNextLowpass
             if voiceMuted[channel] {
-                // kein Beitrag
-            } else if (memory[SIDaddr + 0x17] & FILTSW[channel]) != 0 {
-                filtin += (wfout - 32768.0) * (envcnt[channel] / 256.0)
-            } else if (channel % SID_CHANNEL_AMOUNT) != 2 || (memory[SIDaddr + 0x18] & OFF3_BITMASK) == 0 {
-                output += (wfout - 32768.0) * (envcnt[channel] / 256.0)
+                if (memory[SIDaddr + 0x18] & HIGHPASS_BITMASK) != 0 { mutedFilterOutput -= voiceHighpass }
+                if (memory[SIDaddr + 0x18] & BANDPASS_BITMASK) != 0 { mutedFilterOutput -= voiceNextBandpass }
+                if (memory[SIDaddr + 0x18] & LOWPASS_BITMASK) != 0 { mutedFilterOutput += voiceNextLowpass }
+            } else {
+                allMuted = false
+                if routed { audibleFilterInput += signal }
+                else if (channel % SID_CHANNEL_AMOUNT) != 2 || (memory[SIDaddr + 0x18] & OFF3_BITMASK) == 0 {
+                    output += signal
+                }
             }
         }
 
@@ -961,22 +999,6 @@ public final class ViciousProcessor: Sendable {
             memory[SIDaddr + 0x1B] = UInt8(truncatingIfNeeded: osc3Int >> 8)
         }
         memory[SIDaddr + 0x1C] = UInt8(envcnt[startChannel + 2])
-
-        // Filter Math
-        var cutoff = Double(memory[SIDaddr + 0x15] & 7) / 8.0 + Double(memory[SIDaddr + 0x16]) + 0.2
-        var resonance = 1.0
-        if SID_model == 8580.0 {
-            cutoff = 1.0 - exp(cutoff * cutoff_ratio_8580)
-            // 4 - (nibble) muss signed gerechnet werden (Ergebnis kann negativ
-            // sein). In UInt8 wuerde 4 - 15 underflowen und trappen; in C wird
-            // der uint8-Ausdruck zu int promotet. Daher explizit ueber Int.
-            resonance = pow(2.0, Double(4 - Int(memory[SIDaddr + 0x17] >> 4)) / 8.0)
-        } else {
-            if cutoff < 24.0 { cutoff = 0.035 }
-            else { cutoff = 1.0 - 1.263 * exp(cutoff * cutoff_ratio_6581) }
-            let resNibble = memory[SIDaddr + 0x17]
-            resonance = (resNibble > 0x5F) ? 8.0 / Double(resNibble >> 4) : 1.41
-        }
 
         let bandpassVal = filtin + prevbandpass[num] * resonance + prevlowpass[num]
         var outputFiltered = output
@@ -994,7 +1016,10 @@ public final class ViciousProcessor: Sendable {
         prevlowpass[num] = nextLowpass
         if filterEnabled && (memory[SIDaddr + 0x18] & LOWPASS_BITMASK) != 0 { outputFiltered += nextLowpass }
 
-        if !filterEnabled { outputFiltered += filtin }
+        if filterEnabled { outputFiltered -= mutedFilterOutput }
+        else { outputFiltered += audibleFilterInput }
+        // Bei komplett stummem Chip auch Rundungsreste der Subtraktion entfernen.
+        if allMuted { outputFiltered = 0 }
 
         let scaledVol = Double(memory[SIDaddr + 0x18] & 0xF)
         return (outputFiltered / OUTPUT_SCALEDOWN) * scaledVol
@@ -1382,6 +1407,8 @@ public final class ViciousProcessor: Sendable {
         let prevwavdata: [Double]
         let prevlowpass: [Double]
         let prevbandpass: [Double]
+        let voiceLowpass: [Double]
+        let voiceBandpass: [Double]
     }
     private func loopContext() -> LoopContext {
         LoopContext(data: loopFileData, rate: samplerate, clock: clock, sub: subtune,
@@ -1444,7 +1471,9 @@ public final class ViciousProcessor: Sendable {
             prevwfout: prevwfout.withUnsafeBufferPointer { Array($0) },
             prevwavdata: prevwavdata.withUnsafeBufferPointer { Array($0) },
             prevlowpass: prevlowpass.withUnsafeBufferPointer { Array($0) },
-            prevbandpass: prevbandpass.withUnsafeBufferPointer { Array($0) })
+            prevbandpass: prevbandpass.withUnsafeBufferPointer { Array($0) },
+            voiceLowpass: voiceLowpass.withUnsafeBufferPointer { Array($0) },
+            voiceBandpass: voiceBandpass.withUnsafeBufferPointer { Array($0) })
         return PreparedLoop(context: loopContext(), state: state, endSample: UInt64((end * samplerate).rounded(.down)))
     }
     @discardableResult
@@ -1469,6 +1498,8 @@ public final class ViciousProcessor: Sendable {
         prevwavdata = prevwavdata.withUnsafeBufferPointer { Array($0) }
         prevlowpass = prevlowpass.withUnsafeBufferPointer { Array($0) }
         prevbandpass = prevbandpass.withUnsafeBufferPointer { Array($0) }
+        voiceLowpass = voiceLowpass.withUnsafeBufferPointer { Array($0) }
+        voiceBandpass = voiceBandpass.withUnsafeBufferPointer { Array($0) }
         preparedLoop = loop
         // Song-Fade endet nicht mitten in der Schleife. Die Timerfrist bleibt.
         fadeEnvelope = PlaybackFadeEnvelope(timerEnd: fadeEnvelope.timerEnd, seconds: fadeEnvelope.seconds)
@@ -1513,6 +1544,8 @@ public final class ViciousProcessor: Sendable {
         copyLoopElements(&prevwavdata, state.prevwavdata)
         copyLoopElements(&prevlowpass, state.prevlowpass)
         copyLoopElements(&prevbandpass, state.prevbandpass)
+        copyLoopElements(&voiceLowpass, state.voiceLowpass)
+        copyLoopElements(&voiceBandpass, state.voiceBandpass)
     }
 
     public func getChannelsData() -> SidVisuals {

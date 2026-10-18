@@ -1,3 +1,10 @@
+Vicious SID Player 1.9.43 keeps filtered voices warm while muted.
+
+- Voice and chip mutes now remove filtered contributions at the output, preserving the continuously emulated shared filter state. Unmuting no longer introduces a filter transient caused by missing input while muted.
+- Per-voice contributions also follow routing changes and native filter bypass. Prepared A/B loops retain these states; a completely muted chip produces exact silence.
+
+See [validation](docs/validation-1.9.43.md).
+
 Vicious SID Player 1.9.42 adds collection audits and explicit recovery of moved references on Mac, iPhone and HTML5.
 
 - Check readable SID headers, complete content identities, duplicates, missing files and moved references without changing music. Native checks also report missing matches in loaded STIL and song-length databases.
