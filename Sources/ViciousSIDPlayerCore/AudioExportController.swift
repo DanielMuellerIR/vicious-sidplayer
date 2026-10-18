@@ -3,44 +3,63 @@ import Foundation
 import Combine
 
 @MainActor
-public final class WAVExportController: ObservableObject {
+public final class AudioExportController: ObservableObject {
     public enum State: Equatable, Sendable { case idle, preparing, ready, exporting, cancelling, finished }
     @Published public private(set) var state = State.idle
-    @Published public private(set) var items: [WAVExportItem] = []
+    @Published public private(set) var items: [AudioExportItem] = []
     @Published public private(set) var selectedIDs: Set<Int> = []
-    @Published public private(set) var progress: WAVExportProgress?
-    @Published public private(set) var result: WAVExportResult?
+    @Published public private(set) var progress: AudioExportProgress?
+    @Published public private(set) var result: AudioExportResult?
     @Published public private(set) var error: String?
     @Published public private(set) var isUsingSlice = false
+    @Published public private(set) var format = AudioExportFormat.wav
     private var task: Task<Void, Never>?
     private var generation = 0
     private var manualDuration: Double?
+    private var directory: URL?
+    private var durationInputError: String?
 
     public init() {}
     deinit { task?.cancel() }
 
     public var isWorking: Bool { state == .preparing || state == .exporting || state == .cancelling }
-    public var selectedItems: [WAVExportItem] { items.filter { selectedIDs.contains($0.id) } }
-    public var canExport: Bool { state == .ready && error == nil && !selectedIDs.isEmpty && selectedItems.allSatisfy(\.hasValidDuration) }
+    public var selectedItems: [AudioExportItem] { items.filter { selectedIDs.contains($0.id) } }
+    public var formatError: String? {
+        guard format.isAvailable else { return AudioExportError.encoderUnavailable(format.displayName).localizedDescription }
+        if format == .flac, selectedItems.contains(where: { $0.hasValidDuration && !$0.hasValidDuration(for: format) }) {
+            return AudioExportError.flacTooShort.localizedDescription
+        }
+        return nil
+    }
+    public var canExport: Bool { state == .ready && error == nil && formatError == nil && !selectedIDs.isEmpty && selectedItems.allSatisfy { $0.hasValidDuration(for: format) } }
     public var selectedBytes: Int64 { selectedItems.reduce(0) { $0 + $1.estimatedBytes } }
+    public func estimatedBytes(quality: AACExportQuality) -> Int64? {
+        switch format {
+        case .wav: return selectedBytes
+        case .m4a: return selectedItems.filter(\.hasValidDuration).reduce(0) { $0 + Int64($1.seconds * Double(quality.rawValue) / 8) }
+        case .flac: return nil
+        }
+    }
 
-    public func prepare(sources: [WAVExportSource], durations: WAVExportDurationContext, directory: URL? = nil) {
+    public func prepare(sources: [AudioExportSource], durations: AudioExportDurationContext, directory: URL? = nil) {
         task?.cancel(); generation &+= 1
         let current = generation
+        self.directory = directory
+        let format = format
         state = .preparing; error = nil; result = nil; progress = nil
-        items = []; selectedIDs = []; manualDuration = nil; isUsingSlice = false
-        let gate = WAVExportProgressGate()
+        items = []; selectedIDs = []; manualDuration = nil; durationInputError = nil; isUsingSlice = false
+        let gate = AudioExportProgressGate()
         let publish: @MainActor @Sendable (Int, Int) -> Void = { [weak self] completed, total in
             guard let self, self.generation == current, self.state == .preparing else { return }
-            self.progress = WAVExportProgress(completedFiles: completed, totalFiles: total,
+            self.progress = AudioExportProgress(completedFiles: completed, totalFiles: total,
                 fileName: "", renderedFrames: 0, totalFrames: 0)
         }
         let worker = Task.detached(priority: .userInitiated) {
-            let prepared = try WAVExportPlanner.prepare(sources: sources, durations: durations) { completed, total in
+            let prepared = try AudioExportPlanner.prepare(sources: sources, durations: durations, format: format) { completed, total in
                 guard gate.allows(force: completed == total) else { return }
                 Task { @MainActor in publish(completed, total) }
             }
-            return try directory.map { try WAVExportPlanner.naming(prepared, in: $0) } ?? prepared
+            return try AudioExportPlanner.naming(prepared, in: directory, format: format)
         }
         task = Task { [weak self] in
             do {
@@ -57,13 +76,20 @@ public final class WAVExportController: ObservableObject {
         }
     }
 
-    public func renameForDirectory(_ directory: URL) {
+    public func setFormat(_ format: AudioExportFormat) {
+        guard state == .ready, self.format != format else { return }
+        self.format = format
+        renameForDirectory(directory)
+    }
+    public func renameForDirectory(_ directory: URL?) {
         guard state == .ready else { return }
+        self.directory = directory
+        let format = format
         let previous = items
         task?.cancel(); generation &+= 1
         let current = generation
-        state = .preparing; error = nil
-        let worker = Task.detached(priority: .userInitiated) { try WAVExportPlanner.naming(previous, in: directory) }
+        state = .preparing; error = durationInputError
+        let worker = Task.detached(priority: .userInitiated) { try AudioExportPlanner.naming(previous, in: directory, format: format) }
         task = Task { [weak self] in
             do {
                 let renamed = try await withTaskCancellationHandler { try await worker.value } onCancel: { worker.cancel() }
@@ -90,36 +116,36 @@ public final class WAVExportController: ObservableObject {
         guard state == .ready else { return }
         do {
             let seconds = try PlaybackDurationInput.seconds(text, maximum: WavRenderer.maximumDurationSeconds)
-            items = try WAVExportPlanner.applyingDuration(seconds, to: items)
-            manualDuration = seconds; isUsingSlice = false; error = nil
-        } catch { self.error = error.localizedDescription }
+            items = try AudioExportPlanner.applyingDuration(seconds, to: items)
+            manualDuration = seconds; isUsingSlice = false; error = nil; durationInputError = nil
+        } catch { durationInputError = error.localizedDescription; self.error = durationInputError }
     }
     public func setSlice(_ range: ClosedRange<Double>?) {
         guard state == .ready else { return }
         do {
-            items = try range.map { try WAVExportPlanner.applyingSlice($0, to: items) }
-                ?? WAVExportPlanner.applyingDuration(manualDuration, to: items)
-            isUsingSlice = range != nil; error = nil
-        } catch { self.error = error.localizedDescription }
+            items = try range.map { try AudioExportPlanner.applyingSlice($0, to: items) }
+                ?? AudioExportPlanner.applyingDuration(manualDuration, to: items)
+            isUsingSlice = range != nil; error = nil; durationInputError = nil
+        } catch { durationInputError = error.localizedDescription; self.error = durationInputError }
     }
 
-    public func export(directory: URL, options: WAVExportOptions) {
+    public func export(directory: URL, options: AudioExportOptions) {
         export(destination: .folder(directory), options: options)
     }
-    public func export(destination: WAVExportDestination, options: WAVExportOptions) {
-        guard canExport else { return }
+    public func export(destination: AudioExportDestination, options: AudioExportOptions) {
+        guard canExport, options.format == format else { return }
         let selection = selectedItems
         generation &+= 1
         let current = generation
         state = .exporting; result = nil; error = nil; progress = nil
-        let gate = WAVExportProgressGate()
-        let publish: @MainActor @Sendable (WAVExportProgress) -> Void = { [weak self] value in
+        let gate = AudioExportProgressGate()
+        let publish: @MainActor @Sendable (AudioExportProgress) -> Void = { [weak self] value in
             guard let self, self.generation == current, self.state == .exporting || self.state == .cancelling else { return }
             self.progress = value
         }
         let worker = Task.detached(priority: .userInitiated) {
-            WAVBatchExporter.run(items: selection, options: options, destination: destination) { value in
-                let last = value.completedFiles + 1 == value.totalFiles && value.renderedFrames == value.totalFrames
+            await AudioBatchExporter.run(items: selection, options: options, destination: destination) { value in
+                let last = value.fraction == 1
                 guard gate.allows(force: last) else { return }
                 Task { @MainActor in publish(value) }
             }
@@ -137,7 +163,7 @@ public final class WAVExportController: ObservableObject {
     }
 }
 
-private final class WAVExportProgressGate: @unchecked Sendable {
+private final class AudioExportProgressGate: @unchecked Sendable {
     private let lock = NSLock()
     private let clock = ContinuousClock()
     private var last: ContinuousClock.Instant?

@@ -1,4 +1,5 @@
 import XCTest
+import AVFoundation
 import ViciousSIDPlayerCore
 @testable import ViciousSIDPlayer
 
@@ -77,7 +78,7 @@ final class ListeningHistoryIntegrationTests: XCTestCase {
         coordinator.elapsedSeconds = 0.2; coordinator.setLoopStart()
         coordinator.elapsedSeconds = 0.6; coordinator.setLoopEnd(); coordinator.setLoopEnabled(true)
         let queue = model.listening.queue, history = model.history.document
-        let presentation = try XCTUnwrap(model.makeWAVExportPresentation())
+        let presentation = try XCTUnwrap(model.makeAudioExportPresentation())
         let current = try XCTUnwrap(presentation.choices.first { $0.id == 0 })
         XCTAssertEqual(current.sources.first?.subtune, 2)
         XCTAssertEqual(current.slice, 0.2...0.6)
@@ -96,17 +97,50 @@ final class ListeningHistoryIntegrationTests: XCTestCase {
         let md5 = try XCTUnwrap(model.currentMD5)
         let target = PlaybackEndTimeTarget(md5: md5, subtune: 2, title: "Tune")
         try model.playbackOptions.setEndTime("0.4", target: target)
-        let presentation = try XCTUnwrap(model.makeWAVExportPresentation())
+        let presentation = try XCTUnwrap(model.makeAudioExportPresentation())
         try model.playbackOptions.setEndTime("1.5", target: target)
         let sources = try XCTUnwrap(presentation.choices.first { $0.id == 0 }?.sources)
         let items = try await Task.detached {
-            try WAVExportPlanner.prepare(sources: sources, durations: presentation.durations)
+            try AudioExportPlanner.prepare(sources: sources, durations: presentation.durations)
         }.value
         XCTAssertEqual(items.count, 1)
         XCTAssertEqual(items.first?.md5, md5)
         XCTAssertEqual(items.first?.seconds, 0.4)
         XCTAssertEqual(items.first?.durationSource, .personal)
         XCTAssertFalse(model.coordinator.isPlaying)
+    }
+
+    func testNativeCompressedBatchUsesThePresentationAndKeepsPlaybackUntouched() async throws {
+        let model = try await makeModel()
+        model.select(trackID: "Tune.sid"); model.setSubtune(2)
+        let presentation = try XCTUnwrap(model.makeAudioExportPresentation())
+        let source = try XCTUnwrap(presentation.choices.first { $0.id == 1 }?.sources)
+        let queue = model.listening.queue, history = model.history.document
+        for format in [AudioExportFormat.m4a, .flac] {
+            XCTAssertTrue(format.isAvailable)
+            let output = directory.appendingPathComponent(format.rawValue)
+            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+            let items = try await Task.detached {
+                let prepared = try AudioExportPlanner.prepare(sources: source, durations: presentation.durations, format: format)
+                return try AudioExportPlanner.applyingDuration(0.1, to: prepared)
+            }.value
+            let result = await Task.detached {
+                await AudioBatchExporter.run(items: items, options: AudioExportOptions(format: format), directory: output)
+            }.value
+            XCTAssertNil(result.error); XCTAssertFalse(result.wasCancelled); XCTAssertEqual(result.files.count, 3)
+            for url in result.files {
+                XCTAssertEqual(url.pathExtension, format.rawValue)
+                let audio = try AVAudioFile(forReading: url)
+                XCTAssertEqual(audio.processingFormat.channelCount, 1)
+                if format == .flac { XCTAssertEqual(audio.length, 4410) }
+                else {
+                    let duration = try await AVURLAsset(url: url).load(.duration)
+                    XCTAssertEqual(duration.seconds, 0.1, accuracy: 1.0 / 44100)
+                }
+            }
+        }
+        XCTAssertEqual(model.listening.queue, queue); XCTAssertEqual(model.history.document, history)
+        XCTAssertEqual(model.coordinator.currentSubtune, 2); XCTAssertFalse(model.coordinator.isPlaying)
     }
 
     func testLoopPreventsNormalCompletionButSleepExpiryStopsIt() async throws {

@@ -3,24 +3,26 @@ import AppKit
 import UniformTypeIdentifiers
 import ViciousSIDPlayerCore
 
-struct WAVExportView: View {
-    let presentation: WAVExportPresentation
+struct AudioExportView: View {
+    let presentation: AudioExportPresentation
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var controller = WAVExportController()
+    @StateObject private var controller = AudioExportController()
     @State private var choiceID = 0
     @State private var mixMode = 0
     @State private var channel = 0
     @State private var filterEnabled = true
     @State private var durationText = ""
+    @State private var aacQuality = AACExportQuality.standard
     @State private var directory: URL?
 
-    private var choice: WAVExportChoice? { presentation.choices.first { $0.id == choiceID } }
+    private var choice: AudioExportChoice? { presentation.choices.first { $0.id == choiceID } }
     private var missingChannel: Bool {
         mixMode == 2 && controller.selectedItems.contains { !$0.activeChips.contains(channel / 3) }
     }
-    private var options: WAVExportOptions {
+    private var options: AudioExportOptions {
         var value = presentation.options
         value.filterEnabled = filterEnabled
+        value.format = controller.format; value.aacQuality = aacQuality
         value.mix = mixMode == 1 ? .current(presentation.analysisMix) : mixMode == 2 ? .channel(channel) : .full
         return value
     }
@@ -28,7 +30,7 @@ struct WAVExportView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("WAV exportieren").font(.title2.weight(.semibold))
+                Text("Audio exportieren").font(.title2.weight(.semibold))
                 Spacer()
                 Button("Schließen") { dismiss() }.disabled(controller.isWorking)
             }
@@ -38,7 +40,7 @@ struct WAVExportView: View {
             }
             if controller.isWorking {
                 ProgressView(value: controller.progress?.fraction ?? 0)
-                Text(controller.state == .preparing ? String(localized: "Exportvorschau wird vorbereitet …") : controller.state == .cancelling ? String(localized: "Export wird abgebrochen …") : String(localized: "WAV wird gerendert …"))
+                Text(phaseLabel)
                 if let progress = controller.progress {
                     Text(verbatim: "\(progress.completedFiles)/\(progress.totalFiles) · \(progress.fileName)")
                         .font(.caption).lineLimit(2)
@@ -51,7 +53,7 @@ struct WAVExportView: View {
                 preview
                 HStack {
                     Text("Ausgewählt: \(controller.selectedIDs.count)").foregroundStyle(.secondary)
-                    Text(ByteCountFormatter.string(fromByteCount: controller.selectedBytes, countStyle: .file)).foregroundStyle(.secondary)
+                    Text(sizeLabel).foregroundStyle(.secondary)
                     Spacer()
                     Button("Exportieren …") { export() }
                         .keyboardShortcut(.defaultAction)
@@ -59,6 +61,7 @@ struct WAVExportView: View {
                 }
             } else { Spacer(minLength: 0) }
             if let error = controller.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
+            if let error = controller.formatError { Text(error).foregroundStyle(.red) }
         }
         .padding(20)
         .frame(minWidth: 660, idealWidth: 720, minHeight: 580, idealHeight: 720)
@@ -73,6 +76,20 @@ struct WAVExportView: View {
 
     private var configuration: some View {
         VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Picker("Format", selection: Binding(get: { controller.format }, set: { controller.setFormat($0) })) {
+                    ForEach(AudioExportFormat.allCases) { Text(verbatim: $0.displayName).tag($0) }
+                }
+                if controller.format == .m4a {
+                    Picker("Bitrate", selection: $aacQuality) {
+                        ForEach(AACExportQuality.allCases) { Text(verbatim: $0.displayName).tag($0) }
+                    }.frame(width: 220)
+                }
+            }
+            Text(controller.format.description).font(.caption).foregroundStyle(.secondary)
+            if controller.format != .wav {
+                Text("Metadaten: SID-Titel, Autor, SID-Info und Subtune.").font(.caption).foregroundStyle(.secondary)
+            }
             Picker("Auswahl", selection: $choiceID) {
                 ForEach(presentation.choices) { choice in Text(choice.title).tag(choice.id) }
             }
@@ -128,7 +145,7 @@ struct WAVExportView: View {
                                 Image(systemName: controller.selectedIDs.contains(item.id) ? "checkmark.square.fill" : "square")
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(item.fileName).lineLimit(1).truncationMode(.middle)
-                                    Text(durationLabel(item)).font(.caption).foregroundStyle(item.hasValidDuration ? Color.secondary : .red)
+                                    Text(durationLabel(item)).font(.caption).foregroundStyle(item.hasValidDuration(for: controller.format) ? Color.secondary : .red)
                                 }
                                 Spacer(minLength: 0)
                             }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
@@ -141,7 +158,7 @@ struct WAVExportView: View {
         }
     }
 
-    private func durationLabel(_ item: WAVExportItem) -> String {
+    private func durationLabel(_ item: AudioExportItem) -> String {
         let source: String
         if controller.isUsingSlice { source = String(localized: "A/B-Ausschnitt") }
         else if item.usesManualDuration { source = String(localized: "Manuelle Dauer") }
@@ -156,7 +173,7 @@ struct WAVExportView: View {
         return item.hasValidDuration ? "\(item.durationDescription) · \(source) · \(item.channels == 2 ? "Stereo" : "Mono")" : String(localized: "Ungültige Dauer")
     }
 
-    @ViewBuilder private func resultView(_ result: WAVExportResult) -> some View {
+    @ViewBuilder private func resultView(_ result: AudioExportResult) -> some View {
         Text(result.wasCancelled ? String(localized: "Export abgebrochen; fertige Dateien bleiben erhalten.")
             : result.error != nil ? String(localized: "Export beendet; fertige Dateien bleiben erhalten.") : String(localized: "Export abgeschlossen.")).font(.headline)
         Text("Fertige Dateien: \(result.files.count)")
@@ -182,9 +199,25 @@ struct WAVExportView: View {
         if let directory { controller.export(directory: directory, options: options); return }
         if controller.selectedIDs.count == 1, let item = controller.selectedItems.first {
             let panel = NSSavePanel()
-            panel.allowedContentTypes = [.wav]; panel.nameFieldStringValue = item.fileName
+            panel.allowedContentTypes = [UTType(filenameExtension: controller.format.rawValue) ?? .audio]
+            panel.nameFieldStringValue = item.fileName
             guard panel.runModal() == .OK, let url = panel.url else { return }
             controller.export(destination: .file(url), options: options)
         } else { chooseDirectory() }
+    }
+
+    private var sizeLabel: String {
+        guard let bytes = controller.estimatedBytes(quality: aacQuality) else { return String(localized: "FLAC-Größe hängt vom Inhalt ab.") }
+        let value = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        return controller.format == .m4a ? String(format: String(localized: "Ca. %@"), value) : value
+    }
+    private var phaseLabel: String {
+        if controller.state == .preparing { return String(localized: "Exportvorschau wird vorbereitet …") }
+        if controller.state == .cancelling { return String(localized: "Export wird abgebrochen …") }
+        switch controller.progress?.phase {
+        case .encoding: return String(localized: "Audio wird codiert …")
+        case .metadata: return String(localized: "Metadaten werden geschrieben …")
+        default: return String(localized: "Audio wird gerendert …")
+        }
     }
 }

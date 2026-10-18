@@ -49,7 +49,7 @@ public struct MainView: View {
         _playbackOptions = StateObject(wrappedValue: PlaybackOptionsController(fileURL: support?.appendingPathComponent(PlaybackSettingsStore.fileName), startup: startup))
     }
     @State private var playbackOptionsPresentation: PlaybackOptionsPresentation?
-    @State private var wavExportPresentation: WAVExportPresentation?
+    @State private var audioExportPresentation: AudioExportPresentation?
     @State private var sidebarPage = LibrarySidebarPage.library
     @State private var selectedListeningListID: UUID?
     @State private var listeningLibraryEntries: [ListeningEntry] = []
@@ -268,7 +268,7 @@ public struct MainView: View {
     }
 
     // Effektive Dauer des aktuellen Subtunes — bestimmt Scrubber, Auto-Next,
-    // Now-Playing und WAV-Export-Dauer. Die Leiter aus den drei Quellen steht im
+    // Now-Playing und Audio-Export-Dauer. Die Leiter aus den drei Quellen steht im
     // Core, damit Mac und iPhone nicht auseinanderlaufen.
     private var currentDuration: Double {
         return SongLengthSelection.duration(databaseLengths: currentTrackLengths,
@@ -780,8 +780,8 @@ public struct MainView: View {
         .sheet(isPresented: $showCollectionTransfer) {
             if let collectionTransfer { PersonalCollectionView(controller: collectionTransfer) }
         }
-        .sheet(item: $wavExportPresentation) { presentation in
-            WAVExportView(presentation: presentation)
+        .sheet(item: $audioExportPresentation) { presentation in
+            AudioExportView(presentation: presentation)
         }
         .onChange(of: showCollectionTransfer) { shown in
             if !shown, collectionTransfer?.requiresRestart != true { collectionTransfer = nil; collectionSubscription = nil }
@@ -2330,10 +2330,10 @@ public struct MainView: View {
                 systemPrefersDark = MainView.systemInterfaceIsDark()
             }
         }
-        // WAV-Export des aktuellen Tracks (Menue "Wiedergabe" -> Cmd+E).
-        NotificationCenter.default.addObserver(forName: NSNotification.Name("menuExportWAV"), object: nil, queue: .main) { _ in
+        // Audio-Export des aktuellen Tracks (Menue "Wiedergabe" -> Cmd+E).
+        NotificationCenter.default.addObserver(forName: NSNotification.Name("menuExportAudio"), object: nil, queue: .main) { _ in
             Task { @MainActor in
-                exportCurrentTrackAsWAV()
+                exportCurrentTrackAsAudio()
             }
         }
         // Doppelklick / "Oeffnen mit" bei bereits laufender App (Warmstart).
@@ -2356,34 +2356,34 @@ public struct MainView: View {
         #endif
     }
 
-    private func exportCurrentTrackAsWAV() {
+    private func exportCurrentTrackAsAudio() {
         guard let track = playlist.track(at: currentTrackIdx) else {
-            errorMessage = "Kein Track für den WAV-Export ausgewählt."
+            errorMessage = "Kein Track für den Audio-Export ausgewählt."
             return
         }
-        func sources(_ entries: [ListeningEntry]) -> [WAVExportSource] {
+        func sources(_ entries: [ListeningEntry]) -> [AudioExportSource] {
             entries.compactMap { entry in
-                entry.url(relativeTo: library?.root, allowExternal: true).map { WAVExportSource(url: $0, subtune: entry.subtune) }
+                entry.url(relativeTo: library?.root, allowExternal: true).map { AudioExportSource(url: $0, subtune: entry.subtune) }
             }
         }
         var choices = [
-            WAVExportChoice(id: 0, title: String(localized: "Aktueller Subtune"),
-                sources: [WAVExportSource(url: track.url, subtune: coordinator.currentSubtune)], slice: coordinator.playbackLoop.range),
-            WAVExportChoice(id: 1, title: String(localized: "Alle Subtunes dieses Titels"), sources: [WAVExportSource(url: track.url)])
+            AudioExportChoice(id: 0, title: String(localized: "Aktueller Subtune"),
+                sources: [AudioExportSource(url: track.url, subtune: coordinator.currentSubtune)], slice: coordinator.playbackLoop.range),
+            AudioExportChoice(id: 1, title: String(localized: "Alle Subtunes dieses Titels"), sources: [AudioExportSource(url: track.url)])
         ]
         if let queue = listening.queue, !queue.items.isEmpty {
-            choices.append(WAVExportChoice(id: 2, title: String(localized: "Hörfolge"), sources: sources(queue.items)))
+            choices.append(AudioExportChoice(id: 2, title: String(localized: "Hörfolge"), sources: sources(queue.items)))
         }
         let visible = LibrarySearchSelection.entries(in: playlist, scope: .visible(searchText: searchText, favoritesOnly: favoritesOnly),
             favorites: favorites, records: metadataIndex.records, duration: knownLibraryDuration, heard: { history.hasHeard(md5: $0.md5) })
-        if !visible.isEmpty { choices.append(WAVExportChoice(id: 3, title: String(localized: "Sichtbare Bibliothek"), sources: sources(visible))) }
+        if !visible.isEmpty { choices.append(AudioExportChoice(id: 3, title: String(localized: "Sichtbare Bibliothek"), sources: sources(visible))) }
         if let id = selectedListeningListID, let list = listening.document.lists.first(where: { $0.id == id }) {
-            choices.append(WAVExportChoice(id: 4, title: list.name, sources: sources(list.entries)))
+            choices.append(AudioExportChoice(id: 4, title: list.name, sources: sources(list.entries)))
         }
-        wavExportPresentation = WAVExportPresentation(choices: choices,
-            durations: WAVExportDurationContext(resolver: lengthResolver, database: songlengthDB,
+        audioExportPresentation = AudioExportPresentation(choices: choices,
+            durations: AudioExportDurationContext(resolver: lengthResolver, database: songlengthDB,
                 settings: playbackOptions.document, clockMode: coordinator.clockMode),
-            options: WAVExportOptions(modelOverride: coordinator.modelOverride, clockMode: coordinator.clockMode,
+            options: AudioExportOptions(modelOverride: coordinator.modelOverride, clockMode: coordinator.clockMode,
                 filterEnabled: coordinator.filterEnabled, fadeOutSeconds: playbackOptions.document.fadeOutSeconds),
             analysisMix: coordinator.analysisMix)
     }

@@ -1,7 +1,24 @@
 import XCTest
 @testable import ViciousSIDPlayerCore
 
-final class WAVExportTests: XCTestCase {
+final class AudioExportTests: XCTestCase {
+#if !canImport(Combine)
+    func testUnavailableEncoderLeavesSourcesAndDestinationsUntouched() async throws {
+        let folder = try temporaryFolder(); defer { try? FileManager.default.removeItem(at: folder) }
+        let pair = try preparedPair(in: folder, seconds: 0.1)
+        for format in [AudioExportFormat.m4a, .flac] {
+            let items = try AudioExportPlanner.naming(pair, in: nil, format: format)
+            let target = folder.appendingPathComponent(items[0].fileName), foreign = Data("Existing output".utf8)
+            try foreign.write(to: target)
+            let result = await AudioBatchExporter.run(items: items, options: AudioExportOptions(format: format), directory: folder)
+            XCTAssertTrue(result.files.isEmpty); XCTAssertFalse(result.wasCancelled)
+            XCTAssertTrue(result.error?.contains("WAV") == true)
+            XCTAssertEqual(try Data(contentsOf: target), foreign)
+            XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: folder.path).contains { $0.hasPrefix(".vicious-") })
+        }
+    }
+#endif
+
     func testRendererUsesStartMixFilterFadeAndIntermediateProgress() throws {
         let folder = try temporaryFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -83,9 +100,9 @@ final class WAVExportTests: XCTestCase {
         cache.store(md5: md5, subtune: 2, seconds: -1, clockMode: .pal)
         var settings = PlaybackSettingsDocument()
         try settings.setEndTime(0.2, md5: md5, subtune: 0)
-        let context = WAVExportDurationContext(resolver: SongLengthResolver(cache: cache),
+        let context = AudioExportDurationContext(resolver: SongLengthResolver(cache: cache),
             database: SonglengthDB(entries: [md5: [0.4]]), settings: settings, clockMode: .pal)
-        let items = try WAVExportPlanner.prepare(sources: [WAVExportSource(url: source)], durations: context)
+        let items = try AudioExportPlanner.prepare(sources: [AudioExportSource(url: source)], durations: context)
         XCTAssertEqual(items.map(\.subtune), [0, 1, 2])
         XCTAssertEqual(items.map(\.seconds), [0.2, 0.7, 360])
         XCTAssertEqual(items.map(\.durationSource), [.personal, .computed, .fallback])
@@ -97,25 +114,25 @@ final class WAVExportTests: XCTestCase {
     }
 
     func testNamesProtectCaseUnicodeAndExistingTargets() {
-        let names = WAVExportFileNames.names(for: ["Same", "same", "Café", "Cafe\u{301}", "CON.foo", "../escape/track", " . ", String(repeating: "🎶", count: 100)], existing: ["SAME.WAV"])
+        let names = AudioExportFileNames.names(for: ["Same", "same", "Café", "Cafe\u{301}", "CON.foo", "../escape/track", " . ", String(repeating: "🎶", count: 100)], existing: ["SAME.WAV"])
         XCTAssertEqual(Array(names.prefix(2)), ["Same (2).wav", "same (3).wav"])
         XCTAssertEqual(names[2], "Café.wav")
         XCTAssertTrue(names[3].hasSuffix(" (2).wav"))
         XCTAssertEqual(names[4], "_CON.foo.wav")
         XCTAssertTrue(names.allSatisfy { !$0.contains("/") && !$0.contains("\\") && !$0.hasPrefix(".") && $0.utf8.count <= 160 })
-        let namesAtScale = WAVExportFileNames.names(for: Array(repeating: "Same", count: 10000))
+        let namesAtScale = AudioExportFileNames.names(for: Array(repeating: "Same", count: 10000))
         XCTAssertEqual(Set(namesAtScale).count, 10000)
         XCTAssertEqual(namesAtScale.last, "Same (10000).wav")
     }
 
-    func testBatchDetectsChangedHeaderAndRetainsTheCompletedFile() throws {
+    func testBatchDetectsChangedHeaderAndRetainsTheCompletedFile() async throws {
         let folder = try temporaryFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
         let items = try preparedPair(in: folder, seconds: 0.1)
         var changed = try Data(contentsOf: items[1].sourceURL)
         changed[0x16] = 0x54
         try changed.write(to: items[1].sourceURL)
-        let result = WAVBatchExporter.run(items: items, options: WAVExportOptions(), directory: folder)
+        let result = await AudioBatchExporter.run(items: items, options: AudioExportOptions(), directory: folder)
         XCTAssertEqual(result.files.count, 1)
         XCTAssertFalse(result.wasCancelled)
         XCTAssertNotNil(result.error)
@@ -123,13 +140,13 @@ final class WAVExportTests: XCTestCase {
         XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: folder.path).contains { $0.hasSuffix(".tmp") })
     }
 
-    func testBatchRefusesAFileCreatedDuringRendering() throws {
+    func testBatchRefusesAFileCreatedDuringRendering() async throws {
         let folder = try temporaryFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
         let item = try preparedPair(in: folder, seconds: 0.2)[0]
         let destination = folder.appendingPathComponent(item.fileName)
         let foreign = Data("Created after preview".utf8)
-        let result = WAVBatchExporter.run(items: [item], options: WAVExportOptions(), directory: folder) { progress in
+        let result = await AudioBatchExporter.run(items: [item], options: AudioExportOptions(), directory: folder) { progress in
             if progress.renderedFrames == 4096 { try! foreign.write(to: destination) }
         }
         XCTAssertTrue(result.files.isEmpty)
@@ -144,7 +161,7 @@ final class WAVExportTests: XCTestCase {
         let items = try preparedPair(in: folder, seconds: 0.2)
         let started = DispatchSemaphore(value: 0), resume = DispatchSemaphore(value: 0)
         let worker = Task.detached {
-            WAVBatchExporter.run(items: items, options: WAVExportOptions(), directory: folder) { progress in
+            await AudioBatchExporter.run(items: items, options: AudioExportOptions(), directory: folder) { progress in
                 if progress.completedFiles == 1 && progress.renderedFrames == 4096 {
                     started.signal(); resume.wait()
                 }
@@ -170,68 +187,141 @@ final class WAVExportTests: XCTestCase {
         let folder = try temporaryFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
         let items = try preparedPair(in: folder, seconds: 0.2)
-        XCTAssertThrowsError(try WAVExportPlanner.applyingSlice(1...1.5, to: items))
-        let sliced = try WAVExportPlanner.applyingSlice(1...1.5, to: [items[0]])
+        XCTAssertThrowsError(try AudioExportPlanner.applyingSlice(1...1.5, to: items))
+        let sliced = try AudioExportPlanner.applyingSlice(1...1.5, to: [items[0]])
         XCTAssertEqual(sliced[0].startSeconds, 1)
         XCTAssertEqual(sliced[0].seconds, 0.5)
         XCTAssertEqual(sliced[0].durationDescription, "0:00.5")
-        let precise = try WAVExportPlanner.applyingDuration(1.3457142857149582, to: [items[0]])[0]
+        let precise = try AudioExportPlanner.applyingDuration(1.3457142857149582, to: [items[0]])[0]
         XCTAssertEqual(precise.durationDescription, "0:01.346")
         XCTAssertEqual(precise.seconds, 1.3457142857149582)
-        let reset = try WAVExportPlanner.applyingDuration(nil, to: sliced)
+        let reset = try AudioExportPlanner.applyingDuration(nil, to: sliced)
         XCTAssertEqual(reset[0].startSeconds, 0)
         XCTAssertEqual(reset[0].seconds, 360)
         XCTAssertFalse(reset[0].usesManualDuration)
-        XCTAssertThrowsError(try WAVExportPlanner.applyingDuration(.nan, to: items))
+        XCTAssertThrowsError(try AudioExportPlanner.applyingDuration(.nan, to: items))
     }
 
     func testCurrentMixIsResolvedForEachFilesActiveChips() throws {
-        let mix = WAVExportMix.current(AnalysisMix())
+        let mix = AudioExportMix.current(AnalysisMix())
         XCTAssertTrue(try mix.mutedChannels(activeChips: [0], fileName: "One.sid")[6])
         XCTAssertFalse(try mix.mutedChannels(activeChips: [0, 2], fileName: "Sparse.sid")[6])
-        let isolated = try WAVExportMix.channel(6).mutedChannels(activeChips: [0, 2], fileName: "Sparse.sid")
+        let isolated = try AudioExportMix.channel(6).mutedChannels(activeChips: [0, 2], fileName: "Sparse.sid")
         XCTAssertEqual(isolated.filter { !$0 }.count, 1)
         XCTAssertFalse(isolated[6])
-        XCTAssertThrowsError(try WAVExportMix.channel(3).mutedChannels(activeChips: [0, 2], fileName: "Sparse.sid"))
+        XCTAssertThrowsError(try AudioExportMix.channel(3).mutedChannels(activeChips: [0, 2], fileName: "Sparse.sid"))
     }
 
-    func testExplicitSingleDestinationPreservesMultiSelectionAndCanReplaceOneFile() throws {
+    func testExplicitSingleDestinationPreservesMultiSelectionAndCanReplaceOneFile() async throws {
         let folder = try temporaryFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
         let items = try preparedPair(in: folder, seconds: 0.1)
         let destination = folder.appendingPathComponent("explicit.wav"), original = Data("Existing output".utf8)
         try original.write(to: destination)
-        let rejected = WAVBatchExporter.run(items: items, options: WAVExportOptions(), destination: .file(destination))
+        let rejected = await AudioBatchExporter.run(items: items, options: AudioExportOptions(), destination: .file(destination))
         XCTAssertTrue(rejected.files.isEmpty)
         XCTAssertNotNil(rejected.error)
         XCTAssertEqual(try Data(contentsOf: destination), original)
-        let replaced = WAVBatchExporter.run(items: [items[0]], options: WAVExportOptions(), destination: .file(destination))
+        let replaced = await AudioBatchExporter.run(items: [items[0]], options: AudioExportOptions(), destination: .file(destination))
         XCTAssertEqual(replaced.files, [destination])
         XCTAssertNil(replaced.error)
         XCTAssertEqual(try Data(contentsOf: destination).count, 44 + 4410 * 4)
         let sourceBytes = try Data(contentsOf: items[0].sourceURL)
-        let sourceTarget = WAVBatchExporter.run(items: [items[0]], options: WAVExportOptions(), destination: .file(items[0].sourceURL))
+        let sourceTarget = await AudioBatchExporter.run(items: [items[0]], options: AudioExportOptions(), destination: .file(items[0].sourceURL))
         XCTAssertTrue(sourceTarget.files.isEmpty)
         XCTAssertNotNil(sourceTarget.error)
         XCTAssertEqual(try Data(contentsOf: items[0].sourceURL), sourceBytes)
         let longDestination = folder.appendingPathComponent(String(repeating: "a", count: 240) + ".wav")
-        let longResult = WAVBatchExporter.run(items: [items[0]], options: WAVExportOptions(), destination: .file(longDestination))
+        let longResult = await AudioBatchExporter.run(items: [items[0]], options: AudioExportOptions(), destination: .file(longDestination))
         XCTAssertNil(longResult.error)
         XCTAssertEqual(longResult.files, [longDestination])
     }
 
     #if canImport(Combine)
+    func testCompressedBatchProtectsLateTargetsAndApprovedReplacement() async throws {
+        for format in [AudioExportFormat.m4a, .flac] {
+            try XCTSkipUnless(format.isAvailable)
+            let folder = try temporaryFolder(); defer { try? FileManager.default.removeItem(at: folder) }
+            let pair = try preparedPair(in: folder, seconds: 0.1)
+            let items = try AudioExportPlanner.naming(pair, in: nil, format: format)
+            let target = folder.appendingPathComponent(items[0].fileName), foreign = Data("Created after preview".utf8)
+            let options = AudioExportOptions(format: format)
+            let rejected = await AudioBatchExporter.run(items: [items[0]], options: options, directory: folder) { value in
+                if value.phase == .metadata { try! foreign.write(to: target) }
+            }
+            XCTAssertTrue(rejected.files.isEmpty); XCTAssertNotNil(rejected.error)
+            XCTAssertEqual(try Data(contentsOf: target), foreign)
+            let result = await AudioBatchExporter.run(items: [items[0]], options: options, destination: .file(target))
+            XCTAssertEqual(result.files, [target]); XCTAssertNil(result.error)
+            XCTAssertNotEqual(try Data(contentsOf: target), foreign)
+            XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: folder.path).contains { $0.hasPrefix(".vicious-") })
+            let source = try Data(contentsOf: items[0].sourceURL)
+            let bad = await AudioBatchExporter.run(items: [items[0]], options: options, destination: .file(items[0].sourceURL))
+            XCTAssertTrue(bad.files.isEmpty); XCTAssertNotNil(bad.error)
+            XCTAssertEqual(try Data(contentsOf: items[0].sourceURL), source)
+        }
+    }
+
+    func testCompressedCancellationKeepsCompletedFilesAndRemovesEncodingWork() async throws {
+        for format in [AudioExportFormat.m4a, .flac] {
+            try XCTSkipUnless(format.isAvailable)
+            let folder = try temporaryFolder(); defer { try? FileManager.default.removeItem(at: folder) }
+            let items = try AudioExportPlanner.naming(preparedPair(in: folder, seconds: 0.5), in: nil, format: format)
+            let started = DispatchSemaphore(value: 0), resume = DispatchSemaphore(value: 0)
+            let worker = Task.detached {
+                await AudioBatchExporter.run(items: items, options: AudioExportOptions(format: format), directory: folder) { value in
+                    if value.completedFiles == 1 && value.phase == .encoding && value.renderedFrames > 0 {
+                        started.signal(); resume.wait()
+                    }
+                }
+            }
+            let observed = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                DispatchQueue.global().async { continuation.resume(returning: started.wait(timeout: .now() + 20) == .success) }
+            }
+            worker.cancel(); resume.signal()
+            let result = await worker.value
+            XCTAssertTrue(observed); XCTAssertTrue(result.wasCancelled); XCTAssertNil(result.error)
+            XCTAssertEqual(result.files.count, 1)
+            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: folder.path).filter { $0.hasPrefix(".vicious-") }, [])
+        }
+    }
+
+    @MainActor
+    func testFormatChangePreservesSelectionDurationAndInvalidInput() async throws {
+        let folder = try temporaryFolder(); defer { try? FileManager.default.removeItem(at: folder) }
+        let pair = try preparedPair(in: folder, seconds: 0.5)
+        let controller = AudioExportController()
+        let context = AudioExportDurationContext(resolver: SongLengthResolver(cache: SongLengthCache(fileURL: folder.appendingPathComponent("cache.json"))),
+            database: nil, settings: PlaybackSettingsDocument(), clockMode: .auto)
+        controller.prepare(sources: pair.map { AudioExportSource(url: $0.sourceURL, subtune: 0) }, durations: context, directory: folder)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        while controller.isWorking && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        controller.toggleSelection(1); controller.setDuration("0.5")
+        controller.setDuration("invalid")
+        let error = controller.error
+        try Data("Foreign".utf8).write(to: folder.appendingPathComponent("FIRST (SUBTUNE 1).FLAC"))
+        controller.setFormat(.flac)
+        while controller.isWorking && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(controller.selectedIDs, [0]); XCTAssertEqual(controller.items[0].seconds, 0.5)
+        XCTAssertEqual(controller.items[0].fileName, "First (Subtune 1) (2).flac")
+        XCTAssertEqual(controller.error, error); XCTAssertFalse(controller.canExport)
+        controller.setDuration("0.001")
+        XCTAssertNotNil(controller.formatError); XCTAssertFalse(controller.canExport)
+        controller.setDuration("0.5")
+        XCTAssertNil(controller.formatError); XCTAssertTrue(controller.canExport)
+    }
+
     @MainActor
     func testControllerKeepsTheLatestPreparationWhenAnOldSourceFails() async throws {
         let folder = try temporaryFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
         let source = folder.appendingPathComponent("Valid.sid")
         try sparseSIDData().write(to: source)
-        let context = WAVExportDurationContext(resolver: SongLengthResolver(cache: SongLengthCache(fileURL: folder.appendingPathComponent("cache.json"))),
+        let context = AudioExportDurationContext(resolver: SongLengthResolver(cache: SongLengthCache(fileURL: folder.appendingPathComponent("cache.json"))),
             database: nil, settings: PlaybackSettingsDocument(), clockMode: .auto)
-        let controller = WAVExportController()
-        controller.prepare(sources: [WAVExportSource(url: folder.appendingPathComponent("Missing.sid"))], durations: context)
-        controller.prepare(sources: [WAVExportSource(url: source, subtune: 0)], durations: context)
+        let controller = AudioExportController()
+        controller.prepare(sources: [AudioExportSource(url: folder.appendingPathComponent("Missing.sid"))], durations: context)
+        controller.prepare(sources: [AudioExportSource(url: source, subtune: 0)], durations: context)
         let clock = ContinuousClock(), deadline = ContinuousClock.now.advanced(by: .seconds(10))
         while controller.isWorking && clock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
         XCTAssertEqual(controller.state, .ready)
@@ -247,13 +337,13 @@ final class WAVExportTests: XCTestCase {
         return folder
     }
 
-    private func preparedPair(in folder: URL, seconds: Double) throws -> [WAVExportItem] {
+    private func preparedPair(in folder: URL, seconds: Double) throws -> [AudioExportItem] {
         let sources = ["First.sid", "Second.sid"].map { folder.appendingPathComponent($0) }
         for source in sources { try sparseSIDData().write(to: source) }
-        let context = WAVExportDurationContext(resolver: SongLengthResolver(cache: SongLengthCache(fileURL: folder.appendingPathComponent("cache.json"))),
+        let context = AudioExportDurationContext(resolver: SongLengthResolver(cache: SongLengthCache(fileURL: folder.appendingPathComponent("cache.json"))),
             database: nil, settings: PlaybackSettingsDocument(), clockMode: .auto)
-        let items = try WAVExportPlanner.prepare(sources: sources.map { WAVExportSource(url: $0, subtune: 0) }, durations: context)
-        return try WAVExportPlanner.applyingDuration(seconds, to: items)
+        let items = try AudioExportPlanner.prepare(sources: sources.map { AudioExportSource(url: $0, subtune: 0) }, durations: context)
+        return try AudioExportPlanner.applyingDuration(seconds, to: items)
     }
 
     private func sparseSID() throws -> SidFileData { try SidParser.parse(data: sparseSIDData()) }

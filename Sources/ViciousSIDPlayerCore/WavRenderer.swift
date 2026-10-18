@@ -170,7 +170,7 @@ public enum WavRenderer {
     /// dagegen einen Hardlink auf die fertige eigene Nachbardatei: Existiert
     /// das Ziel inzwischen, scheitert link mit EEXIST und erhält seine Bytes.
     /// Foundation replaceItemAt ist unter Linux dafür nicht zuverlässig.
-    private static func publishAtomically(_ source: URL, at destination: URL, mode: DestinationMode) throws {
+    static func publishAtomically(_ source: URL, at destination: URL, mode: DestinationMode) throws {
         let errorCode: Int32 = source.withUnsafeFileSystemRepresentation { sourcePath in
             destination.withUnsafeFileSystemRepresentation { destinationPath in
                 guard let sourcePath, let destinationPath else { return EINVAL }

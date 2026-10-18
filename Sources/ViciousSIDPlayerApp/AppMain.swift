@@ -147,8 +147,8 @@ struct ViciousSIDPlayerApp: App {
                 
                 Divider()
 
-                Button("Als WAV exportieren…") {
-                    NotificationCenter.default.post(name: NSNotification.Name("menuExportWAV"), object: nil)
+                Button("Audio exportieren…") {
+                    NotificationCenter.default.post(name: NSNotification.Name("menuExportAudio"), object: nil)
                 }
                 .keyboardShortcut("e", modifiers: .command)
 

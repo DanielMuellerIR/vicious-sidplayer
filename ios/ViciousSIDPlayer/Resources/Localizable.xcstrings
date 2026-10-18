@@ -4240,6 +4240,326 @@
           }
         }
       }
+    },
+    "Audio exportieren": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio exportieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export audio"
+          }
+        }
+      }
+    },
+    "Audio exportieren…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio exportieren…"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export audio…"
+          }
+        }
+      }
+    },
+    "Dateiformat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dateiformat"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File format"
+          }
+        }
+      }
+    },
+    "Format": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Format"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Format"
+          }
+        }
+      }
+    },
+    "Bitrate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bitrate"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bit rate"
+          }
+        }
+      }
+    },
+    "Unkomprimiert · 44,1 kHz · 16 Bit": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unkomprimiert · 44,1 kHz · 16 Bit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uncompressed · 44.1 kHz · 16-bit"
+          }
+        }
+      }
+    },
+    "Verlustbehaftet · 44,1 kHz · kleinere Dateien": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlustbehaftet · 44,1 kHz · kleinere Dateien"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lossy · 44.1 kHz · smaller files"
+          }
+        }
+      }
+    },
+    "Verlustfrei · 44,1 kHz · 16 Bit": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlustfrei · 44,1 kHz · 16 Bit"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lossless · 44.1 kHz · 16-bit"
+          }
+        }
+      }
+    },
+    "Metadaten: SID-Titel, Autor, SID-Info und Subtune.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metadaten: SID-Titel, Autor, SID-Info und Subtune."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metadata: SID title, author, SID information, and subtune."
+          }
+        }
+      }
+    },
+    "FLAC-Größe hängt vom Inhalt ab.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FLAC-Größe hängt vom Inhalt ab."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FLAC size depends on the audio."
+          }
+        }
+      }
+    },
+    "Ca. %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ca. %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approx. %@"
+          }
+        }
+      }
+    },
+    "Audio wird codiert …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio wird codiert …"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Encoding audio…"
+          }
+        }
+      }
+    },
+    "Audio wird gerendert …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio wird gerendert …"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rendering audio…"
+          }
+        }
+      }
+    },
+    "Metadaten werden geschrieben …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Metadaten werden geschrieben …"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Writing metadata…"
+          }
+        }
+      }
+    },
+    "Kein Titel für den Audio-Export ausgewählt.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Titel für den Audio-Export ausgewählt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No tune selected for audio export."
+          }
+        }
+      }
+    },
+    "Das Audio-Exportziel ist ungültig oder würde eine SID-Quelle ersetzen.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Audio-Exportziel ist ungültig oder würde eine SID-Quelle ersetzen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The audio export destination is invalid or would replace a SID source."
+          }
+        }
+      }
+    },
+    "Der Systemencoder für %@ ist nicht verfügbar. Bitte WAV wählen.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Systemencoder für %@ ist nicht verfügbar. Bitte WAV wählen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The system encoder for %@ is unavailable. Please choose WAV."
+          }
+        }
+      }
+    },
+    "Der Systemencoder konnte die Audiodatei nicht schreiben (Fehler %d).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Systemencoder konnte die Audiodatei nicht schreiben (Fehler %d)."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The system encoder could not write the audio file (error %d)."
+          }
+        }
+      }
+    },
+    "Der Systemencoder hat keine gültige Audiodatei mit der angeforderten Dauer erzeugt.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Systemencoder hat keine gültige Audiodatei mit der angeforderten Dauer erzeugt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The system encoder did not produce valid audio of the requested duration."
+          }
+        }
+      }
+    },
+    "FLAC benötigt mindestens 192 Samples (ca. 4,36 ms). Bitte eine längere Dauer oder WAV wählen.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FLAC benötigt mindestens 192 Samples (ca. 4,36 ms). Bitte eine längere Dauer oder WAV wählen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FLAC requires at least 192 samples (about 4.36 ms). Please choose a longer duration or WAV."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

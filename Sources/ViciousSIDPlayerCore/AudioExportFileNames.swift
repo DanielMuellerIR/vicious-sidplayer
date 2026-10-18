@@ -1,17 +1,17 @@
 import Foundation
 
-public enum WAVExportFileNames {
-    public static func names(for titles: [String], existing: Set<String> = []) -> [String] {
+public enum AudioExportFileNames {
+    public static func names(for titles: [String], existing: Set<String> = [], format: AudioExportFormat = .wav) -> [String] {
         var used = Set(existing.map(key))
         var nextNumber: [String: Int] = [:]
         return titles.map { title in
             let base = safeBase(title)
             let baseKey = key(base)
             var number = nextNumber[baseKey] ?? 1
-            var name = number == 1 ? base + ".wav" : "\(base) (\(number)).wav"
+            var name = number == 1 ? base + "." + format.rawValue : "\(base) (\(number)).\(format.rawValue)"
             while used.contains(key(name)) {
                 number += 1
-                name = "\(base) (\(number)).wav"
+                name = "\(base) (\(number)).\(format.rawValue)"
             }
             used.insert(key(name))
             nextNumber[baseKey] = number + 1

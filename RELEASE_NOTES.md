@@ -1,3 +1,11 @@
+Vicious SID Player 1.9.41 adds M4A and FLAC to native batch export.
+
+- Choose WAV, lossless 16-bit FLAC, or AAC in M4A at 128, 192, or 256 kbit/s. All formats use the existing duration, mix, filter, fade, naming, and cancellation rules on Mac and iPhone.
+- M4A and FLAC include title, author, SID information, and subtune metadata. FLAC preserves the rendered WAV samples exactly. M4A retains the AAC encoder delay information and validates the exact number of usable samples.
+- Short FLAC files use an explicit encoder block size; durations below 192 samples receive a clear error. Missing system encoders also produce a clear error without adding a codec dependency.
+
+See [validation](docs/validation-1.9.41.md).
+
 Vicious SID Player 1.9.40 adds batch WAV export with an explicit mix choice on Mac and iPhone.
 
 - Preview the current subtune, all subtunes in a file, the listening sequence or visible library; macOS also offers the selected saved list. Choose entries and inspect resolved duration sources, file names and output size before rendering.

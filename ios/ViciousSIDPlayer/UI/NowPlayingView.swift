@@ -65,7 +65,7 @@ struct NowPlayingView: View {
 
                     STILNotesView()
 
-                    WAVExportButton()
+                    AudioExportButton()
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -345,21 +345,21 @@ private struct PlaybackOptionsView: View {
     }
 }
 
-// MARK: - WAV-Export
+// MARK: - Audio-Export
 
-private struct WAVExportButton: View {
+private struct AudioExportButton: View {
     @EnvironmentObject private var model: AppModel
-    @State private var presentation: WAVExportPresentation?
+    @State private var presentation: AudioExportPresentation?
 
     var body: some View {
-        Button { presentation = model.makeWAVExportPresentation() } label: {
-            Label("Als WAV exportieren", systemImage: "square.and.arrow.up")
+        Button { presentation = model.makeAudioExportPresentation() } label: {
+            Label("Audio exportieren", systemImage: "square.and.arrow.up")
                 .frame(maxWidth: .infinity, minHeight: 44)
         }
         .buttonStyle(.bordered)
         .disabled(model.currentTrackID == nil)
         .sheet(item: $presentation) { presentation in
-            WAVExportView(presentation: presentation)
+            AudioExportView(presentation: presentation)
         }
     }
 }

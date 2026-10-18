@@ -1,27 +1,29 @@
 import SwiftUI
 import ViciousSIDPlayerCore
 
-struct WAVExportView: View {
-    let presentation: WAVExportPresentation
+struct AudioExportView: View {
+    let presentation: AudioExportPresentation
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var controller = WAVExportController()
+    @StateObject private var controller = AudioExportController()
     @State private var choiceID = 0
     @State private var mixMode = 0
     @State private var channel = 0
     @State private var filterEnabled = true
     @State private var durationText = ""
+    @State private var aacQuality = AACExportQuality.standard
     @State private var directory: URL?
     @State private var localError: String?
     @State private var sharedFiles: ExportedFiles?
     @FocusState private var isEditingDuration: Bool
 
-    private var choice: WAVExportChoice? { presentation.choices.first { $0.id == choiceID } }
+    private var choice: AudioExportChoice? { presentation.choices.first { $0.id == choiceID } }
     private var missingChannel: Bool {
         mixMode == 2 && controller.selectedItems.contains { !$0.activeChips.contains(channel / 3) }
     }
-    private var options: WAVExportOptions {
+    private var options: AudioExportOptions {
         var value = presentation.options
         value.filterEnabled = filterEnabled
+        value.format = controller.format; value.aacQuality = aacQuality
         value.mix = mixMode == 1 ? .current(presentation.analysisMix) : mixMode == 2 ? .channel(channel) : .full
         return value
     }
@@ -49,7 +51,7 @@ struct WAVExportView: View {
                     preview
                     Section {
                         Text("Ausgewählt: \(controller.selectedIDs.count)")
-                        Text(ByteCountFormatter.string(fromByteCount: controller.selectedBytes, countStyle: .file))
+                        Text(sizeLabel)
                             .foregroundStyle(.secondary)
                         Button {
                             if let directory { controller.export(directory: directory, options: options) }
@@ -61,8 +63,9 @@ struct WAVExportView: View {
                 if let error = controller.error ?? localError {
                     Section { Text(error).foregroundStyle(.red).textSelection(.enabled) }
                 }
+                if let error = controller.formatError { Section { Text(error).foregroundStyle(.red) } }
             }
-            .navigationTitle("WAV exportieren")
+            .navigationTitle("Audio exportieren")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -83,7 +86,7 @@ struct WAVExportView: View {
             filterEnabled = presentation.options.filterEnabled
             guard directory == nil else { return }
             do {
-                let folder = FileManager.default.temporaryDirectory.appendingPathComponent("WAV-Export", isDirectory: true)
+                let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Audio-Export", isDirectory: true)
                     .appendingPathComponent(UUID().uuidString, isDirectory: true)
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 directory = folder
@@ -96,11 +99,30 @@ struct WAVExportView: View {
         switch controller.state {
         case .preparing: return String(localized: "Exportvorschau wird vorbereitet …")
         case .cancelling: return String(localized: "Export wird abgebrochen …")
-        default: return String(localized: "WAV wird gerendert …")
+        default:
+            switch controller.progress?.phase {
+            case .encoding: return String(localized: "Audio wird codiert …")
+            case .metadata: return String(localized: "Metadaten werden geschrieben …")
+            default: return String(localized: "Audio wird gerendert …")
+            }
         }
     }
 
     @ViewBuilder private var configuration: some View {
+        Section("Dateiformat") {
+            Picker("Format", selection: Binding(get: { controller.format }, set: { controller.setFormat($0) })) {
+                ForEach(AudioExportFormat.allCases) { Text(verbatim: $0.displayName).tag($0) }
+            }
+            if controller.format == .m4a {
+                Picker("Bitrate", selection: $aacQuality) {
+                    ForEach(AACExportQuality.allCases) { Text(verbatim: $0.displayName).tag($0) }
+                }
+            }
+            Text(controller.format.description).font(.caption).foregroundStyle(.secondary)
+            if controller.format != .wav {
+                Text("Metadaten: SID-Titel, Autor, SID-Info und Subtune.").font(.caption).foregroundStyle(.secondary)
+            }
+        }
         Section("Auswahl und Mix") {
             Picker("Auswahl", selection: $choiceID) {
                 ForEach(presentation.choices) { Text($0.title).tag($0.id) }
@@ -171,7 +193,7 @@ struct WAVExportView: View {
                                 Image(systemName: controller.selectedIDs.contains(item.id) ? "checkmark.square.fill" : "square")
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(item.fileName).lineLimit(2).truncationMode(.middle)
-                                    Text(durationLabel(item)).font(.caption).foregroundStyle(item.hasValidDuration ? Color.secondary : .red)
+                                    Text(durationLabel(item)).font(.caption).foregroundStyle(item.hasValidDuration(for: controller.format) ? Color.secondary : .red)
                                 }
                                 Spacer(minLength: 0)
                             }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
@@ -184,7 +206,7 @@ struct WAVExportView: View {
         }
     }
 
-    private func durationLabel(_ item: WAVExportItem) -> String {
+    private func durationLabel(_ item: AudioExportItem) -> String {
         let source: String
         if controller.isUsingSlice { source = String(localized: "A/B-Ausschnitt") }
         else if item.usesManualDuration { source = String(localized: "Manuelle Dauer") }
@@ -199,7 +221,7 @@ struct WAVExportView: View {
         return item.hasValidDuration ? "\(item.durationDescription) · \(source) · \(item.channels == 2 ? "Stereo" : "Mono")" : String(localized: "Ungültige Dauer")
     }
 
-    @ViewBuilder private func resultView(_ result: WAVExportResult) -> some View {
+    @ViewBuilder private func resultView(_ result: AudioExportResult) -> some View {
         Section {
             Text(result.wasCancelled ? String(localized: "Export abgebrochen; fertige Dateien bleiben erhalten.")
                 : result.error != nil ? String(localized: "Export beendet; fertige Dateien bleiben erhalten.") : String(localized: "Export abgeschlossen."))
@@ -215,5 +237,11 @@ struct WAVExportView: View {
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }.frame(height: 240)
         }
+    }
+
+    private var sizeLabel: String {
+        guard let bytes = controller.estimatedBytes(quality: aacQuality) else { return String(localized: "FLAC-Größe hängt vom Inhalt ab.") }
+        let value = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        return controller.format == .m4a ? String(format: String(localized: "Ca. %@"), value) : value
     }
 }

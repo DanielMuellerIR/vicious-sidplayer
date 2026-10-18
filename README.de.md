@@ -68,7 +68,7 @@ Der Titelpfad gilt relativ zum Autoplay-Ordner. Absolute Pfade, `..` und alles, 
 - **Favoriten**: Ein dauerhafter Stern pro Titel mit „nur Favoriten“-Filter.
 - **Solo, Stimmen-/Chip-Mute und Filter-Bypass**: Alle neun Stimmen eines 3SID-Stücks auf Mac, iPhone und in HTML5 getrennt steuern. Mehrere Solos spielen gemeinsam; Stimmen- und Chip-Mute haben Vorrang. „Solos aufheben“ erhält die Mutes. Die Analyseauswahl gilt für die Sitzung; auch stumme Stimmen werden weiter emuliert.
 - **Piano, Register und A/B-Schleifen**: Neben dem Scope je SID-Chip Piano / Hz oder Register wählen. Die Register-Tonhöhe ist angenähert; Noise, kombinierte Wellenformen und Digi-Töne haben sichtbare Grenzen. A und B mit mindestens 0,25 Sekunden Abstand setzen und die Sitzungsschleife einschalten. Ein Sprung außerhalb schaltet sie aus; Datei- oder Subtunewechsel löschen die Marker. Der native Einschlaftimer hat Vorrang.
-- **WAV-Export (macOS und iPhone)**: Ausgewählte Titel und Subtunes aus der aktuellen Datei, Hörfolge oder sichtbaren Bibliothek vorab prüfen; auf dem Mac zusätzlich die ausgewählte gespeicherte Liste. Aufgelöste Endzeiten, manuelle Dauer oder den aktuellen A/B-Ausschnitt verwenden. Vollständigen Mix, aktuellen Mute-/Solo-Mix oder eine SID-Stimme mit ausdrücklicher Filterwahl rendern. Der gemeinsame Chipfilter läuft auch bei einer einzelnen Stimme weiter; getrennte Dateien lassen sich wegen Rundung und Clipping nicht garantiert bitgenau addieren. Der Batch erhält vorhandene Dateien und behält bei Abbruch fertige Ausgaben. Auf dem Mac öffnet ⌘E die Konfiguration mit nativen Speicher-/Ordnerdialogen; das iPhone teilt fertige Dateien. Headless-WAV-Rendering bleibt über die Kommandozeile verfügbar (siehe [Headless / CLI](#headless--cli-für-skripte-und-ai-agenten)).
+- **Audio-Export (macOS und iPhone)**: Ausgewählte Titel und Subtunes aus der aktuellen Datei, Hörfolge oder sichtbaren Bibliothek vorab prüfen; auf dem Mac zusätzlich die ausgewählte gespeicherte Liste. Aufgelöste Endzeiten, manuelle Dauer oder den aktuellen A/B-Ausschnitt verwenden. Vollständigen Mix, aktuellen Mute-/Solo-Mix oder eine SID-Stimme mit ausdrücklicher Filterwahl rendern. Der gemeinsame Chipfilter läuft auch bei einer einzelnen Stimme weiter; getrennte Dateien lassen sich wegen Rundung und Clipping nicht garantiert bitgenau addieren. Zur Wahl stehen unkomprimiertes WAV, verlustfreies FLAC (beide 44,1 kHz / 16 Bit) und AAC in M4A mit 128, 192 oder 256 kbit/s. M4A und FLAC enthalten SID-Titel, Autor, SID-Info und Subtune-Nummer; FLAC benötigt mindestens 192 Samples (ca. 4,36 ms). Die Formate verwenden Systemcodecs ohne externen Encoder. Der Batch erhält vorhandene Dateien und behält bei Abbruch fertige Ausgaben. Auf dem Mac öffnet ⌘E die Konfiguration mit nativen Speicher-/Ordnerdialogen; das iPhone teilt fertige Dateien. Headless-WAV-Rendering bleibt über die Kommandozeile verfügbar (siehe [Headless / CLI](#headless--cli-für-skripte-und-ai-agenten)).
 - **Dark / Light Mode**: Folgt automatisch der Systemeinstellung (Standard); in den Einstellungen (⌘,) lässt sich fest Hell oder Dunkel wählen, ⌘T schaltet um.
 - **Lokale Hörfolgendaten im Browser**: Benannte Listen, Lieblings-Subtunes, Reihenfolge und Position liegen im Browserspeicher. Nach dem Neuladen dieselben SID-Dateien oder den Ordner erneut auswählen; Musik wird nie in der Seite gespeichert. Ein eindeutiger Inhaltsvergleich kann eine verschobene Datei wieder zuordnen. Die Wiederherstellung bereitet die Wiedergabe ohne automatischen Start vor. Unlesbare Daten bleiben erhalten; fehlender oder voller Speicher wird gemeldet.
 - **Playlist mit Duplikaterkennung**: Bereits geladene Titel werden nicht doppelt aufgenommen. Die Playlist kann jederzeit geleert werden.
@@ -117,7 +117,7 @@ Titel, Komponist und Info in der Seitenleiste sowie lange Titelnamen zeigen ihre
 | ⌘P | Play / Pause |
 | ⌘→ | Nächster Hörfolgeneintrag |
 | ⌘← | Vorheriger Hörfolgeneintrag |
-| ⌘E | WAV-Export konfigurieren |
+| ⌘E | Audio-Export konfigurieren |
 | ⌘T | Hell-/Dunkelmodus umschalten (wechselt auf feste Wahl; zurück zu *Automatisch* über die Einstellungen) |
 | ⌘, | Einstellungen (Erscheinungsbild, Autoplay-Ordner) |
 
@@ -173,7 +173,7 @@ App Store offen bleibt.
 - **Bibliothek zurücksetzen**: alles wegwerfen und neu befüllen — Favoriten auf
   Wunsch behalten.
 - Oszilloskop, Subtunes, Voice-Mute, Filter-Bypass, SID-Modellwahl, Songlängen,
-  Suche, Favoriten, Shuffle, Session-Restore, Theme und WAV-Export wie auf dem
+  Suche, Favoriten, Shuffle, Session-Restore, Theme und Audio-Export wie auf dem
   Desktop.
 
 Oszilloskop und alle UI-Timer laufen nur, solange die App im Vordergrund ist. Im
