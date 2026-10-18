@@ -90,15 +90,16 @@ echo "  OK   $work/swift.wav"
 
 # --- 2b. JS-Seite -------------------------------------------------------------
 echo "2. HTML5-Engine rendern"
-node - "$PWD/sid-player-worklet.js" "$work/parity.sid" "$work/js.pcm" "$SECONDS_TO_RENDER" <<'JS' || exit 1
+node --input-type=module - "$work/parity.sid" "$work/js.pcm" "$SECONDS_TO_RENDER" <<'JS' || exit 1
 // Die Engine-Klasse SidPlayerProcessor ist bewusst KEIN AudioWorkletProcessor
 // (siehe Kommentar in sid-player-worklet.js) und laesst sich deshalb hier normal
 // erzeugen. Alles ab "class SidPlayerWorklet" braucht echte Browser-Klassen und
 // bleibt draussen. Die Engine liest die Worklet-Globale `sampleRate`, die wir ihr
 // als Funktionsparameter unterschieben.
-const fs = require('fs');
-const [ , , workletPath, sidPath, outPath, secondsArg ] = process.argv;
-const src = fs.readFileSync(workletPath, 'utf8');
+import fs from 'node:fs';
+import { sidSource } from './Tests/WebSourceSupport.mjs';
+const [ , , sidPath, outPath, secondsArg ] = process.argv;
+const src = await sidSource('sid-player-worklet.js');
 const engineSrc = src.slice(0, src.indexOf('class SidPlayerWorklet'));
 const SidPlayerProcessor = new Function('sampleRate', engineSrc + '; return SidPlayerProcessor;')(44100);
 

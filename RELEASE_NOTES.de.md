@@ -2,6 +2,7 @@ Vicious SID Player 1.9.50 vereinfacht die Stimmenbedienung auf dem iPhone.
 
 - Die höheren Oszilloskopkurven nutzen die volle Breite. Tippen auf eine Kurve schaltet die jeweilige Stimme stumm oder wieder ein; die Emulation läuft weiter.
 - Solo liegt als dezenter Knopf am rechten Rand über jeder Kurve. Aktive Solos sind hervorgehoben und bleiben unabhängig von der Stummschaltung.
+- Die Swift-/HTML5-Paritätsprüfung lädt vor dem Samplevergleich den gemeinsamen SID-Parser wie die übrigen Webtests.
 
 Siehe [Prüfstand](docs/validation-1.9.50.md).
 
