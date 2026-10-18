@@ -2,6 +2,12 @@
 
 Stand: 2026-10-16. Ausgangspunkt: v1.9.26.
 
+Diese Analyse beschreibt den damaligen Funktionsstand und bleibt als
+Entscheidungsgrundlage erhalten. Die daraus abgeleiteten Softwarepakete sind
+inzwischen bis v1.9.50 umgesetzt. Den aktuellen Umsetzungs- und Prüfstand zeigt
+der [Erweiterungsplan](feature-roadmap.md); offene Gerätefälle und die noch
+ungeklärte iPhone-Stoppmeldung stehen im [Backlog](../backlog.md).
+
 Den größten nächsten Nutzen bieten korrektes PAL/NTSC-Timing, eine Suche über
 echte Musikmetadaten und gespeicherte Playlists mit gezielter Subtune-Auswahl.
 Diese Erweiterungen verbessern Klangtreue und tägliche Nutzung und passen in
