@@ -140,6 +140,42 @@ Automatisierte Prüfungen und die Sichtprüfung der nativen Apps und HTML5 sind 
 - Persönliche Daten bleiben lokal. Nicht unterstützte, beschädigte oder extern geänderte Daten werden erhalten. Der Mac wartet beim Beenden auf ausstehende Verlaufsspeicherung; das iPhone sichert beim Wechsel in den Hintergrund. Im Browser müssen Musikdateien nach einem Neustart erneut ausgewählt werden.
 - Lesezeichen nach 20 Minuten bleiben mit einem ausdrücklichen Hinweis auf die Sprunggrenze gespeichert; Abspielen von Anfang bleibt möglich. Der plattformübergreifende Datenaustausch ist separat geplant.
 
+Vicious SID Player 1.9.31 ergänzt Wiedergabeoptionen für macOS und iPhone.
+
+- Subtune, Datei oder Hörfolge wiederholen, bis zu 30 Sekunden ausblenden, persönliche Endzeiten setzen oder nach einem Timer beziehungsweise dem aktuellen Subtune stoppen. Native Wiedergabe, Suche und Export verwenden dieselben Dauerregeln.
+- Der Einschlaftimer verwendet eine monotone Frist, läuft bei Pause weiter und hat Vorrang vor Repeat. Er wird beim Start nicht wiederhergestellt; nach Ablauf braucht das iPhone eine ausdrückliche Wiedergabeaktion.
+
+Siehe [Prüfstand](docs/validation-1.9.31.md).
+
+Vicious SID Player 1.9.30 ergänzt native Metadatensuche und gespeicherte Bibliotheksansichten.
+
+- Titel, Autoren, Ordner, Chipmodelle und bekannte Dauern durchsuchen, während Metadaten im Hintergrund geladen werden. Feldfilter kombinieren und benannte Suchen samt Favoritenfilter sichern.
+- Suchänderungen lassen die aktive Hörfolge unverändert. Unbekannte Metadaten und Dauern bleiben ausdrücklich erkennbar; neuere oder beschädigte Suchdaten bleiben erhalten.
+
+Siehe [Prüfstand](docs/validation-1.9.30.md).
+
+Vicious SID Player 1.9.29 bringt Hörlisten und Warteschlangen auf iPhone und HTML5.
+
+- Listen und Lieblings-Subtunes sichern, Einträge als Nächstes einreihen und die aktive Folge umordnen. Vorbereitete iPhone-Titel und wiederhergestellte Browserauswahlen starten nicht automatisch.
+- Browserdaten bleiben lokal; Musikdateien nach einem Neustart erneut auswählen. Unlesbarer oder fehlender Speicher wird gemeldet, ohne vorhandene Daten zu verwerfen.
+
+Siehe [Prüfstand](docs/validation-1.9.29.md).
+
+Vicious SID Player 1.9.28 ergänzt gespeicherte Subtune-Listen und eine Hörfolge auf dem Mac.
+
+- Bibliothek, Suchtreffer, Favoriten oder Ordner ausdrücklich als Folge starten. Spätere Suchen und Änderungen an der gespeicherten Liste verändern die aktive Kopie nicht.
+- Einträge mit festem Subtune spielen diesen, Dateieinträge auch die verbleibenden Subtunes. Listen und Auswahlen enden; die gesamte Bibliothek läuft in Durchläufen weiter. Shuffle vermeidet unmittelbare Wiederholungen am Übergang.
+- Listenidentitäten, offene Als-Nächstes-Einträge und Position über Neustarts und Bibliothekswechsel erhalten. Beschädigte oder neuere persönliche Daten bleiben unangetastet.
+
+Siehe [Prüfstand](docs/validation-1.9.28.md).
+
+Vicious SID Player 1.9.27 ergänzt PAL-/NTSC-Timing in nativer, HTML5- und CLI-Wiedergabe.
+
+- Auto folgt dem SID-Header und verwendet PAL bei unbekannter oder doppelter Taktangabe. Die ausdrückliche Taktwahl gilt auch für Seek, nativen Export und taktabhängige berechnete Längen; im CLI über `--clock auto|pal|ntsc`.
+- Die Minifizierung des Single-File-HTML5-Players erhält den Inhalt von Strings und Template-Literalen.
+
+Siehe [Prüfstand](docs/validation-1.9.27.md).
+
 Vicious SID Player 1.9.26 ergänzt Sparkle-Updates für die macOS-App.
 
 - Die App sucht im Hintergrund nach signierten Updates. „Nach Updates suchen…“ im App-Menü prüft sofort; die Installation braucht deine Zustimmung.

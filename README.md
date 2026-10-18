@@ -40,13 +40,13 @@ not tracked. It opens directly in the browser without a web server.
 
 - **Drag & drop**: Drop single `.sid` files or entire folders onto the player. Playback starts immediately.
 - **Real-time oscilloscope**: Shows three voices of the selected SID chip (triangle, sawtooth, pulse, noise), with frequencies, gate status, ADSR envelopes and the chip model.
-- **SID model selection (macOS app)**: Picker with `Auto`, `6581`, and `8580`. `Auto` follows the preference stored in the SID file; a fixed choice forces the respective chip model and applies live to the running song (many tunes only sound right on the chip they were originally written for).
+- **SID model selection (macOS and iPhone)**: Picker with `Auto`, `6581`, and `8580`. `Auto` follows the preference stored in the SID file; a fixed choice forces the respective chip model and applies live to the running song (many tunes only sound right on the chip they were originally written for).
 - **PAL/NTSC clock selection**: Automatically follows the SID header, with explicit PAL and NTSC overrides in the native and HTML5 players. Unknown or dual-standard files use PAL in Auto mode. The selected clock also applies to seeking and WAV export; calculated song lengths are cached separately for each clock mode.
 - **Quick Look preview (macOS app)**: Select a `.sid` file in Finder and press Space — the tune plays instantly, with title, composer, and copyright plus subtune switching for multi-song files. Setup: see [Quick Look preview](#quick-look-preview-for-sid-files-macos).
 - **Playback options (macOS and iPhone)**: Repeat the current subtune, whole file or active listening sequence; add a fade out of up to 30 seconds; set a custom end time; or stop after a timer or the current subtune. Custom end times take priority over HVSC and calculated lengths and also apply to search, the position slider, Now Playing and WAV export. The sleep timer continues during pause and takes priority over repeat. Its active deadline is not restored on launch.
-- **Real song lengths**: Reads the HVSC `Songlengths.md5` database (chosen in the settings or found automatically next to your collection) so the position slider and auto-advance use the actual tune length. Tunes without a database entry are analyzed in the background on first play (if they end in silence) and the result is cached.
-- **Tune notes (STIL)**: Reads the HVSC `STIL.txt` (chosen in the settings or found automatically next to your collection) and shows what does not fit into the SID file header — which original a tune covers, who wrote the melody, notes on individual subtunes. The database belongs to the HVSC project and is not bundled.
-- **Listening lists and queue (macOS, iPhone, HTML5)**: The sidebar tabs **Musik**, **Listen**, and **Folge** share the library area. Use **Auswahl** to play the entire library, current search results, favorites, or a folder as a deliberate sequence. Later search/filter changes do not alter that sequence. Save named lists, add individual subtunes (including several from the same file), mark favorite subtunes, queue **Als Nächstes**, and reorder entries. Named lists and selections stop at the end; the whole library continues in cycles. Shuffle visits each entry once per cycle and avoids an immediate repeat at the cycle boundary. Lists belong to their collection; switching the autoplay folder retains them for later use.
+- **Real song lengths (macOS and iPhone)**: Reads the HVSC `Songlengths.md5` database (imported in iPhone settings; chosen or found automatically next to the collection on Mac) so the position slider and auto-advance use the actual tune length. Tunes without a database entry are analyzed in the background on first play (if they end in silence) and the result is cached.
+- **Tune notes (macOS and iPhone)**: Reads the HVSC `STIL.txt` (imported in iPhone settings; chosen or found automatically next to the collection on Mac) and shows what does not fit into the SID file header — which original a tune covers, who wrote the melody, notes on individual subtunes. The database belongs to the HVSC project and is not bundled.
+- **Listening lists and queue (macOS, iPhone, HTML5)**: The tabs **Musik**, **Listen**, **Folge**, and **Verlauf** share the library area. Use **Auswahl** to play the entire library, current search results, favorites, or a folder as a deliberate sequence. Later search/filter changes do not alter that sequence. Save named lists, add individual subtunes (including several from the same file), mark favorite subtunes, queue **Als Nächstes**, and reorder entries. Named lists and selections stop at the end; the whole library continues in cycles. Shuffle visits each entry once per cycle and avoids an immediate repeat at the cycle boundary. Lists belong to their collection; switching the autoplay folder retains them for later use.
 - **Folder view**: The sidebar shows your collection either as a flat track list or as an expandable folder tree — the only workable way through an HVSC with tens of thousands of files. Toggle it in the playlist header; search and the favourites filter still show the flat list of matches.
 - **Mini player**: ⌘⌥M shrinks the window to a slim bar with title, elapsed time and transport controls, for keeping it around while you work. The same shortcut brings the full window back at its previous size.
 - **Remote control via URL scheme**: Drive the running app from scripts and shortcuts, with no network service:
@@ -74,7 +74,7 @@ Track paths are relative to the autoplay folder. Absolute paths, `..` and anythi
 - **Dark / light mode**: Follows the system setting automatically (default); a fixed light or dark appearance can be chosen in the settings (⌘,) or toggled with ⌘T.
 - **Local browser listening data**: Named lists, favorite subtunes, queue order and position are saved in browser storage. After reloading, select the same SID files or folder again to restore access; music is never stored in the page. A moved file can be reconnected after explicitly approving a unique content match in the collection audit. Restoration prepares playback without starting it. Unreadable data stays untouched; unavailable or full storage is reported.
 - **Playlist with duplicate detection**: Already loaded tunes are not added twice. The playlist can be cleared at any time.
-- **Shuffle**: Random playback that persists across restarts; a random song starts on launch when enabled.
+- **Shuffle**: The setting persists across restarts. macOS starts a fresh shuffled sequence on launch; iPhone and HTML5 prepare playback without starting it.
 - With the standard sidebar, the full player can be narrowed to 800 points; control groups wrap onto additional rows. To include buttons and menus in the Tab order, enable **Keyboard navigation** in macOS Keyboard settings. VoiceOver names the controls and their current states.
 
 In HTML5, the collection tabs use Left/Right, Home and End; Tab enters the selected panel. Dialogs keep keyboard focus and return it when closed. Load buttons and sliders have accessible names; focus the metadata panel to read long text in full. On iPhone, transport and subtune buttons have at least 44-point targets; large accessibility text uses vertical control groups. VoiceOver and external-keyboard acceptance on iPhone require the [device checklist](ios/GERAETETEST.md).
@@ -83,7 +83,7 @@ The scope uses a 30 Hz animation schedule. Hidden or minimized Mac windows pause
 
 **Media keys**: Play/pause, stop, and track skipping via F7/F8/F9, the Touch Bar, and AirPods — the app registers as the system's *Now Playing* app.
 - **macOS updates**: Sparkle checks for signed updates in the background; “Nach Updates suchen…” in the app menu checks immediately. Installing an update requires your approval. The first Sparkle-enabled release needs a manual installation.
-- **No external assets**: The entire interface (including macOS window decorations and icons) is drawn procedurally in CSS and SwiftUI Canvas.
+- **Local interface assets**: The HTML5 interface, icons and scripts are included in the generated file. Native visualizers use SwiftUI Canvas; the macOS updater and its license are bundled with the app.
 
 ---
 
@@ -111,7 +111,7 @@ Every control in the app has a tooltip: rest the pointer on it for a moment and 
 | Speaker icons (oscilloscope, right edge) | Mute or unmute each SID voice individually — the emulation keeps running, only the audio contribution is removed. |
 | SID chip selector / Mischung … | Choose the displayed chip or open grouped mute and solo controls. A fixed model override applies to all chips. |
 | FILTER: ON / OFF (oscilloscope, bottom left) | Bypass the SID filter; filtered voices then play unfiltered. |
-| Musik / Listen / Folge | Switch between the library, saved listening lists, and the active queue. |
+| Musik / Listen / Folge / Verlauf | Switch between the library, saved listening lists, active queue, and listening history. |
 | Auswahl (library) | Start or save a deliberate selection; searching alone leaves playback unchanged. |
 | Trash (playlist header) | Clear the current library list and queue; saved listening lists remain. |
 
@@ -171,7 +171,7 @@ privacy manifest, so the App Store route stays open.
 - **Background playback**: music keeps running when the screen is locked, with
   play/pause, previous/next and position control from the lock screen, the
   Control Center and AirPods.
-- **Track selection**: tapping a library track prepares it; press Play to start. Selecting another track stops the previous one and prepares the new selection.
+- **Track selection**: tapping another library track during playback starts it immediately. When paused or stopped, selection prepares the track; press Play to start. Missing SID titles use the filename.
 - **Folder import**: pick a folder (iCloud Drive, Nextcloud, “On My iPhone”) and
   the app walks it recursively, keeping the directory structure, skipping
   duplicates, with progress and a cancel button.
@@ -185,9 +185,15 @@ privacy manifest, so the App Store route stays open.
   song lengths, search, favorites, shuffle, session restore, theme and audio
   export, as on the desktop.
 
-The oscilloscope and all UI timers only run while the app is in the foreground.
-In the background the audio keeps playing and the drawing stops — that is the
-single biggest battery saver here.
+The oscilloscope draws only while the Playback tab and app are active. In the
+background, time updates slow to once per second; audio, Auto-Next and lock-screen
+updates continue independently. The library uses compact rows and keeps Music,
+Lists, Queue and History above search. Tap a waveform to mute its voice; use the
+subtle solo button at its right edge. Loop controls are under “Tools and details”.
+
+A sporadic stop after returning to the app or advancing tracks remains under
+investigation. Simulator transition tests passed, but do not establish that this
+real-device issue is resolved. See [current checks and limits](docs/validation-1.9.49.md).
 
 **Build**
 
@@ -304,7 +310,7 @@ The following fixes were applied on top of the original:
 
 | Layer | HTML5 | macOS (Swift) |
 |---|---|---|
-| Parser | `sidplayer.js` | `SidParser.swift` |
+| Parser | `sid-format.js` (shared by UI and worklet) | `SidParser.swift` |
 | DSP / emulator | `sid-player-worklet.js` (AudioWorklet) | `ViciousProcessor.swift` (`AVAudioSourceNode`) |
 | UI | Vanilla JS + CSS custom properties | SwiftUI + Canvas |
 

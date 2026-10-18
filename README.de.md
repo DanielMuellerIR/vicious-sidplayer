@@ -40,13 +40,13 @@ versioniert. Sie lässt sich ohne Webserver direkt im Browser öffnen.
 
 - **Drag & Drop**: Einzelne `.sid`-Dateien oder ganze Ordner können auf den Player gezogen werden. Die Wiedergabe startet sofort.
 - **Echtzeit-Oszilloskop**: Zeigt drei Stimmen des gewählten SID-Chips (Dreieck, Sägezahn, Puls, Rauschen) mit Frequenzen, Gate-Status, ADSR-Hüllkurven und Chipmodell.
-- **SID-Modellwahl (macOS-App)**: Picker zwischen `Auto`, `6581` und `8580`. `Auto` folgt der in der SID-Datei hinterlegten Präferenz; die feste Wahl erzwingt das jeweilige Chip-Modell und wirkt live auf den laufenden Song (viele Tunes klingen nur auf dem ursprünglich gemeinten Chip korrekt).
+- **SID-Modellwahl (macOS und iPhone)**: Picker zwischen `Auto`, `6581` und `8580`. `Auto` folgt der in der SID-Datei hinterlegten Präferenz; die feste Wahl erzwingt das jeweilige Chip-Modell und wirkt live auf den laufenden Song (viele Tunes klingen nur auf dem ursprünglich gemeinten Chip korrekt).
 - **PAL/NTSC-Taktwahl**: Folgt automatisch dem SID-Dateikopf; PAL und NTSC lassen sich in den nativen Apps und im HTML5-Player ausdrücklich wählen. Unbekannte oder für beide Standards geeignete Dateien verwenden bei Auto PAL. Die Wahl gilt auch für Seek und WAV-Export; berechnete Songlängen werden je Taktmodus getrennt gecacht.
 - **Quick-Look-Vorschau (macOS-App)**: `.sid`-Datei im Finder markieren und Leertaste drücken — der Song spielt sofort, dazu erscheinen Titel, Komponist und Copyright samt Song-Umschaltung bei mehreren Subtunes. Einrichtung: siehe [Quick-Look-Vorschau](#quick-look-vorschau-für-sid-dateien-macos).
 - **Wiedergabeoptionen (macOS und iPhone)**: Aktuellen Subtune, ganze Datei oder aktive Hörfolge wiederholen; bis zu 30 Sekunden ausblenden; eine eigene Endzeit festlegen; oder nach einem Timer beziehungsweise dem aktuellen Subtune stoppen. Eigene Endzeiten haben Vorrang vor HVSC und berechneten Längen und gelten auch für Suche, Positionsslider, Now Playing und WAV-Export. Der Einschlaftimer läuft während Pause weiter und übersteuert Repeat. Eine aktive Frist wird beim Start nicht wiederhergestellt.
-- **Echte Songlängen**: Liest die HVSC-Datenbank `Songlengths.md5` (in den Einstellungen wählbar oder automatisch neben der Sammlung gefunden) — Positions-Slider und Auto-Next nutzen dann die tatsächliche Länge. Songs ohne Datenbank-Eintrag analysiert die App beim ersten Abspielen im Hintergrund (sofern sie in Stille enden) und merkt sich das Ergebnis.
-- **Titel-Anmerkungen (STIL)**: Liest die `STIL.txt` der HVSC (in den Einstellungen wählbar oder automatisch neben der Sammlung gefunden) und zeigt zum laufenden Titel, was im SID-Dateikopf keinen Platz hat — welche Vorlage ein Tune covert, wer die Melodie geschrieben hat, Anmerkungen zu einzelnen Subtunes. Die Datenbank gehört dem HVSC-Projekt und wird nicht mitgeliefert.
-- **Hörfolgen und Warteschlange (macOS, iPhone, HTML5)**: Die Tabs **Musik**, **Listen** und **Folge** teilen sich den Bibliotheksbereich. Über **Auswahl** lassen sich die ganze Bibliothek, aktuelle Suchtreffer, Favoriten oder ein Ordner ausdrücklich als Folge starten. Spätere Such-/Filteränderungen verändern diese Folge nicht. Benannte Listen speichern, einzelne Subtunes hinzufügen (auch mehrere derselben Datei), Lieblings-Subtunes merken, **Als Nächstes** einreihen und Einträge umordnen. Listen und Auswahlen stoppen am Ende; die gesamte Bibliothek läuft in Durchläufen weiter. Shuffle spielt jeden Eintrag einmal je Durchlauf und vermeidet die unmittelbare Wiederholung am Übergang. Listen gehören zu ihrer Sammlung; beim Wechsel des Autoplay-Ordners bleiben sie für später erhalten.
+- **Echte Songlängen (macOS und iPhone)**: Liest die HVSC-Datenbank `Songlengths.md5` (auf dem iPhone in den Einstellungen importiert; auf dem Mac wählbar oder automatisch neben der Sammlung gefunden) — Positions-Slider und Auto-Next nutzen dann die tatsächliche Länge. Songs ohne Datenbank-Eintrag analysiert die App beim ersten Abspielen im Hintergrund (sofern sie in Stille enden) und merkt sich das Ergebnis.
+- **Titel-Anmerkungen (macOS und iPhone)**: Liest die `STIL.txt` der HVSC (auf dem iPhone in den Einstellungen importiert; auf dem Mac wählbar oder automatisch neben der Sammlung gefunden) und zeigt zum laufenden Titel, was im SID-Dateikopf keinen Platz hat — welche Vorlage ein Tune covert, wer die Melodie geschrieben hat, Anmerkungen zu einzelnen Subtunes. Die Datenbank gehört dem HVSC-Projekt und wird nicht mitgeliefert.
+- **Hörfolgen und Warteschlange (macOS, iPhone, HTML5)**: Die Tabs **Musik**, **Listen**, **Folge** und **Verlauf** teilen sich den Bibliotheksbereich. Über **Auswahl** lassen sich die ganze Bibliothek, aktuelle Suchtreffer, Favoriten oder ein Ordner ausdrücklich als Folge starten. Spätere Such-/Filteränderungen verändern diese Folge nicht. Benannte Listen speichern, einzelne Subtunes hinzufügen (auch mehrere derselben Datei), Lieblings-Subtunes merken, **Als Nächstes** einreihen und Einträge umordnen. Listen und Auswahlen stoppen am Ende; die gesamte Bibliothek läuft in Durchläufen weiter. Shuffle spielt jeden Eintrag einmal je Durchlauf und vermeidet die unmittelbare Wiederholung am Übergang. Listen gehören zu ihrer Sammlung; beim Wechsel des Autoplay-Ordners bleiben sie für später erhalten.
 - **Ordneransicht**: Die Seitenleiste zeigt die Sammlung wahlweise als flache Titelliste oder als aufklappbaren Ordnerbaum — bei einer HVSC mit zehntausenden Dateien der einzig brauchbare Weg. Umschalter im Kopf der Playlist; Suche und Favoritenfilter zeigen weiterhin die flache Trefferliste.
 - **Mini-Player**: ⌘⌥M schaltet das Fenster auf eine schmale Leiste mit Titel, Spielzeit und Transport um — zum Nebenherlaufen. Zurück geht es mit demselben Kürzel; das Fenster nimmt wieder seine vorherige Größe an.
 - **Fernsteuerung per URL-Schema**: Die laufende App lässt sich aus Skripten und Kurzbefehlen steuern, ohne Netzwerkdienst:
@@ -74,7 +74,7 @@ Der Titelpfad gilt relativ zum Autoplay-Ordner. Absolute Pfade, `..` und alles, 
 - **Dark / Light Mode**: Folgt automatisch der Systemeinstellung (Standard); in den Einstellungen (⌘,) lässt sich fest Hell oder Dunkel wählen, ⌘T schaltet um.
 - **Lokale Hörfolgendaten im Browser**: Benannte Listen, Lieblings-Subtunes, Reihenfolge und Position liegen im Browserspeicher. Nach dem Neuladen dieselben SID-Dateien oder den Ordner erneut auswählen; Musik wird nie in der Seite gespeichert. Eine verschobene Datei lässt sich nach ausdrücklicher Bestätigung eines eindeutigen Inhaltsvergleichs in der Sammlungsprüfung wieder zuordnen. Die Wiederherstellung bereitet die Wiedergabe ohne automatischen Start vor. Unlesbare Daten bleiben erhalten; fehlender oder voller Speicher wird gemeldet.
 - **Playlist mit Duplikaterkennung**: Bereits geladene Titel werden nicht doppelt aufgenommen. Die Playlist kann jederzeit geleert werden.
-- **Shuffle**: Zufallswiedergabe, die über Neustarts erhalten bleibt; ist sie aktiv, startet beim App-Start ein zufälliger Song.
+- **Shuffle**: Die Einstellung bleibt über Neustarts erhalten. macOS startet beim Öffnen eine frisch gemischte Folge; iPhone und HTML5 bereiten die Wiedergabe ohne automatischen Start vor.
 - Mit der Standardseitenleiste lässt sich das volle Fenster auf 800 Punkte verengen; Controlgruppen wechseln dann in weitere Zeilen. Für Buttons und Menüs in der Tabfolge die **Tastaturnavigation** in den macOS-Tastatureinstellungen einschalten. VoiceOver benennt die Controls und ihren aktuellen Zustand.
 
 In HTML5 wählen Links/Rechts, Home und End die Sammlungs-Tabs; Tab führt in den ausgewählten Bereich. Dialoge halten den Tastaturfokus und geben ihn beim Schließen zurück. Ladeknöpfe und Regler haben sprechende Namen; der fokussierte Metadatenbereich zeigt lange Texte vollständig. Auf dem iPhone haben Transport- und Subtune-Tasten mindestens 44 Punkte große Treffflächen; große Bedienungshilfen-Schrift verwendet vertikale Controlgruppen. Die iPhone-Abnahme mit VoiceOver und externer Tastatur erfolgt über die [Geräteprüfliste](ios/GERAETETEST.md).
@@ -83,7 +83,7 @@ Das Oszilloskop verwendet einen 30-Hz-Zeichenplan. Ausgeblendete oder minimierte
 
 **Media-Tasten**: Play/Pause, Stop und Titelsprung über F7/F8/F9, Touch Bar und AirPods — die App registriert sich als *Now Playing*-App des Systems.
 - **macOS-Updates**: Sparkle sucht im Hintergrund nach signierten Updates; „Nach Updates suchen…“ im App-Menü prüft sofort. Die Installation braucht deine Zustimmung. Die erste Sparkle-fähige Version muss einmal manuell installiert werden.
-- **Keine externen Assets**: Die gesamte Oberfläche (inkl. macOS-Fensterdekorationen und Icons) ist rein prozedural in CSS bzw. SwiftUI Canvas gezeichnet.
+- **Lokale Oberflächendateien**: HTML5-Oberfläche, Icons und Skripte sind in der erzeugten Datei enthalten. Native Visualisierungen verwenden SwiftUI Canvas; der macOS-Updater samt Lizenz liegt im App-Bundle.
 
 ---
 
@@ -111,7 +111,7 @@ Jedes Bedienelement der App hat einen Tooltip: den Zeiger einen Moment darauf ru
 | Lautsprecher-Symbole (Oszilloskop, rechter Rand) | Jede SID-Stimme einzeln stumm-/lautschalten — die Emulation läuft weiter, nur der Audio-Beitrag entfällt. |
 | SID-Chipwahl / Mischung … | Angezeigten Chip wählen oder gruppierte Mute-/Solo-Regler öffnen. Eine feste Modellwahl wirkt auf alle Chips. |
 | FILTER: ON / OFF (Oszilloskop, unten links) | SID-Filter überbrücken; gefilterte Stimmen laufen dann ungefiltert. |
-| Musik / Listen / Folge | Bibliothek, gespeicherte Hörfolgen oder laufende Warteschlange anzeigen. |
+| Musik / Listen / Folge / Verlauf | Bibliothek, gespeicherte Hörfolgen, laufende Warteschlange oder Hörverlauf anzeigen. |
 | Auswahl (Bibliothek) | Eine Auswahl ausdrücklich starten oder sichern; Suchen allein verändert die Wiedergabe nicht. |
 | Papierkorb (Playlist-Kopf) | Aktuelle Bibliotheksliste und Warteschlange leeren; gespeicherte Hörfolgen bleiben erhalten. |
 
@@ -172,7 +172,7 @@ App Store offen bleibt.
 - **Hintergrundwiedergabe**: Die Musik läuft bei gesperrtem Display weiter, mit
   Play/Pause, Vor/Zurück und Positionssteuerung über Sperrbildschirm,
   Kontrollzentrum und AirPods.
-- **Titelauswahl**: Antippen eines Bibliothekstitels bereitet ihn vor; Play startet die Wiedergabe. Die Auswahl eines anderen Titels stoppt den bisherigen und bereitet den neuen vor.
+- **Titelauswahl**: Während laufender Musik startet das Antippen eines anderen Bibliothekstitels diesen sofort. Aus Pause oder Stop bereitet die Auswahl den Titel vor; Play startet ihn. Ohne SID-Titel erscheint der Dateiname.
 - **Ordner-Import**: Einen Ordner auswählen (iCloud Drive, Nextcloud, „Auf
   meinem iPhone“) — die App läuft rekursiv hindurch, erhält die
   Unterordnerstruktur, überspringt Duplikate, zeigt Fortschritt und lässt sich
@@ -187,9 +187,16 @@ App Store offen bleibt.
   Suche, Favoriten, Shuffle, Session-Restore, Theme und Audio-Export wie auf dem
   Desktop.
 
-Oszilloskop und alle UI-Timer laufen nur, solange die App im Vordergrund ist. Im
-Hintergrund spielt das Audio weiter und die Visualisierung steht still — das ist
-hier der mit Abstand größte Batteriehebel.
+Das Oszilloskop zeichnet nur im sichtbaren Wiedergabe-Tab bei aktiver App. Im
+Hintergrund sinken die Zeitaktualisierungen auf einmal pro Sekunde; Audio, Auto-Next
+und Sperrbildschirm-Anzeige laufen unabhängig weiter. Kompakte Bibliothekszeilen
+und Musik, Listen, Folge und Verlauf über der Suche nutzen den Bildschirm besser.
+Tippen auf eine Kurve schaltet die Stimme stumm; der dezente Solo-Knopf liegt
+rechts darüber. Abschnittsschleifen liegen unter „Werkzeuge und Details“.
+
+Ein sporadischer Stopp nach der Rückkehr zur App oder einem Titelwechsel wird
+weiter untersucht. Die Wechseltests im Simulator bestanden; damit ist der Fehler
+auf echter Hardware noch nicht als behoben belegt. Siehe [Prüfstand und Grenzen](docs/validation-1.9.49.md).
 
 **Bauen**
 
@@ -307,7 +314,7 @@ Gegenüber dem Original wurden folgende Korrekturen vorgenommen:
 
 | Schicht | HTML5 | macOS (Swift) |
 |---|---|---|
-| Parser | `sidplayer.js` | `SidParser.swift` |
+| Parser | `sid-format.js` (gemeinsam für Oberfläche und Worklet) | `SidParser.swift` |
 | DSP / Emulator | `sid-player-worklet.js` (AudioWorklet) | `ViciousProcessor.swift` (`AVAudioSourceNode`) |
 | UI | Vanilla JS + CSS Custom Properties | SwiftUI + Canvas |
 
