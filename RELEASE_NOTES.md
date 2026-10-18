@@ -1,3 +1,11 @@
+Vicious SID Player 1.9.39 adds per-chip piano/frequency and register views, plus A/B loops on Mac, iPhone and HTML5.
+
+- Read effective PAL/NTSC frequencies, approximate notes and emulated register values. Noise, combined waveforms and digi samples have visible pitch limitations; registers are read only.
+- Set temporary A/B markers and repeat the interval without another history entry or Auto-Next. Pause retains the loop; Stop keeps the markers. Seeking outside turns it off, and a new file or subtune clears it. Native sleep expiry stops playback.
+- Long A positions are prepared outside the audio callback. Repeated jumps restore the prepared CPU, memory, oscillator, envelope and filter state into existing buffers.
+
+See [validation](docs/validation-1.9.39.md).
+
 Vicious SID Player 1.9.38 fixes import recovery, personal data saving and queue control.
 
 - An interrupted import no longer leaves an empty staging folder that blocks startup. macOS warns before quitting if custom end times could not be saved and allows a retry.

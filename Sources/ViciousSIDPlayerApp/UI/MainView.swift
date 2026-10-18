@@ -712,6 +712,11 @@ public struct MainView: View {
                     Divider()
                         .background(borderCol)
                     
+                    PlaybackLoopControls(coordinator: coordinator)
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                        .background(bgSecondary)
+                    Divider().background(borderCol)
+
                     // Canvas visualizer
                     OscilloscopeView(coordinator: coordinator, theme: theme)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1258,6 +1263,7 @@ public struct MainView: View {
     }
 
     private func applyPlaybackOptions() {
+        coordinator.setLoopDuration(currentDuration)
         coordinator.setFadeEnvelope(playbackOptions.fadeEnvelope(duration: currentDuration, elapsed: coordinator.elapsedSeconds,
             autoNext: autoNext, hasPersonalEnd: personalDuration != nil))
     }
@@ -1286,7 +1292,7 @@ public struct MainView: View {
             currentSubtune: coordinator.currentSubtune, subtuneCount: coordinator.subtunesCount, entry: listening.queue?.current,
             autoNext: autoNext, repeatMode: playbackOptions.document.repeatMode,
             hasExplicitEnd: personalDuration != nil || playbackOptions.document.fadeOutSeconds > 0,
-            stopAfterSubtune: playbackOptions.stopAfterSubtune) else { return }
+            stopAfterSubtune: playbackOptions.stopAfterSubtune, loopEnabled: coordinator.playbackLoop.isEnabled) else { return }
         switch action {
         case .stop:
             if playbackOptions.stopAfterSubtune { playbackOptions.finishSubtuneStop() } else { stopPlayback() }

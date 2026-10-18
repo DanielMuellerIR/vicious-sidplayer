@@ -16,9 +16,11 @@ final class ListeningHistoryIntegrationTests: XCTestCase {
     }
     override func tearDown() async throws {
         for model in models {
+            let estimate = model.lengthEstimateTask
             model.coordinator.stop(); model.stopPlaybackLoop(); model.cancelLengthEstimate()
             model.listening.flush(); model.savedSearches.flush(); model.playbackOptions.cancelSleepTimer(); model.playbackOptions.flush()
             await model.metadataIndex.suspend()
+            await estimate?.value
             _ = await model.history.flush()
         }
         defaults.removePersistentDomain(forName: suite)
@@ -48,6 +50,79 @@ final class ListeningHistoryIntegrationTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(10))
         }
         return model
+    }
+
+    func testLoopMarkersSurviveStopAndInsideSeekButNewSubtuneClearsThem() async throws {
+        let model = try await makeModel()
+        model.select(trackID: "Tune.sid")
+        let coordinator = model.coordinator
+        coordinator.elapsedSeconds = 0.2; coordinator.setLoopStart()
+        coordinator.elapsedSeconds = 0.6; coordinator.setLoopEnd(); coordinator.setLoopEnabled(true)
+        model.seek(to: 0.3)
+        XCTAssertTrue(coordinator.playbackLoop.isEnabled)
+        model.stopPlayback()
+        XCTAssertFalse(coordinator.playbackLoop.isEnabled)
+        XCTAssertEqual(coordinator.playbackLoop.range, 0.2...0.6)
+        coordinator.setLoopEnabled(true); model.seek(to: 2)
+        XCTAssertFalse(coordinator.playbackLoop.isEnabled)
+        XCTAssertEqual(coordinator.playbackLoop.range, 0.2...0.6)
+        model.setSubtune(2)
+        XCTAssertNil(coordinator.playbackLoop.range)
+    }
+
+    func testLoopPreventsNormalCompletionButSleepExpiryStopsIt() async throws {
+        let model = try await makeModel()
+        model.select(trackID: "Tune.sid")
+        let coordinator = model.coordinator
+        coordinator.elapsedSeconds = 0; coordinator.setLoopStart()
+        coordinator.elapsedSeconds = 0.25; coordinator.setLoopEnd(); coordinator.setLoopEnabled(true)
+        coordinator.isPlaying = true
+        model.autoNext = true
+        model.handleConfiguredPlaybackEnd(elapsed: 1000)
+        XCTAssertTrue(coordinator.isPlaying)
+        XCTAssertEqual(coordinator.currentSubtune, 0)
+        try model.playbackOptions.startSleepTimer(seconds: 0.02)
+        try await Task.sleep(for: .milliseconds(50))
+        model.playbackOptions.refreshSleepTimer()
+        XCTAssertTrue(model.playbackOptions.didExpire)
+        XCTAssertFalse(coordinator.isPlaying)
+        XCTAssertFalse(coordinator.playbackLoop.isEnabled)
+        XCTAssertEqual(coordinator.playbackLoop.range, 0...0.25)
+    }
+
+    func testMediaServiceRebuildRestoresLoopOnlyForUnchangedMusic() async throws {
+        let model = try await makeModel()
+        model.select(trackID: "Tune.sid"); model.setSubtune(2)
+        let coordinator = model.coordinator
+        coordinator.elapsedSeconds = 0.2; coordinator.setLoopStart()
+        coordinator.elapsedSeconds = 0.6; coordinator.setLoopEnd(); coordinator.setLoopEnabled(true)
+        coordinator.elapsedSeconds = 0.4
+        model.rebuildAfterMediaServicesReset()
+        XCTAssertEqual(coordinator.currentSubtune, 2)
+        XCTAssertEqual(coordinator.elapsedSeconds, 0.4)
+        XCTAssertEqual(coordinator.playbackLoop.range, 0.2...0.6)
+        XCTAssertTrue(coordinator.playbackLoop.isEnabled)
+        XCTAssertFalse(coordinator.isPlaying)
+
+        model.volume = 0; model.togglePlayPause()
+        for _ in 0..<300 where coordinator.isPreparingSeek || coordinator.isPreparingLoop {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try await Task.sleep(for: .seconds(1))
+        XCTAssertTrue(coordinator.isPlaying)
+        XCTAssertTrue(coordinator.playbackLoop.isEnabled)
+        XCTAssertGreaterThanOrEqual(coordinator.elapsedSeconds, 0.2)
+        XCTAssertLessThan(coordinator.elapsedSeconds, 0.8, "Auch ein gepufferter Seek braucht anschließend seinen A-Zustand")
+        model.togglePlayPause(); XCTAssertTrue(coordinator.isPaused)
+        model.togglePlayPause()
+        XCTAssertFalse(coordinator.isPreparingLoop, "Pause erhält den bereits vorbereiteten A-Zustand")
+        model.stopPlayback()
+
+        var changed = fixture(); changed[0x16] = 0x58
+        try changed.write(to: directory.appendingPathComponent("Documents/Tune.sid"))
+        model.rebuildAfterMediaServicesReset()
+        XCTAssertNil(coordinator.playbackLoop.range)
+        XCTAssertFalse(coordinator.playbackLoop.isEnabled)
     }
 
     func testPreparationAndStoppedSeekNeverMarkAFileAsHeard() async throws {

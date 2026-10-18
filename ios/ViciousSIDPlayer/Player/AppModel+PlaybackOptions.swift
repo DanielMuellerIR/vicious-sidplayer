@@ -7,6 +7,7 @@ extension AppModel {
         currentMD5.map { PlaybackEndTimeTarget(md5: $0, subtune: coordinator.currentSubtune, title: coordinator.trackName) }
     }
     func applyPlaybackOptions() {
+        coordinator.setLoopDuration(currentDuration)
         coordinator.setFadeEnvelope(playbackOptions.fadeEnvelope(duration: currentDuration, elapsed: coordinator.elapsedSeconds,
             autoNext: autoNext, hasPersonalEnd: personalDuration != nil))
     }
@@ -24,7 +25,7 @@ extension AppModel {
             currentSubtune: coordinator.currentSubtune, subtuneCount: coordinator.subtunesCount, entry: listening.queue?.current,
             autoNext: autoNext, repeatMode: playbackOptions.document.repeatMode,
             hasExplicitEnd: personalDuration != nil || playbackOptions.document.fadeOutSeconds > 0,
-            stopAfterSubtune: playbackOptions.stopAfterSubtune) else { return }
+            stopAfterSubtune: playbackOptions.stopAfterSubtune, loopEnabled: coordinator.playbackLoop.isEnabled) else { return }
         switch action {
         case .stop:
             if playbackOptions.stopAfterSubtune { playbackOptions.finishSubtuneStop() } else { stopPlayback() }

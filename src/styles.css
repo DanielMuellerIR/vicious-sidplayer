@@ -564,3 +564,26 @@ body:has(.player.theme-light) #analysis-dialog { --bg-secondary: #fff; --text-pr
 .analysis-voice-actions button { flex: 1; min-width: 0; padding: 6px 3px; }
 .analysis-layout button { min-height: 44px; }
 .analysis-layout button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+.scope-toolbar { flex-wrap: wrap; }
+.loop-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.loop-controls label { display: flex; align-items: center; gap: 4px; }
+.loop-controls small { flex-basis: 100%; color: var(--text-secondary); }
+#analysis-values { flex: 1; min-height: 180px; padding: 12px; overflow: auto; }
+.analysis-value-heading { font: 12px monospace; margin-bottom: 12px; color: var(--text-secondary); }
+.pitch-row { margin-bottom: 12px; font: 12px monospace; }
+.pitch-row.muted { opacity: 0.4; }
+.piano-keys { display: flex; align-items: flex-start; gap: 3px; margin-top: 6px; }
+.piano-keys span { flex: 1; height: 24px; border: 1px solid var(--border); background: var(--bg-secondary); border-radius: 3px; }
+.piano-keys span.black-key { height: 17px; background: var(--text-secondary); }
+.piano-keys span.active-key { background: var(--accent); }
+.register-values { width: 100%; font: 12px monospace; border-collapse: collapse; }
+.register-values td { padding: 4px 6px; border-bottom: 1px solid var(--border); }
+.register-values td:last-child { font-weight: bold; text-align: right; }
+.analysis-hint { font-size: 11px; line-height: 1.5; color: var(--text-secondary); }
+[hidden] { display: none !important; }
+@media (max-width: 768px) {
+  .main { overflow-y: auto; }
+  .sidebar { flex: none; height: 340px; min-height: 0; }
+  .visualizer-container { height: 400px; min-height: 400px; }
+}

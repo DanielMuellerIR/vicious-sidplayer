@@ -113,7 +113,9 @@
 
     <!-- Visualizer Container -->
     <div class="visualizer-container" id="visualizer-container">
-      <div class="scope-toolbar"><label id="scope-chip-label">Scope <select id="scope-chip" aria-label="Displayed SID chip"></select></label><span id="scope-model"></span><button id="analysis-open">Mix / Solo</button></div>
+      <div class="scope-toolbar"><label id="scope-chip-label">Scope <select id="scope-chip" aria-label="Displayed SID chip"></select></label><span id="scope-model"></span><label>View <select id="analysis-view" aria-label="Analysis view"><option value="scope">Scope</option><option value="piano">Piano / Hz</option><option value="registers">Registers</option></select></label><button id="analysis-open">Mix / Solo</button></div>
+      <div class="loop-controls"><button id="loop-a">Set A</button><button id="loop-b">Set B</button><label><input id="loop-enabled" type="checkbox"> A/B</label><button id="loop-clear" aria-label="Clear A/B markers">Clear</button><span id="loop-markers"></span><small id="loop-status"></small></div>
+      <div id="analysis-values" hidden></div>
       <div class="scope-canvas" id="scope-canvas"><canvas id="oscilloscope"></canvas></div>
     </div>
   </div>

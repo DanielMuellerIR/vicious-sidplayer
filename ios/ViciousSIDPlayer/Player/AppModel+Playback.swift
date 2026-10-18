@@ -323,6 +323,8 @@ extension AppModel {
         let subtune = coordinator.currentSubtune
         let position = coordinator.elapsedSeconds
         let wasPlaying = coordinator.isPlaying
+        let loop = coordinator.playbackLoop
+        let md5 = currentMD5
 
         // Nicht nur `stop()`: Nach dem Neustart des Audiodienstes ist die
         // AVAudioEngine selbst ungueltig. Wird sie weiterbenutzt, bleibt die
@@ -339,6 +341,8 @@ extension AppModel {
         // Scrubber und Auto-Next mit der Dauer des falschen Subtunes
         // (gleiches Muster wie in `restoreSessionIfPossible`).
         resolveComputedLengthIfNeeded()
+        applyPlaybackOptions()
+        if md5 != nil, currentMD5 == md5 { coordinator.restoreLoop(loop) }
         // `loadTrack` hat oben Subtune 0 / Position 0 gesichert. Den
         // wiederhergestellten Stand ausdruecklich zuruecksichern: bei pausierter
         // Wiedergabe laeuft kein Playback-Takt, der das nachholen wuerde, und

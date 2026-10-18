@@ -5,6 +5,7 @@ public struct OscilloscopeView: View {
     @ObservedObject var coordinator: ViciousCoordinator
     var theme: PlayerTheme
     @State private var selectedChip = 0
+    @State private var analysisMode = 0
     @State private var showsMixControls = false
     private var displayedChip: Int { coordinator.activeSIDChips.contains(selectedChip) ? selectedChip : coordinator.activeSIDChips[0] }
 
@@ -38,10 +39,14 @@ public struct OscilloscopeView: View {
                 } else { Text(verbatim: "SID 1").font(.caption) }
                 Text(verbatim: "\(coordinator.modelForChip(displayedChip))").font(.caption.monospaced())
                 Spacer(minLength: 8)
+                Picker("Analyseansicht", selection: $analysisMode) {
+                    Text("Oszilloskop").tag(0); Text("Piano / Hz").tag(1); Text("Register").tag(2)
+                }.labelsHidden().frame(width: 130).accessibilityIdentifier("analysis-view")
                 Button("Mischung …") { showsMixControls.toggle() }
                     .popover(isPresented: $showsMixControls) { mixControls }
             }
             .padding(8)
+            if analysisMode == 0 {
             ZStack {
                 scopeCanvas
                 GeometryReader { geo in
@@ -80,6 +85,10 @@ public struct OscilloscopeView: View {
                     .help("SID-Filter an/aus; der Filterzustand läuft weiter")
                     .position(x: 52, y: geo.size.height - 12)
                 }
+            }
+            } else {
+                SIDAnalysisPanel(coordinator: coordinator, chip: displayedChip, mode: analysisMode)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
         }
         .onChange(of: coordinator.activeSIDChips) { chips in

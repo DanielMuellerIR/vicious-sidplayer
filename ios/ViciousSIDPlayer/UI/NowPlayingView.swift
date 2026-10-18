@@ -29,7 +29,7 @@ struct NowPlayingView: View {
                     OscilloscopeView(coordinator: model.coordinator,
                                      palette: palette,
                                      isSceneActive: model.isSceneActive)
-                        .frame(height: 200)
+                        .frame(height: 280)
 
                     SubtuneSelectorView(coordinator: model.coordinator) { index in
                         model.setSubtune(index)
@@ -50,6 +50,8 @@ struct NowPlayingView: View {
                                  duration: model.currentDuration) { seconds in
                         model.seek(to: seconds)
                     }
+
+                    PlaybackLoopControls(coordinator: model.coordinator)
 
                     TransportControlsView(coordinator: model.coordinator,
                                           accent: palette.accent)

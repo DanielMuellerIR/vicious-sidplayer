@@ -390,6 +390,7 @@ async function loadTrack(index, autoplay, subtune = 0, updateListeningQueue = tr
   
   setPlayingUI(false);
   player.stop();
+  clearWebLoopMarkers();
   playBtn.disabled = true;
   positionScrubber.disabled = true;
   subtuneControls.style.display = 'none';
@@ -464,6 +465,7 @@ function setPlayingUI(isPlaying) {
 }
 
 function setSubtune(sub) {
+  clearWebLoopMarkers();
   if (webCollectionBusy) return;
   if (!Number.isInteger(sub) || sub < 0 || sub >= totalSubtunesCount) return;
   observeWebHistory(false, true);
@@ -529,6 +531,8 @@ player.watchVisuals((visuals) => {
   lastVisuals.pulsewidths = visuals.pulsewidths;
   lastVisuals.playtime = visuals.playtime;
   lastVisuals.chips = visuals.chips || null;
+  lastVisuals.clock = visuals.clock || 'pal';
+  renderWebAnalysisValues();
   observeWebHistory();
   const bucket = Math.floor((visuals.playtime || 0) / 5);
   if (bucket !== lastWebSessionBucket) { lastWebSessionBucket = bucket; persistWebListening(); }
@@ -538,7 +542,7 @@ player.watchVisuals((visuals) => {
 bindWebPlayerCallbacks();
 
 async function checkWebAutoNext(playtime) {
-  if (webAdvanceInProgress || !playingState || !autoNextCheck.checked || playtime < SCRUB_MAX) return;
+  if (webPlaybackLoop.enabled || webAdvanceInProgress || !playingState || !autoNextCheck.checked || playtime < SCRUB_MAX) return;
   webAdvanceInProgress = true;
   try {
     if (listeningQueue?.current?.subtune == null && currentSubtune + 1 < totalSubtunesCount) {
@@ -561,6 +565,7 @@ resizeCanvas();
 
 function draw() {
   requestAnimationFrame(draw);
+  if ($('analysis-view').value !== 'scope') return;
 
   const W = canvas.width;
   const H = canvas.height;

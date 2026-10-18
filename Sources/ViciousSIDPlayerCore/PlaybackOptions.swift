@@ -119,8 +119,9 @@ public enum PlaybackCompletionAction: Equatable, Sendable {
 public enum PlaybackCompletionPolicy {
     public static func action(isPlaying: Bool, elapsed: Double, duration: Double, currentSubtune: Int, subtuneCount: Int,
                               entry: ListeningEntry?, autoNext: Bool, repeatMode: PlaybackRepeatMode,
-                              hasExplicitEnd: Bool = false, stopAfterSubtune: Bool = false) -> PlaybackCompletionAction? {
-        guard isPlaying, elapsed.isFinite, duration.isFinite, duration >= 0, elapsed >= duration,
+                              hasExplicitEnd: Bool = false, stopAfterSubtune: Bool = false,
+                              loopEnabled: Bool = false) -> PlaybackCompletionAction? {
+        guard !loopEnabled, isPlaying, elapsed.isFinite, duration.isFinite, duration >= 0, elapsed >= duration,
               autoNext || repeatMode != .off || hasExplicitEnd || stopAfterSubtune else { return nil }
         if stopAfterSubtune || subtuneCount <= 0 { return .stop }
         switch repeatMode {

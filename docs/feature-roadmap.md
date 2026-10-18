@@ -1,6 +1,6 @@
 # Erweiterungsplan
 
-Stand: 2026-10-17. Ausgangspunkt: v1.9.26.
+Stand: 2026-10-18. Ausgangspunkt: v1.9.26.
 
 Dieser Plan setzt die [Erweiterungsanalyse](feature-opportunities.md) um. Jede Stufe umfasst Detailentwurf, Implementierung und Abnahme. Die Budgets sind Aufwandsschätzungen.
 
@@ -15,7 +15,7 @@ Dieser Plan setzt die [Erweiterungsanalyse](feature-opportunities.md) um. Jede S
 | 06 | Nativer Austausch persönlicher Sammlungsdaten | 6–10 h | Auf Mac und iPhone in v1.9.35 abgenommen |
 | 06b | Sammlungsaustausch in HTML5 | 4–6 h | Abgeschlossen in v1.9.36; nativer Rundlauf und Browser-Speicherschutz geprüft |
 | 07 | Solo und getrennte Multi-SID-Steuerung | 4–6 h | In v1.9.37 auf Mac, iPhone und HTML5 abgenommen |
-| 08 | Piano-, Registeransicht und A/B-Schleifen | 8–12 h | Geplant |
+| 08 | Piano-, Registeransicht und A/B-Schleifen | 8–12 h | In v1.9.39 auf Mac, iPhone und HTML5 abgenommen ([Prüfstand](validation-1.9.39.md)) |
 | 09 | Batch-WAV-Export und Mixwahl | 6–10 h | Geplant |
 | 10 | Weitere Exportformate | 4–8 h | Geplant |
 | 11 | Sammlungsprüfung und Wiederfinden | 6–10 h | Geplant |

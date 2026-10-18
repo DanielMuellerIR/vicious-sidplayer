@@ -1,3 +1,11 @@
+Vicious SID Player 1.9.39 ergänzt Piano-/Frequenz- und Registeransichten je Chip sowie A/B-Schleifen auf Mac, iPhone und HTML5.
+
+- Effektive PAL-/NTSC-Frequenzen, angenäherte Noten und emulierte Registerwerte anzeigen. Noise, kombinierte Wellenformen und Digi-Töne haben sichtbare Tonhöhengrenzen; Register sind ausschließlich lesbar.
+- Temporäre A/B-Marker setzen und den Abschnitt ohne weiteren Verlaufseintrag oder Auto-Next wiederholen. Pause erhält die Schleife; Stop erhält die Marker. Ein Sprung außerhalb schaltet sie aus, eine neue Datei oder ein neuer Subtune löscht sie. Der native Schlafablauf beendet die Wiedergabe.
+- Lange A-Positionen werden außerhalb des Audiocallbacks vorbereitet. Rücksprünge übernehmen den vorbereiteten CPU-, Speicher-, Oszillator-, Hüllkurven- und Filterzustand in vorhandene Puffer.
+
+Siehe [Prüfstand](docs/validation-1.9.39.md).
+
 Vicious SID Player 1.9.38 korrigiert Importwiederherstellung, persönliche Datensicherung und Hörfolgensteuerung.
 
 - Ein abgebrochener Import hinterlässt keinen leeren Arbeitsordner mehr, der den Start sperrt. macOS warnt vor dem Beenden, wenn persönliche Endzeiten nicht gesichert werden konnten, und erlaubt einen neuen Versuch.

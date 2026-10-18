@@ -6,6 +6,8 @@ public struct SidChipVisuals: Sendable {
     public let gates: (Int, Int, Int)
     public let waveforms: (Int, Int, Int)
     public let pulsewidths: (Float, Float, Float)
+    public var registers = SIMD32<UInt8>(repeating: 0)
+    public var baseAddress: UInt32 = 0
 
     public static let silent = SidChipVisuals(envelopes: (0, 0, 0), frequencies: (0, 0, 0),
         gates: (0, 0, 0), waveforms: (0, 0, 0), pulsewidths: (0.5, 0.5, 0.5))
@@ -105,6 +107,12 @@ public final class ViciousProcessor: Sendable {
     nonisolated(unsafe) private var initialized: Bool = false
     nonisolated(unsafe) private var finished: Bool = false
     nonisolated(unsafe) private var playtime: Double = 0.0
+    nonisolated(unsafe) private var renderedSamples: UInt64 = 0
+    // Transportzeit läuft über Schleifensprünge hinweg weiter. Nur sie steuert
+    // die Timer-Fadefrist; die angezeigte Titelzeit springt nach A zurück.
+    nonisolated(unsafe) private var transportTime: Double = 0
+    nonisolated(unsafe) private var preparedLoop: PreparedLoop?
+    nonisolated(unsafe) private var loopFileData = Data()
     nonisolated(unsafe) private var clk_ratio: Double = 0.0
     nonisolated(unsafe) private var frame_sampleperiod: Double = 0.0
     nonisolated(unsafe) private var framecnt: Double = 1.0
@@ -300,6 +308,9 @@ public final class ViciousProcessor: Sendable {
             finished = false
             CPUtime = 0.0
             playtime = 0.0
+            renderedSamples = 0
+            transportTime = 0
+            preparedLoop = nil
             initialized = true
         }
     }
@@ -993,8 +1004,13 @@ public final class ViciousProcessor: Sendable {
     // SID-Chip einzeln rendern (chipOut). play()/playStereo() mischen daraus.
     private func synthesizeSample() {
         if loaded && initialized {
+            if let loop = preparedLoop, renderedSamples < loop.state.renderedSamples || renderedSamples >= loop.endSample {
+                restoreLoopState(loop.state)
+            }
             framecnt -= 1.0
             playtime += 1.0 / samplerate
+            transportTime += 1.0 / samplerate
+            renderedSamples += 1
 
             if framecnt <= 0.0 {
                 framecnt = frame_sampleperiod
@@ -1039,7 +1055,7 @@ public final class ViciousProcessor: Sendable {
         mix = chipOut[0] + chipOut[1] + chipOut[2]
 
         let activeVol = SIDamount_vol[min(3, max(1, SIDamount))]
-        return mix * volume * activeVol * fadeEnvelope.gain(at: playtime)
+        return mix * volume * activeVol * fadeEnvelope.gain(at: transportTime)
     }
 
     // Stereo-Variante fuer Multi-SID-Tunes: 1 SID = Mitte; 2 SIDs = Chip 1 links,
@@ -1051,7 +1067,7 @@ public final class ViciousProcessor: Sendable {
         defer { lock.unlock() }
 
         synthesizeSample()
-        let activeVol = SIDamount_vol[min(3, max(1, SIDamount))] * volume * fadeEnvelope.gain(at: playtime)
+        let activeVol = SIDamount_vol[min(3, max(1, SIDamount))] * volume * fadeEnvelope.gain(at: transportTime)
 
         if SIDamount <= 1 {
             let mono = chipOut[0] * activeVol
@@ -1096,6 +1112,8 @@ public final class ViciousProcessor: Sendable {
         
         loaded = false
         initialized = false
+        preparedLoop = nil
+        loopFileData = sidFile.binaryData
         initSID()
 
         loadaddr = sidFile.loadAddr
@@ -1169,7 +1187,10 @@ public final class ViciousProcessor: Sendable {
     public func setFadeEnvelope(_ envelope: PlaybackFadeEnvelope) {
         lock.lock()
         defer { lock.unlock() }
-        fadeEnvelope = envelope
+        let offset = transportTime - playtime
+        fadeEnvelope = PlaybackFadeEnvelope(
+            songEnd: preparedLoop == nil ? envelope.songEnd.map { $0 + offset } : nil,
+            timerEnd: envelope.timerEnd.map { $0 + offset }, seconds: envelope.seconds)
     }
 
     // Aktuelles SID-Modell anwenden: Nutzer-Override hat Vorrang (gilt dann fuer
@@ -1192,6 +1213,7 @@ public final class ViciousProcessor: Sendable {
     public func setModelOverride(_ model: Double?) {
         lock.lock()
         defer { lock.unlock() }
+        preparedLoop = nil
         modelOverride = model
         applyCurrentModel()
     }
@@ -1202,6 +1224,7 @@ public final class ViciousProcessor: Sendable {
         guard voice >= 0 && voice < SID_CHANNEL_AMOUNT else { return }
         lock.lock()
         defer { lock.unlock() }
+        preparedLoop = nil
         voiceMuted[voice] = muted
         voiceMuted[voice + 3] = muted
         voiceMuted[voice + 6] = muted
@@ -1211,6 +1234,7 @@ public final class ViciousProcessor: Sendable {
         guard (0..<9).contains(channel) else { return }
         lock.lock()
         defer { lock.unlock() }
+        preparedLoop = nil
         voiceMuted[channel] = muted
     }
 
@@ -1219,6 +1243,7 @@ public final class ViciousProcessor: Sendable {
         guard muted.count == 9 else { return false }
         lock.lock()
         defer { lock.unlock() }
+        preparedLoop = nil
         voiceMuted = muted
         return true
     }
@@ -1227,6 +1252,7 @@ public final class ViciousProcessor: Sendable {
     public func setFilterEnabled(_ enabled: Bool) {
         lock.lock()
         defer { lock.unlock() }
+        preparedLoop = nil
         filterEnabled = enabled
     }
 
@@ -1296,6 +1322,196 @@ public final class ViciousProcessor: Sendable {
         }
     }
 
+    /// Opaquer, unveränderlicher A-Zustand. Ausschließlich außerhalb des
+    /// Audiocallbacks erstellen; die Ausgabe kopiert ihn in eigene feste Puffer.
+    public struct PreparedLoop: Sendable {
+        fileprivate let context: LoopContext
+        fileprivate let state: LoopState
+        fileprivate let endSample: UInt64
+    }
+    fileprivate struct LoopContext: Equatable, Sendable {
+        let data: Data
+        let rate: Double
+        let clock: C64Clock
+        let sub: Int
+        let load: UInt16
+        let initAddress: UInt16
+        let play: UInt16
+        let timers: [UInt8]
+        let addresses: [UInt32]
+        let models: [Double]
+        let muted: [Bool]
+        let filter: Bool
+    }
+    fileprivate struct LoopState: Sendable {
+        let memory: [UInt8]
+        let PC: UInt16
+        let A: UInt8
+        let X: UInt8
+        let Y: UInt8
+        let SP: UInt8
+        let IR: UInt8
+        let addr: UInt32
+        let ST: UInt8
+        let cycles: Int
+        let storadd: UInt32
+        let SID_model: Double
+        let finished: Bool
+        let playtime: Double
+        let renderedSamples: UInt64
+        let frame_sampleperiod: Double
+        let framecnt: Double
+        let CPUtime: Double
+        let pPC: UInt16
+        let mix: Double
+        let chipOut: [Double]
+        let ADSRstate: [UInt8]
+        let ratecnt: [Double]
+        let envcnt: [Double]
+        let expcnt: [Double]
+        let prevSR: [UInt8]
+        let phaseaccu: [Double]
+        let prevaccu: [Double]
+        let sourceMSBrise: [UInt8]
+        let sourceMSB: [Double]
+        let noise_LFSR: [UInt32]
+        let prevwfout: [Double]
+        let prevwavdata: [Double]
+        let prevlowpass: [Double]
+        let prevbandpass: [Double]
+    }
+    private func loopContext() -> LoopContext {
+        LoopContext(data: loopFileData, rate: samplerate, clock: clock, sub: subtune,
+                    load: loadaddr, initAddress: initaddr, play: playaddf, timers: timermode,
+                    addresses: SID_address, models: preferred_SID_model, muted: voiceMuted, filter: filterEnabled)
+    }
+    public static func prepareLoop(sid: SidFileData, subtune: Int, sampleRate: Double,
+                                   range: ClosedRange<Double>, model: Int? = nil,
+                                   muted: [Bool] = Array(repeating: false, count: 9),
+                                   filterEnabled: Bool = true, clockMode: SidClockMode = .auto,
+                                   cancellationCheck: () throws -> Void = {}) throws -> PreparedLoop {
+        guard range.lowerBound.isFinite, range.upperBound.isFinite, range.lowerBound >= 0,
+              range.lowerBound <= maximumSeekSeconds, range.upperBound * sampleRate < Double(UInt64.max), range.upperBound - range.lowerBound >= PlaybackLoop.minimumSpan,
+              sampleRate.isFinite, sampleRate > 0, muted.count == 9,
+              floor(range.upperBound * sampleRate) > floor(range.lowerBound * sampleRate),
+              (0..<sid.subtuneAmount).contains(subtune) else { throw PlaybackOptionError.invalidDuration }
+        try cancellationCheck()
+        let processor = ViciousProcessor(sampleRate: sampleRate, clockMode: clockMode)
+        _ = processor.loadSID(sidFile: sid)
+        processor.setModelOverride(model.map(Double.init))
+        processor.setMutedChannels(muted)
+        processor.setFilterEnabled(filterEnabled)
+        processor.initSubtune(sub: subtune)
+        try processor.seekCancellable(seconds: range.lowerBound, cancellationCheck: cancellationCheck)
+        return processor.captureLoop(end: range.upperBound)
+    }
+    private func captureLoop(end: Double) -> PreparedLoop {
+        let state = LoopState(
+            memory: memory.data.withUnsafeBufferPointer { Array($0) },
+            PC: PC,
+            A: A,
+            X: X,
+            Y: Y,
+            SP: SP,
+            IR: IR,
+            addr: addr,
+            ST: ST,
+            cycles: cycles,
+            storadd: storadd,
+            SID_model: SID_model,
+            finished: finished,
+            playtime: playtime,
+            renderedSamples: renderedSamples,
+            frame_sampleperiod: frame_sampleperiod,
+            framecnt: framecnt,
+            CPUtime: CPUtime,
+            pPC: pPC,
+            mix: mix,
+            chipOut: chipOut.withUnsafeBufferPointer { Array($0) },
+            ADSRstate: ADSRstate.withUnsafeBufferPointer { Array($0) },
+            ratecnt: ratecnt.withUnsafeBufferPointer { Array($0) },
+            envcnt: envcnt.withUnsafeBufferPointer { Array($0) },
+            expcnt: expcnt.withUnsafeBufferPointer { Array($0) },
+            prevSR: prevSR.withUnsafeBufferPointer { Array($0) },
+            phaseaccu: phaseaccu.withUnsafeBufferPointer { Array($0) },
+            prevaccu: prevaccu.withUnsafeBufferPointer { Array($0) },
+            sourceMSBrise: sourceMSBrise.withUnsafeBufferPointer { Array($0) },
+            sourceMSB: sourceMSB.withUnsafeBufferPointer { Array($0) },
+            noise_LFSR: noise_LFSR.withUnsafeBufferPointer { Array($0) },
+            prevwfout: prevwfout.withUnsafeBufferPointer { Array($0) },
+            prevwavdata: prevwavdata.withUnsafeBufferPointer { Array($0) },
+            prevlowpass: prevlowpass.withUnsafeBufferPointer { Array($0) },
+            prevbandpass: prevbandpass.withUnsafeBufferPointer { Array($0) })
+        return PreparedLoop(context: loopContext(), state: state, endSample: UInt64((end * samplerate).rounded(.down)))
+    }
+    @discardableResult
+    public func installLoop(_ loop: PreparedLoop) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard loaded, initialized, loop.context == loopContext() else { return false }
+        // Auch noch nie benutzte (z. B. stille) Stimmen können Literalspeicher
+        // teilen. Vor dem ersten Rücksprung jeden Zielpuffer ausdrücklich lösen.
+        memory.data = memory.data.withUnsafeBufferPointer { Array($0) }
+        chipOut = chipOut.withUnsafeBufferPointer { Array($0) }
+        ADSRstate = ADSRstate.withUnsafeBufferPointer { Array($0) }
+        ratecnt = ratecnt.withUnsafeBufferPointer { Array($0) }
+        envcnt = envcnt.withUnsafeBufferPointer { Array($0) }
+        expcnt = expcnt.withUnsafeBufferPointer { Array($0) }
+        prevSR = prevSR.withUnsafeBufferPointer { Array($0) }
+        phaseaccu = phaseaccu.withUnsafeBufferPointer { Array($0) }
+        prevaccu = prevaccu.withUnsafeBufferPointer { Array($0) }
+        sourceMSBrise = sourceMSBrise.withUnsafeBufferPointer { Array($0) }
+        sourceMSB = sourceMSB.withUnsafeBufferPointer { Array($0) }
+        noise_LFSR = noise_LFSR.withUnsafeBufferPointer { Array($0) }
+        prevwfout = prevwfout.withUnsafeBufferPointer { Array($0) }
+        prevwavdata = prevwavdata.withUnsafeBufferPointer { Array($0) }
+        prevlowpass = prevlowpass.withUnsafeBufferPointer { Array($0) }
+        prevbandpass = prevbandpass.withUnsafeBufferPointer { Array($0) }
+        preparedLoop = loop
+        // Song-Fade endet nicht mitten in der Schleife. Die Timerfrist bleibt.
+        fadeEnvelope = PlaybackFadeEnvelope(timerEnd: fadeEnvelope.timerEnd, seconds: fadeEnvelope.seconds)
+        return true
+    }
+    public func disableLoop() {
+        lock.lock(); preparedLoop = nil; lock.unlock()
+    }
+    private func restoreLoopState(_ state: LoopState) {
+        copyLoopElements(&memory.data, state.memory)
+        PC = state.PC
+        A = state.A
+        X = state.X
+        Y = state.Y
+        SP = state.SP
+        IR = state.IR
+        addr = state.addr
+        ST = state.ST
+        cycles = state.cycles
+        storadd = state.storadd
+        SID_model = state.SID_model
+        finished = state.finished
+        playtime = state.playtime
+        renderedSamples = state.renderedSamples
+        frame_sampleperiod = state.frame_sampleperiod
+        framecnt = state.framecnt
+        CPUtime = state.CPUtime
+        pPC = state.pPC
+        mix = state.mix
+        copyLoopElements(&chipOut, state.chipOut)
+        copyLoopElements(&ADSRstate, state.ADSRstate)
+        copyLoopElements(&ratecnt, state.ratecnt)
+        copyLoopElements(&envcnt, state.envcnt)
+        copyLoopElements(&expcnt, state.expcnt)
+        copyLoopElements(&prevSR, state.prevSR)
+        copyLoopElements(&phaseaccu, state.phaseaccu)
+        copyLoopElements(&prevaccu, state.prevaccu)
+        copyLoopElements(&sourceMSBrise, state.sourceMSBrise)
+        copyLoopElements(&sourceMSB, state.sourceMSB)
+        copyLoopElements(&noise_LFSR, state.noise_LFSR)
+        copyLoopElements(&prevwfout, state.prevwfout)
+        copyLoopElements(&prevwavdata, state.prevwavdata)
+        copyLoopElements(&prevlowpass, state.prevlowpass)
+        copyLoopElements(&prevbandpass, state.prevbandpass)
+    }
+
     public func getChannelsData() -> SidVisuals {
         lock.lock()
         defer { lock.unlock() }
@@ -1310,12 +1526,18 @@ public final class ViciousProcessor: Sendable {
                 let address = base + voice * 7
                 return Float(Double(UInt16(memory[address + 2]) | UInt16(memory[address + 3] & 0x0F) << 8) / 4096.0)
             }
-            return SidChipVisuals(
+            var result = SidChipVisuals(
                 envelopes: (Float(envcnt[channel] / 255), Float(envcnt[channel + 1] / 255), Float(envcnt[channel + 2] / 255)),
                 frequencies: (frequency(0), frequency(1), frequency(2)),
                 gates: (Int(memory[base + 4] & 1), Int(memory[base + 11] & 1), Int(memory[base + 18] & 1)),
                 waveforms: (Int(memory[base + 4] & 0xF0), Int(memory[base + 11] & 0xF0), Int(memory[base + 18] & 0xF0)),
                 pulsewidths: (pulsewidth(0), pulsewidth(1), pulsewidth(2)))
+            result.baseAddress = SID_address[index]
+            // Reiner Speicher-Peek: POTX/POTY werden nicht als gelesen ausgegeben.
+            for offset in 0...0x18 { result.registers[offset] = memory[base + offset] }
+            result.registers[0x1b] = memory[base + 0x1b]
+            result.registers[0x1c] = memory[base + 0x1c]
+            return result
         }
         return SidVisuals(chips: (chip(0), chip(1), chip(2)), playtime: playtime)
     }
@@ -1323,7 +1545,7 @@ public final class ViciousProcessor: Sendable {
 }
 
 struct SafeMemory: Sendable {
-    private var data = [UInt8](repeating: 0, count: 65536)
+    fileprivate var data = [UInt8](repeating: 0, count: 65536)
     
     subscript(index: Int) -> UInt8 {
         get {
@@ -1354,5 +1576,18 @@ struct SafeMemory: Sendable {
 
     var count: Int {
         return 65536
+    }
+}
+
+// Snapshot und Ziel besitzen getrennte Speicher. Kein Array-Austausch, der
+// beim nächsten Sample Copy-on-write und eine Allokation auslösen würde.
+private func copyLoopElements<T>(_ target: inout [T], _ source: [T]) {
+    precondition(target.count == source.count)
+    target.withUnsafeMutableBufferPointer { destination in
+        source.withUnsafeBufferPointer { origin in
+            if let to = destination.baseAddress, let from = origin.baseAddress {
+                to.update(from: from, count: origin.count)
+            }
+        }
     }
 }

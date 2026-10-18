@@ -66,6 +66,13 @@ export class SidPlayer {
     this.playGen = 0;
     this.audioGen = 0;
     this.audioSetupPromise = null;
+    this.loopData = null;
+    this.loopRange = null;
+    this.loopRequest = 0;
+    this.loopWorker = null;
+    this.loopReady = false;
+    this.loopWorkerSource = null;
+    this.loopStateCallback = null;
 
     // Pending SID binary data (loaded without AudioContext)
     this.pendingData = null;
@@ -150,6 +157,10 @@ export class SidPlayer {
         if (this.visualCallback) this.visualCallback(data.data);
       } else if (data.type === 'seekComplete' && data.generation === this.loadGen && data.request === this.seekRequest) {
         this.seeking = false;
+      } else if (data.type === 'loopReady' && data.generation === this.loadGen && data.request === this.loopRequest) {
+        this.loopReady = data.installed;
+        if (!data.installed) this.setLoopRange(null);
+        this.loopStateCallback?.(data.installed ? 'ready' : 'error');
       } else if (data.type === 'loaded' && data.generation === this.loadGen) {
         this.loaded = true;
       }
@@ -166,6 +177,7 @@ export class SidPlayer {
    */
   async load(url, subtune = 0) {
     const myGen = ++this.loadGen;
+    this.setLoopRange(null);
     this.pendingSeekSeconds = null;
     this.seeking = false;
     this.stop();
@@ -182,6 +194,8 @@ export class SidPlayer {
     const meta = parseSidHeader(uint8);
     if (!meta) throw new Error('Invalid SID file (bad header)');
 
+    this.setLoopRange(null);
+    this.loopData = uint8.slice();
     this.pendingData = uint8;
     this.pendingSubtune = subtune;
     this.loaded = true;
@@ -205,6 +219,7 @@ export class SidPlayer {
     // wird dennoch erhoeht, damit ein evtl. noch laufender asynchroner load()
     // (mit await fetch) sich anschliessend selbst als stale erkennt.
     this.loadGen++;
+    this.setLoopRange(null);
     this.pendingSeekSeconds = null;
     this.seeking = false;
     this.stop();
@@ -214,6 +229,8 @@ export class SidPlayer {
     const meta = parseSidHeader(uint8);
     if (!meta) throw new Error('Invalid SID file (bad header)');
 
+    this.setLoopRange(null);
+    this.loopData = uint8.slice();
     this.pendingData = uint8;
     this.pendingSubtune = subtune;
     this.loaded = true;
@@ -253,6 +270,7 @@ export class SidPlayer {
     }
     this.workletNode.port.postMessage({ type: 'play' });
     this.playing = true;
+    if (this.loopRange && !this.loopWorker && !this.loopReady) this.refreshLoop();
   }
 
   stop() {
@@ -265,10 +283,12 @@ export class SidPlayer {
     if (!Array.isArray(muted) || muted.length !== 9 || !muted.every(value => typeof value === 'boolean')) return false;
     this.mutedChannels = [...muted];
     this.workletNode?.port.postMessage({ type: 'setMutedChannels', muted: this.mutedChannels });
+    this.refreshLoop();
     return true;
   }
 
   setSubtune(subtune) {
+    this.setLoopRange(null);
     this.pendingSubtune = subtune;
     this.pendingSeekSeconds = null;
     this.seeking = false;
@@ -285,10 +305,12 @@ export class SidPlayer {
    */
   seek(seconds) {
     const target = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+    if (this.loopRange && (target < this.loopRange[0] || target > this.loopRange[1])) this.setLoopRange(null);
     if (this.workletNode) {
       this.seeking = true;
       this.workletNode.port.postMessage({ type: 'seek', seconds: target, request: ++this.seekRequest });
     } else { this.pendingSeekSeconds = target; }
+    this.refreshLoop();
   }
 
   setVolume(volume) {
@@ -304,6 +326,47 @@ export class SidPlayer {
       this.seeking = this.loaded;
       this.workletNode.port.postMessage({ type: 'setClockMode', mode: this.clockMode, request: ++this.seekRequest });
     }
+    this.refreshLoop();
+  }
+
+  setLoopRange(range, workerSource = this.loopWorkerSource) {
+    if (range && (!Array.isArray(range) || range.length !== 2 || !range.every(Number.isFinite)
+        || range[0] < 0 || range[0] > 1200 || range[1] - range[0] < 0.25)) return false;
+    this.loopRange = range ? [...range] : null;
+    this.loopWorkerSource = workerSource;
+    this.refreshLoop();
+    return true;
+  }
+
+  refreshLoop() {
+    this.loopReady = false;
+    const request = ++this.loopRequest, generation = this.loadGen;
+    this.loopWorker?.terminate(); this.loopWorker = null;
+    this.workletNode?.port.postMessage({ type: 'prepareLoop', request });
+    if (!this.loopRange) { this.loopStateCallback?.('off'); return; }
+    if (!this.workletNode || !this.loopData) { this.loopStateCallback?.('waiting'); return; }
+    this.loopStateCallback?.('preparing');
+    try {
+      if (typeof this.loopWorkerSource !== 'string' || !this.loopWorkerSource.trim()) throw new Error('Loop worker source unavailable');
+      const url = URL.createObjectURL(new Blob([this.loopWorkerSource], { type: 'application/javascript' }));
+      let worker;
+      try { worker = new Worker(url); } finally { URL.revokeObjectURL(url); }
+      this.loopWorker = worker;
+      const fail = () => {
+        if (request !== this.loopRequest || generation !== this.loadGen) return;
+        this.setLoopRange(null); this.loopStateCallback?.('error');
+      };
+      worker.onerror = fail;
+      worker.onmessage = event => {
+        if (request !== this.loopRequest || generation !== this.loadGen) return;
+        if (event.data.error) { fail(); return; }
+        worker.terminate(); this.loopWorker = null;
+        this.workletNode?.port.postMessage({ type: 'installLoop', snapshot: event.data.snapshot, request, generation });
+      };
+      worker.postMessage({ sampleRate: this.audioCtx.sampleRate, data: this.loopData,
+        subtune: this.pendingSubtune, clockMode: this.clockMode, muted: this.mutedChannels,
+        start: this.loopRange[0], end: this.loopRange[1] });
+    } catch (_) { this.setLoopRange(null); this.loopStateCallback?.('error'); }
   }
 
   watchVisuals(callback) {
@@ -315,6 +378,8 @@ export class SidPlayer {
   }
 
   unload() {
+    this.setLoopRange(null);
+    this.loopData = null;
     this.loadGen++;
     this.audioGen++;
     this.seeking = false;

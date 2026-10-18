@@ -62,6 +62,8 @@ class SidPlayerProcessor {
     let initialized = 0;
     let finished = 0;
     let playtime = 0;
+    let renderedSamples = 0;
+    let preparedLoop = null;
     let seekRemaining = 0;
 
     let clk_ratio = cpuClock / samplerate;
@@ -240,6 +242,8 @@ class SidPlayerProcessor {
         finished = 0;
         CPUtime = 0;
         playtime = 0;
+        renderedSamples = 0;
+        preparedLoop = null;
         initialized = 1;
       }
     }
@@ -541,8 +545,10 @@ class SidPlayerProcessor {
 
     function play() {
       if (loaded && initialized) {
+        if (preparedLoop && (renderedSamples < preparedLoop.state.renderedSamples || renderedSamples >= preparedLoop.endSample)) restoreSnapshot(preparedLoop.state);
         framecnt--;
         playtime += 1 / samplerate;
+        renderedSamples++;
 
         if (framecnt <= 0) {
           framecnt = frame_sampleperiod;
@@ -597,6 +603,7 @@ class SidPlayerProcessor {
     this.loadSID = function(filedata) {
       loaded = 0;
       initialized = 0;
+      preparedLoop = null;
       initSID();
       
       // dataOffset ist ein 16-Bit-Big-Endian-Feld an Header-Position 6-7.
@@ -702,6 +709,7 @@ class SidPlayerProcessor {
 
     this.setMutedChannels = function(muted) {
       if (!Array.isArray(muted) || muted.length !== 9 || !muted.every(value => typeof value === 'boolean')) return false;
+      preparedLoop = null;
       for (let channel = 0; channel < 9; channel++) voiceMuted[channel] = muted[channel];
       return true;
     };
@@ -730,11 +738,95 @@ class SidPlayerProcessor {
       this.advanceSeek(Number.MAX_SAFE_INTEGER);
     };
 
+    // Nur der vorbereitende Dedicated Worker erzeugt diese Kopie. Restore
+    // benutzt vorhandene Puffer, statt im Audiocallback einen Emulator zu bauen.
+    this.captureLoop = end => ({
+      context: { samplerate, clock, subtune, loadaddr, initaddr, playaddf,
+        timermode: timermode.slice(), addresses: SID_address.slice(), models: preferred_SID_model.slice(),
+        muted: voiceMuted.slice(), loadedMemory: loadedMemory.slice() },
+      endSample: Math.floor(end * samplerate),
+      state: {initialized, finished, playtime, renderedSamples, framecnt, CPUtime, pPC, mix, PC, A, T, X, Y, SP, IR, addr, ST, cycles, storadd, SID_model, playaddr, frame_sampleperiod, usesCIATimer, combiwf, prevgate, chnadd, ctrl, wf, test, period, step, SR, accuadd, MSB, tmp, pw, lim, wfout, cutoff, resonance, filtin, output, memory: memory.slice(), ADSRstate: ADSRstate.slice(), ratecnt: ratecnt.slice(), envcnt: envcnt.slice(), expcnt: expcnt.slice(), prevSR: prevSR.slice(), phaseaccu: phaseaccu.slice(), prevaccu: prevaccu.slice(), sourceMSBrise: sourceMSBrise.slice(), sourceMSB: sourceMSB.slice(), noise_LFSR: noise_LFSR.slice(), prevwfout: prevwfout.slice(), prevwavdata: prevwavdata.slice(), prevlowpass: prevlowpass.slice(), prevbandpass: prevbandpass.slice()}
+    });
+    function restoreSnapshot(state) {
+      initialized = state.initialized;
+      finished = state.finished;
+      playtime = state.playtime;
+      renderedSamples = state.renderedSamples;
+      framecnt = state.framecnt;
+      CPUtime = state.CPUtime;
+      pPC = state.pPC;
+      mix = state.mix;
+      PC = state.PC;
+      A = state.A;
+      T = state.T;
+      X = state.X;
+      Y = state.Y;
+      SP = state.SP;
+      IR = state.IR;
+      addr = state.addr;
+      ST = state.ST;
+      cycles = state.cycles;
+      storadd = state.storadd;
+      SID_model = state.SID_model;
+      playaddr = state.playaddr;
+      frame_sampleperiod = state.frame_sampleperiod;
+      usesCIATimer = state.usesCIATimer;
+      combiwf = state.combiwf;
+      prevgate = state.prevgate;
+      chnadd = state.chnadd;
+      ctrl = state.ctrl;
+      wf = state.wf;
+      test = state.test;
+      period = state.period;
+      step = state.step;
+      SR = state.SR;
+      accuadd = state.accuadd;
+      MSB = state.MSB;
+      tmp = state.tmp;
+      pw = state.pw;
+      lim = state.lim;
+      wfout = state.wfout;
+      cutoff = state.cutoff;
+      resonance = state.resonance;
+      filtin = state.filtin;
+      output = state.output;
+      memory.set(state.memory);
+      for (let i = 0; i < ADSRstate.length; i++) ADSRstate[i] = state.ADSRstate[i];
+      for (let i = 0; i < ratecnt.length; i++) ratecnt[i] = state.ratecnt[i];
+      for (let i = 0; i < envcnt.length; i++) envcnt[i] = state.envcnt[i];
+      for (let i = 0; i < expcnt.length; i++) expcnt[i] = state.expcnt[i];
+      for (let i = 0; i < prevSR.length; i++) prevSR[i] = state.prevSR[i];
+      for (let i = 0; i < phaseaccu.length; i++) phaseaccu[i] = state.phaseaccu[i];
+      for (let i = 0; i < prevaccu.length; i++) prevaccu[i] = state.prevaccu[i];
+      for (let i = 0; i < sourceMSBrise.length; i++) sourceMSBrise[i] = state.sourceMSBrise[i];
+      for (let i = 0; i < sourceMSB.length; i++) sourceMSB[i] = state.sourceMSB[i];
+      for (let i = 0; i < noise_LFSR.length; i++) noise_LFSR[i] = state.noise_LFSR[i];
+      for (let i = 0; i < prevwfout.length; i++) prevwfout[i] = state.prevwfout[i];
+      for (let i = 0; i < prevwavdata.length; i++) prevwavdata[i] = state.prevwavdata[i];
+      for (let i = 0; i < prevlowpass.length; i++) prevlowpass[i] = state.prevlowpass[i];
+      for (let i = 0; i < prevbandpass.length; i++) prevbandpass[i] = state.prevbandpass[i];
+    }
+    this.installLoop = snapshot => {
+      const equal = (a, b) => a && b && a.length === b.length && a.every((value, i) => value === b[i]);
+      const c = snapshot?.context, state = snapshot?.state;
+      if (!loaded || !initialized || !c || !state || c.samplerate !== samplerate || c.clock !== clock || c.subtune !== subtune
+          || c.loadaddr !== loadaddr || c.initaddr !== initaddr || c.playaddf !== playaddf
+          || !equal(c.timermode, timermode) || !equal(c.addresses, SID_address)
+          || !equal(c.models, preferred_SID_model) || !equal(c.muted, voiceMuted)
+          || !equal(c.loadedMemory, loadedMemory) || !Number.isSafeInteger(snapshot.endSample)
+          || snapshot.endSample - state.renderedSamples < Math.floor(0.25 * samplerate)) return false;
+      preparedLoop = snapshot;
+      return true;
+    };
+    this.disableLoop = () => { preparedLoop = null; };
+
     this.getChannelsData = function() {
       const chips = SID_address.map((base, chip) => {
         if (!base) return null;
         const channels = [0, 1, 2];
         return {
+          baseAddress: base,
+          registers: Array.from({ length: 32 }, (_, offset) => offset <= 0x18 || offset === 0x1b || offset === 0x1c ? memory[base + offset] : null),
           envelopes: channels.map(voice => envcnt[chip * 3 + voice] / 255),
           frequencies: channels.map(voice => memory[base + voice * 7] + memory[base + voice * 7 + 1] * 256),
           gates: channels.map(voice => memory[base + voice * 7 + 4] & 1),
@@ -756,6 +848,7 @@ class SidPlayerWorklet extends AudioWorkletProcessor {
     this.loaded = false;
     this.seeking = false;
     this.seekRequest = 0;
+    this.loopRequest = 0;
     
     this.visualizerTicker = 0;
     this.generation = 0;
@@ -769,6 +862,12 @@ class SidPlayerWorklet extends AudioWorkletProcessor {
         this.engine.initSubtune(data.subtune || 0);
         this.loaded = true;
         this.port.postMessage({ type: 'loaded', metadata, generation: data.generation });
+      } else if (data.type === 'prepareLoop') {
+        this.loopRequest = data.request;
+        this.engine.disableLoop();
+      } else if (data.type === 'installLoop' && data.generation === this.generation && data.request === this.loopRequest) {
+        const installed = this.engine.installLoop(data.snapshot);
+        this.port.postMessage({ type: 'loopReady', installed, generation: this.generation, request: data.request });
       } else if (data.type === 'play') {
         this.playing = true;
       } else if (data.type === 'stop') {

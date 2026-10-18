@@ -194,6 +194,7 @@ def strip_module_keywords(src: str) -> str:
 def build(minify: bool = True) -> Path:
     """Baut die finale sidplayer.html."""
     worklet_src = (HERE / 'sid-player-worklet.js').read_text()
+    loop_worker_src = 'let sampleRate=44100;\n' + worklet_src.split('\nclass SidPlayerWorklet')[0] + (HERE / 'sid-loop-worker.js').read_text()
     sidplayer_src = (HERE / 'sidplayer.js').read_text()
     css_src = (SRC_DIR / 'styles.css').read_text()
     body_src = (SRC_DIR / 'body.html').read_text()
@@ -209,6 +210,7 @@ def build(minify: bool = True) -> Path:
 
     if minify:
         worklet_src = minify_js(worklet_src)
+        loop_worker_src = minify_js(loop_worker_src)
         sidplayer_src = minify_js(sidplayer_src)
         app_src = minify_js(app_src)
         css_src = minify_css(css_src)
@@ -227,6 +229,7 @@ def build(minify: bool = True) -> Path:
         f'{body_src}'
         '<script>'
         f'const WORKLET_SOURCE={worklet_src!r};'
+        f'const LOOP_WORKER_SOURCE={loop_worker_src!r};'
         "const WORKLET_URL='data:application/javascript;charset=utf-8,'+encodeURIComponent(WORKLET_SOURCE);"
         f'{sidplayer_src}\n'
         f'{app_src}'

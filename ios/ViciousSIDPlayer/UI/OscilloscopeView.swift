@@ -33,6 +33,7 @@ struct OscilloscopeView: View {
     /// App im Vordergrund? Nur dann laeuft der Zeichentakt.
     let isSceneActive: Bool
     @State private var selectedChip = 0
+    @State private var analysisMode = 0
     private var displayedChip: Int { coordinator.activeSIDChips.contains(selectedChip) ? selectedChip : coordinator.activeSIDChips[0] }
 
     /// Zielbild: 30 Bilder pro Sekunde.
@@ -54,6 +55,10 @@ struct OscilloscopeView: View {
                 .pickerStyle(.segmented).labelsHidden()
                 .padding(.horizontal, 8).padding(.top, 6)
             }
+        Picker("Analyseansicht", selection: $analysisMode) {
+            Text("Scope").tag(0); Text("Piano / Hz").tag(1); Text("Register").tag(2)
+        }.pickerStyle(.segmented).accessibilityIdentifier("analysis-view")
+        if analysisMode == 0 {
         TimelineView(.animation(minimumInterval: Self.minimumFrameInterval, paused: isPaused)) { timeline in
             Canvas { context, size in
                 draw(context: &context,
@@ -69,6 +74,11 @@ struct OscilloscopeView: View {
         )
         .accessibilityLabel("Oszilloskop")
         .accessibilityHint("Zeigt die Wellenform der drei SID-Stimmen.")
+        } else {
+            SIDAnalysisPanel(coordinator: coordinator, chip: displayedChip, mode: analysisMode, isSceneActive: isSceneActive)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(palette.scopeBackground, in: RoundedRectangle(cornerRadius: 12))
+        }
         }
         .onChange(of: coordinator.activeSIDChips) { _, chips in
             if !chips.contains(selectedChip) { selectedChip = chips[0] }

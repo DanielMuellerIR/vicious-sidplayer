@@ -125,6 +125,7 @@ public final class ViciousCoordinator: ObservableObject {
     // im festen Echtzeitpuffer und werden beim Zeichnen gelesen.
     @Published public private(set) var analysisMix = AnalysisMix()
     @Published public private(set) var activeSIDChips = [0]
+    @Published public private(set) var sidBaseAddresses: [UInt32] = [0xd400, 0, 0]
     @Published public private(set) var preferredChipModels = [8580, 8580, 8580]
     public var voiceMuted: [Bool] {
         get { Array(analysisMix.channelMuted.prefix(3)) }
@@ -137,6 +138,13 @@ public final class ViciousCoordinator: ObservableObject {
     }
     public var effectiveChannelMuted: [Bool] { analysisMix.effectiveMuted(activeChips: activeSIDChips) }
     @Published public var filterEnabled = true
+    @Published public private(set) var playbackLoop = PlaybackLoop()
+    @Published public private(set) var isPreparingLoop = false
+    @Published public private(set) var loopError: String?
+    private var loopTask: Task<Void, Never>?
+    private var loopGeneration = 0
+    private var loopDuration = 360.0
+    private var loopSnapshot: ViciousProcessor.PreparedLoop?
 
     // Die Anzeigewerte aller SID-Stimmen (Huellkurve, Frequenz, Gate, Wellenform,
     // Pulsbreite) sind BEWUSST nicht `@Published`.
@@ -159,6 +167,7 @@ public final class ViciousCoordinator: ObservableObject {
 
     // codereview-ok: activeSid ist die Quelle, aus der play() den Processor neu erzeugt (2026-07-01)
     private var activeSid: SidFileData?
+    public var hasSID: Bool { activeSid != nil }
     private var engineProcessor: ViciousProcessor?
     private var processorSlot: ProcessorSlot?
     private var seekTask: Task<Void, Never>?
@@ -180,6 +189,7 @@ public final class ViciousCoordinator: ObservableObject {
 
     public func setSid(_ fileData: SidFileData) {
         stop()
+        playbackLoop.clear()
         self.activeSid = fileData
         self.trackName = fileData.metadata.title
         self.composer = fileData.metadata.author
@@ -189,6 +199,7 @@ public final class ViciousCoordinator: ObservableObject {
         self.elapsedSeconds = 0.0
         self.prefModel = fileData.prefModel
         self.clockPreference = fileData.clockPreference
+        sidBaseAddresses = [0xd400, fileData.secondSidAddress, fileData.thirdSidAddress]
         activeSIDChips = [0] + (fileData.secondSidAddress != 0 ? [1] : []) + (fileData.thirdSidAddress != 0 ? [2] : [])
         preferredChipModels = [fileData.prefModel,
             fileData.prefModel2 == 0 ? fileData.prefModel : fileData.prefModel2,
@@ -215,6 +226,7 @@ public final class ViciousCoordinator: ObservableObject {
                 isPlaying = true
                 isPaused = false
                 startUIUpdates()
+                if playbackLoop.isEnabled, loopSnapshot == nil, loopTask == nil { prepareActiveLoop() }
             } catch {
                 print("Fehler beim Fortsetzen der AVAudioEngine: \(error)")
             }
@@ -240,7 +252,7 @@ public final class ViciousCoordinator: ObservableObject {
         processor.setMutedChannels(effectiveChannelMuted)
         processor.setFilterEnabled(filterEnabled)
         processor.initSubtune(sub: currentSubtune)
-        processor.setFadeEnvelope(fadeEnvelope)
+        processor.setFadeEnvelope(effectiveFadeEnvelope)
         let requestedSeek = pendingSeekSeconds
         pendingSeekSeconds = nil
         // Die Master-Lautstaerke regelt ausschliesslich der Mixer (siehe unten,
@@ -310,6 +322,7 @@ public final class ViciousCoordinator: ObservableObject {
             isPaused = false
             startUIUpdates()
             if let requestedSeek { seek(seconds: requestedSeek) }
+            else { prepareActiveLoop() }
         } catch {
             print("Fehler beim Starten der AVAudioEngine: \(error)")
             // Engine-Start fehlgeschlagen: den bereits attachten/verbundenen
@@ -334,6 +347,8 @@ public final class ViciousCoordinator: ObservableObject {
     }
 
     public func stop() {
+        playbackLoop.setEnabled(false)
+        cancelLoopPreparation()
         cancelSeekPreparation()
         audioEngine.stop()
         if let node = sourceNode {
@@ -387,7 +402,7 @@ public final class ViciousCoordinator: ObservableObject {
 
     public func setFadeEnvelope(_ envelope: PlaybackFadeEnvelope) {
         fadeEnvelope = envelope
-        engineProcessor?.setFadeEnvelope(envelope)
+        engineProcessor?.setFadeEnvelope(effectiveFadeEnvelope)
     }
 
     // SID-Modell-Override setzen (nil = Auto). Wirkt live auf den laufenden Song.
@@ -396,6 +411,7 @@ public final class ViciousCoordinator: ObservableObject {
         if let processor = engineProcessor {
             processor.setModelOverride(model.map { Double($0) })
         }
+        prepareActiveLoop()
     }
 
     public func setClockMode(_ mode: SidClockMode) {
@@ -403,7 +419,8 @@ public final class ViciousCoordinator: ObservableObject {
         clockMode = mode
         // Ein anderer Takt veraendert CPU, Huellkurven und Oszillatoren. Der
         // Zielstand wird deshalb wie beim Seek im Hintergrund neu aufgebaut.
-        if engineProcessor != nil { seek(seconds: elapsedSeconds) }
+        if engineProcessor != nil { seek(seconds: elapsedSeconds, preserveLoop: true) }
+        prepareActiveLoop()
     }
 
     // Stimme 1-3 stumm/laut schalten (Analyse; wirkt live auf den laufenden Song).
@@ -426,7 +443,10 @@ public final class ViciousCoordinator: ObservableObject {
     public func clearSolos() {
         analysisMix.clearSolos(); applyAnalysisMix()
     }
-    private func applyAnalysisMix() { engineProcessor?.setMutedChannels(effectiveChannelMuted) }
+    private func applyAnalysisMix() {
+        engineProcessor?.setMutedChannels(effectiveChannelMuted)
+        prepareActiveLoop()
+    }
     public func modelForChip(_ chip: Int) -> Int {
         modelOverride ?? (preferredChipModels.indices.contains(chip) ? preferredChipModels[chip] : prefModel)
     }
@@ -435,6 +455,96 @@ public final class ViciousCoordinator: ObservableObject {
     public func toggleFilterEnabled() {
         filterEnabled.toggle()
         engineProcessor?.setFilterEnabled(filterEnabled)
+        prepareActiveLoop()
+    }
+
+    private var effectiveFadeEnvelope: PlaybackFadeEnvelope {
+        PlaybackFadeEnvelope(songEnd: playbackLoop.isEnabled ? nil : fadeEnvelope.songEnd,
+                             timerEnd: fadeEnvelope.timerEnd, seconds: fadeEnvelope.seconds)
+    }
+
+    public func setLoopDuration(_ seconds: Double) {
+        guard seconds != loopDuration else { return }
+        loopDuration = seconds
+        let before = playbackLoop
+        playbackLoop.constrain(to: seconds)
+        if playbackLoop != before { prepareActiveLoop() }
+    }
+    public func setLoopStart() {
+        playbackLoop.setStart(elapsedSeconds, duration: min(loopDuration, ViciousProcessor.maximumSeekSeconds))
+        prepareActiveLoop()
+    }
+    public func setLoopEnd() {
+        playbackLoop.setEnd(elapsedSeconds, duration: loopDuration)
+        prepareActiveLoop()
+    }
+    public func setLoopEnabled(_ enabled: Bool) {
+        playbackLoop.setEnabled(enabled)
+        prepareActiveLoop()
+    }
+    public func clearLoop() {
+        playbackLoop.clear()
+        prepareActiveLoop()
+    }
+    /// Nach einem Engine-Neuaufbau darf das Frontend die Sitzungsauswahl nur
+    /// bei derselben nachweislich unveränderten Datei und demselben Subtune übernehmen.
+    public func restoreLoop(_ selection: PlaybackLoop) {
+        playbackLoop = selection
+        playbackLoop.constrain(to: loopDuration)
+        prepareActiveLoop()
+    }
+    private func cancelLoopPreparation() {
+        loopGeneration &+= 1
+        loopTask?.cancel(); loopTask = nil
+        loopSnapshot = nil
+        isPreparingLoop = false
+        engineProcessor?.disableLoop()
+        engineProcessor?.setFadeEnvelope(effectiveFadeEnvelope)
+    }
+    private func prepareActiveLoop() {
+        cancelLoopPreparation()
+        loopError = nil
+        guard playbackLoop.isEnabled, let range = playbackLoop.range,
+              let sid = activeSid, let processor = engineProcessor else { return }
+        let generation = loopGeneration
+        let sub = currentSubtune, rate = processor.sampleRate, model = modelOverride
+        let muted = effectiveChannelMuted, filter = filterEnabled, clock = clockMode
+        isPreparingLoop = true
+        let worker = Task.detached(priority: .userInitiated) {
+            try ViciousProcessor.prepareLoop(sid: sid, subtune: sub, sampleRate: rate,
+                range: range, model: model, muted: muted, filterEnabled: filter, clockMode: clock) {
+                    try Task.checkCancellation()
+                }
+        }
+        loopTask = Task { [weak self] in
+            do {
+                let snapshot = try await withTaskCancellationHandler { try await worker.value }
+                    onCancel: { worker.cancel() }
+                guard let self, self.loopGeneration == generation else { return }
+                self.loopTask = nil; self.isPreparingLoop = false
+                self.loopSnapshot = snapshot
+                if let current = self.engineProcessor, !current.installLoop(snapshot) {
+                    // Während eines Takt-Seeks lebt kurz der alte Processor.
+                    // Der fertige neue Processor übernimmt denselben Snapshot.
+                    if !self.isPreparingSeek { self.failLoopPreparation() }
+                }
+                self.engineProcessor?.setFadeEnvelope(self.effectiveFadeEnvelope)
+            } catch {
+                guard let self, self.loopGeneration == generation else { return }
+                self.failLoopPreparation()
+            }
+        }
+    }
+    private func failLoopPreparation() {
+        playbackLoop.setEnabled(false)
+        cancelLoopPreparation()
+        loopError = NSLocalizedString("A/B-Schleife konnte nicht vorbereitet werden.", comment: "")
+    }
+
+    /// Register bleiben im vorhandenen Echtzeitpuffer. Erst die lesende
+    /// Oberfläche wählt einen Chip; hier entsteht kein Array im Audiocallback.
+    public func currentRegisters(chip: Int) -> SidChipVisuals {
+        visualsBuffer.readVisuals().chip(chip)
     }
 
     private func cancelSeekPreparation() {
@@ -444,7 +554,13 @@ public final class ViciousCoordinator: ObservableObject {
     }
 
     public func seek(seconds: Double) {
+        seek(seconds: seconds, preserveLoop: false)
+    }
+
+    private func seek(seconds: Double, preserveLoop: Bool) {
         let target = ViciousProcessor.normalizedSeekSeconds(seconds)
+        if !preserveLoop { playbackLoop.seek(to: target) }
+        if !playbackLoop.isEnabled { cancelLoopPreparation() }
         cancelSeekPreparation()
         if let processor = engineProcessor, let slot = processorSlot, let sid = activeSid {
             // Ein eigener Processor berechnet den Zielstand. Weder MainActor
@@ -472,12 +588,15 @@ public final class ViciousCoordinator: ObservableObject {
                     prepared.setModelOverride(self.modelOverride.map { Double($0) })
                     prepared.setMutedChannels(self.effectiveChannelMuted)
                     prepared.setFilterEnabled(self.filterEnabled)
-                    prepared.setFadeEnvelope(self.fadeEnvelope)
+                    prepared.setFadeEnvelope(self.effectiveFadeEnvelope)
+                    let loopInstalled = self.playbackLoop.isEnabled
+                        && (self.loopSnapshot.map { prepared.installLoop($0) } ?? false)
                     slot.replace(with: prepared)
                     self.engineProcessor = prepared
                     self.seekTask = nil
                     self.visualsBuffer.updatePlaytime(target)
                     if self.isPlaying { try self.audioEngine.start() }
+                    if self.playbackLoop.isEnabled, !loopInstalled, self.loopTask == nil { self.prepareActiveLoop() }
                 } catch {
                     guard let self, self.seekGeneration == generation else { return }
                     self.seekTask = nil
@@ -512,10 +631,12 @@ public final class ViciousCoordinator: ObservableObject {
         guard sub >= 0 && sub < subtunesCount else { return }
         let wasSeeking = isPreparingSeek
         cancelSeekPreparation()
+        playbackLoop.clear()
+        cancelLoopPreparation()
         self.currentSubtune = sub
         self.elapsedSeconds = 0.0
         self.pendingSeekSeconds = nil
-        visualsBuffer.updatePlaytime(0.0)
+        visualsBuffer.write(.silent)
 
         if wasSeeking, let processor = engineProcessor, let sid = activeSid, let slot = processorSlot {
             // Ein abgebrochener Taktwechsel darf den alten Processor nicht
@@ -526,7 +647,7 @@ public final class ViciousCoordinator: ObservableObject {
             replacement.setMutedChannels(effectiveChannelMuted)
             replacement.setFilterEnabled(filterEnabled)
             replacement.initSubtune(sub: sub)
-            replacement.setFadeEnvelope(fadeEnvelope)
+            replacement.setFadeEnvelope(effectiveFadeEnvelope)
             slot.replace(with: replacement)
             engineProcessor = replacement
         } else { engineProcessor?.initSubtune(sub: sub) }

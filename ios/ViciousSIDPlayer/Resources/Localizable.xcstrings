@@ -3344,6 +3344,214 @@
           }
         }
       }
+    },
+    "A setzen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A setzen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set A"
+          }
+        }
+      }
+    },
+    "B setzen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "B setzen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set B"
+          }
+        }
+      }
+    },
+    "A/B": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A/B"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A/B"
+          }
+        }
+      }
+    },
+    "A/B-Marker löschen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A/B-Marker löschen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear A/B markers"
+          }
+        }
+      }
+    },
+    "Analyseansicht": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analyseansicht"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analysis view"
+          }
+        }
+      }
+    },
+    "Scope": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scope"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scope"
+          }
+        }
+      }
+    },
+    "Piano / Hz": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Piano / Hz"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Piano / Hz"
+          }
+        }
+      }
+    },
+    "Register": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Register"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registers"
+          }
+        }
+      }
+    },
+    "Mindestens 0,25 s. Ein Sprung außerhalb A/B schaltet die Schleife aus.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mindestens 0,25 s. Ein Sprung außerhalb A/B schaltet die Schleife aus."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minimum interval: 0.25 s. A seek outside A/B turns the loop off."
+          }
+        }
+      }
+    },
+    "Schleife wird vorbereitet …": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schleife wird vorbereitet …"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing loop…"
+          }
+        }
+      }
+    },
+    "Ungefähre Register-Tonhöhe, A4 = 440 Hz. Noise, kombinierte Wellenformen und Digi-Töne sind nicht verlässlich erkennbar.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ungefähre Register-Tonhöhe, A4 = 440 Hz. Noise, kombinierte Wellenformen und Digi-Töne sind nicht verlässlich erkennbar."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approximate register pitch, A4 = 440 Hz. Noise, combined waveforms and digi samples cannot be identified reliably."
+          }
+        }
+      }
+    },
+    "Geschriebene Register und emulierte OSC3/ENV3-Werte; nur Leseansicht.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geschriebene Register und emulierte OSC3/ENV3-Werte; nur Leseansicht."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Written registers and emulated OSC3/ENV3 values. Read only."
+          }
+        }
+      }
+    },
+    "A/B-Schleife konnte nicht vorbereitet werden.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A/B-Schleife konnte nicht vorbereitet werden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not prepare the A/B loop."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

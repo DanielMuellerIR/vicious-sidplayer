@@ -120,7 +120,7 @@ async function ui() {
       createBuffer() { return {}; } createBufferSource() { return { connect() {}, start() {}, disconnect() {} }; }
     } },
     AudioWorkletNode: class { messages = []; port = { postMessage: message => this.messages.push(message) }; connect() {} },
-    localStorage: { getItem(key) { return storageValues.get(key) ?? null; }, setItem(key, value) { storageValues.set(key, value); }, removeItem(key) { storageValues.delete(key); } }, requestAnimationFrame() {}, WORKLET_URL: 'fixture'
+    localStorage: { getItem(key) { return storageValues.get(key) ?? null; }, setItem(key, value) { storageValues.set(key, value); }, removeItem(key) { storageValues.delete(key); } }, requestAnimationFrame() {}, WORKLET_URL: 'fixture', LOOP_WORKER_SOURCE: source.slice(0, source.indexOf('class SidPlayerWorklet'))
   });
   context.window.document = context.document;
   vm.runInContext(wrapper.replaceAll('export ', ''), context);
