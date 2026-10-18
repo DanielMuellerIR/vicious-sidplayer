@@ -28,7 +28,7 @@ None of the variants ship any SID files. Tunes are loaded via drag & drop, file 
 
 ## Download
 
-Ready-made builds of the macOS app are available as notarized DMGs on the [Releases page](https://github.com/DanielMuellerIR/vicious-sidplayer/releases). Download the DMG, open it, and drag the app into your Applications folder.
+Ready-made Apple Silicon builds of the macOS app are available as notarized DMGs on the [Releases page](https://github.com/DanielMuellerIR/vicious-sidplayer/releases). Download the DMG, open it, and drag the app into your Applications folder.
 
 The HTML5 player is generated locally from the checked-in sources with
 `python3 build.py`; the generated `vicious-sid-player.html` is intentionally
