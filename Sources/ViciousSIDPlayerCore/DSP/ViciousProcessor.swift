@@ -147,7 +147,7 @@ public final class ViciousProcessor: Sendable {
     nonisolated(unsafe) private var voiceBandpass = [Double](repeating: 0.0, count: 9)
 
     nonisolated(unsafe) private var cutoff_ratio_8580: Double = 0.0
-    nonisolated(unsafe) private var cutoff_ratio_6581: Double = 0.0
+    private let cutoffCoefficients6581: [Double]
 
     // Voice-Muting (Analyse-Feature): stummgeschaltete Stimmen laufen in der
     // Emulation normal weiter (Envelope, Oszillator, Register-Readbacks bleiben
@@ -186,7 +186,7 @@ public final class ViciousProcessor: Sendable {
         self.frame_sampleperiod = sampleRate / C64Clock.pal.frameRate
 
         self.cutoff_ratio_8580 = -2.0 * .pi * (12500.0 / 256.0) / sampleRate
-        self.cutoff_ratio_6581 = -2.0 * .pi * (20000.0 / 256.0) / sampleRate
+        self.cutoffCoefficients6581 = SIDFilterCurve.coefficients6581(sampleRate: sampleRate)
 
         // Precalculate Tables
         createCombinedWF(wfarray: &TriSaw_8580, bitmul: 0.8, bitstrength: 2.4, treshold: 0.64)
@@ -757,8 +757,8 @@ public final class ViciousProcessor: Sendable {
             // der uint8-Ausdruck zu int promotet. Daher explizit ueber Int.
             resonance = pow(2.0, Double(4 - Int(memory[SIDaddr + 0x17] >> 4)) / 8.0)
         } else {
-            if cutoff < 24.0 { cutoff = 0.035 }
-            else { cutoff = 1.0 - 1.263 * exp(cutoff * cutoff_ratio_6581) }
+            let register = Int(memory[SIDaddr + 0x16]) << 3 | Int(memory[SIDaddr + 0x15] & 7)
+            cutoff = cutoffCoefficients6581[register]
             let resNibble = memory[SIDaddr + 0x17]
             resonance = (resNibble > 0x5F) ? 8.0 / Double(resNibble >> 4) : 1.41
         }

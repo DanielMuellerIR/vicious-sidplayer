@@ -298,6 +298,7 @@ The following fixes were applied on top of the original:
 - **AudioWorklet architecture**: The engine is implemented as a standalone class instead of a subclass of `AudioWorkletProcessor`, which removes the constructor error in the browser.
 - **Noise waveform and ENV3 readback**: Aligned with the correct jsSID reference.
 - **Swift port**: Correct 24-bit XOR shifts for combined waveforms and array guards against out-of-bounds access.
+- **6581 sample rates**: Preserve the approved 44.1 kHz filter curve exactly and adapt its integrator coefficients to other output rates. This removes a large low-cutoff level drop at 48 kHz in native and HTML5 playback.
 
 ### Architecture
 

@@ -1,6 +1,6 @@
 # Aktiver Backlog
 
-Die Erweiterungen ab v1.9.26 werden im [Erweiterungsplan](docs/feature-roadmap.md) verfolgt. Tastatur, VoiceOver und anpassungsfähiges Layout sind in v1.9.45 auf Mac, HTML5 und iPhone-Simulator abgenommen ([Prüfstand](docs/validation-1.9.45.md)); iPhone-VoiceOver und externe Tastatur bleiben echte Geräteabnahme. Energie und Zeichenlast sind in v1.9.46 mit Mac-Vergleichsmessungen und Simulator-Abnahme geprüft ([Prüfstand](docs/validation-1.9.46.md)). Als Nächstes folgen der vorbereitete 6581-Hörvergleich und die echte Geräteabnahme.
+Die Erweiterungen ab v1.9.26 werden im [Erweiterungsplan](docs/feature-roadmap.md) verfolgt. Tastatur, VoiceOver und anpassungsfähiges Layout sind in v1.9.45 auf Mac, HTML5 und iPhone-Simulator abgenommen ([Prüfstand](docs/validation-1.9.45.md)); iPhone-VoiceOver und externe Tastatur bleiben echte Geräteabnahme. Energie und Zeichenlast sind in v1.9.46 mit Mac-Vergleichsmessungen und Simulator-Abnahme geprüft ([Prüfstand](docs/validation-1.9.46.md)). Das gewählte 6581-Filterziel ist in v1.9.47 umgesetzt und geprüft ([Prüfstand](docs/validation-1.9.47.md)); die reale iPhone-Geräteabnahme steht aus.
 
 1. ~~STIL-Integration~~ **auf dem Mac erledigt am 2026-08-23 (v1.9.12).** Parser,
    Zuordnung über die HVSC-Wurzel und Auto-Fund stehen im Core (`STIL.swift`,
@@ -38,9 +38,13 @@ Die Erweiterungen ab v1.9.26 werden im [Erweiterungsplan](docs/feature-roadmap.m
    verworfen (`RemoteCommand` im Core, 12 Tests). Bewusst nicht dabei: Zugriff auf
    beliebige Dateien, Einstellungen, Export, Beenden — ein URL-Schema kann jede
    Webseite auslösen.
-5. Filter-Cutoff-Tuning für 6581. **Offen: Hörvergleich und Referenz für die gewünschte
-   Klangänderung; ohne diesen Beleg bleibt die bestehende Kurve erhalten.** Ersetzt dauerhaft einen vollständigen reSIDfp-Port
-   (Entscheidung 2026-07-15): holt den hörbaren Teil des Gewinns ohne Engine-Umbau.
+5. ~~Filter-Cutoff-Tuning für 6581~~ **erledigt am 2026-10-18 (v1.9.47).** Gewähltes
+   Ziel: bisherigen 44,1-kHz-Klang bitgenau erhalten und 48 kHz daran angleichen.
+   Die native und HTML5-Engine verwenden dieselbe Referenzkurve; der starke
+   Cutoff-Pegelsprung bei 48 kHz entfällt. Regressionen, Parität und echte
+   App-/Browser-Läufe sind geprüft ([Prüfstand](docs/validation-1.9.47.md)).
+   Eine bestimmte reale 6581-Revision ist kein Abnahmeziel. Gezieltes Tuning
+   ersetzt weiterhin den vollständigen reSIDfp-Port (Entscheidung 2026-07-15).
 
 ## iOS-Nacharbeit (Stand 2026-07-26)
 

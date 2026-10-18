@@ -1,3 +1,10 @@
+Vicious SID Player 1.9.47 aligns the 6581 filter across output sample rates.
+
+- Keep the existing 44.1 kHz output bit for bit and adapt its integrator coefficients to other output rates in native and HTML5 playback. The low-cutoff transition at 48 kHz no longer causes a large level drop.
+- Prepare all 2048 cutoff coefficients once per emulator; the audio callback uses a lookup instead of additional exponentiation. The 8580 curve, resonance, warm mute/bypass state and A/B restoration retain their existing rules.
+
+See [validation](docs/validation-1.9.47.md) for the approved reference, comparisons and limits.
+
 Vicious SID Player 1.9.46 reduces unnecessary display work.
 
 - Cap the Mac and HTML5 scope at 30 frames per second. Hidden or minimized Mac windows pause their visualizers and update playback time once per second; returning restores the display without restarting audio.

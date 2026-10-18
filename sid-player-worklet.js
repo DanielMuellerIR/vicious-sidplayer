@@ -127,7 +127,14 @@ class SidPlayerProcessor {
     let voiceBandpass = Array(9).fill(0);
     
     let cutoff_ratio_8580 = -2 * Math.PI * (12500 / 256) / samplerate;
-    let cutoff_ratio_6581 = -2 * Math.PI * (20000 / 256) / samplerate;
+    const cutoffCoefficients6581 = new Float64Array(2048);
+    const referenceRate6581 = 44100, referenceRatio6581 = -2 * Math.PI * (20000 / 256) / referenceRate6581;
+    for (let register = 0; register < cutoffCoefficients6581.length; register++) {
+      const value = register / 8 + 0.2;
+      const reference = value < 24 ? 0.035 : 1 - 1.263 * Math.exp(value * referenceRatio6581);
+      // 44,1 kHz bleibt bitgenau; die Umrechnung läuft einmal, nicht im Audiopfad.
+      cutoffCoefficients6581[register] = samplerate === referenceRate6581 ? reference : 1 - Math.pow(1 - reference, referenceRate6581 / samplerate);
+    }
     
     // Wave calculations variables
     let prevgate, chnadd, ctrl, wf, test, period, step, SR, accuadd, MSB, tmp, pw, lim, wfout, cutoff, resonance, filtin, output;
@@ -380,8 +387,7 @@ class SidPlayerProcessor {
         cutoff = 1 - Math.exp(cutoff * cutoff_ratio_8580);
         resonance = Math.pow(2, ((4 - (memory[SIDaddr + 0x17] >> 4)) / 8));
       } else {
-        if (cutoff < 24) cutoff = 0.035;
-        else cutoff = 1 - 1.263 * Math.exp(cutoff * cutoff_ratio_6581);
+        cutoff = cutoffCoefficients6581[(memory[SIDaddr + 0x16] << 3) | (memory[SIDaddr + 0x15] & 7)];
         resonance = (memory[SIDaddr + 0x17] > 0x5F) ? 8 / (memory[SIDaddr + 0x17] >> 4) : 1.41;
       }
 

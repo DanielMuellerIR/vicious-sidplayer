@@ -301,6 +301,7 @@ Gegenüber dem Original wurden folgende Korrekturen vorgenommen:
 - **AudioWorklet-Architektur**: Die Engine wurde als eigenständige Klasse implementiert statt als Unterklasse von `AudioWorkletProcessor`, was den Konstruktorfehler im Browser beseitigt.
 - **Noise-Waveform und ENV3-Readback**: An die korrekte jsSID-Referenz angeglichen.
 - **Swift-Port**: Korrekte 24-Bit-XOR-Verschiebungen für kombinierte Wellenformen und Array-Schutzguards gegen Out-of-Bounds-Zugriffe.
+- **6581-Sampleraten**: Die freigegebene 44,1-kHz-Filterkurve exakt erhalten und ihre Integratorkoeffizienten an andere Ausgaberaten anpassen. Das beseitigt einen großen Pegelabfall bei niedrigem Cutoff und 48 kHz in nativer und HTML5-Wiedergabe.
 
 ### Architektur
 

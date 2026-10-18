@@ -1,3 +1,10 @@
+Vicious SID Player 1.9.47 gleicht den 6581-Filter zwischen Ausgaberaten an.
+
+- Die bisherige 44,1-kHz-Ausgabe bitgenau erhalten und ihre Integratorkoeffizienten in nativer und HTML5-Wiedergabe an andere Ausgaberaten anpassen. Der niedrige Cutoff-Übergang verursacht bei 48 kHz keinen großen Pegelabfall mehr.
+- Alle 2048 Cutoff-Koeffizienten einmal je Emulator vorbereiten; der Audiocallback liest aus der Tabelle statt zusätzlich Potenzen zu berechnen. Für 8580-Kurve, Resonanz, warmes Mute/Bypass und A/B-Rücksprünge gelten die bestehenden Regeln weiter.
+
+Der [Prüfstand](docs/validation-1.9.47.md) dokumentiert die freigegebene Referenz, Vergleiche und Grenzen.
+
 Vicious SID Player 1.9.46 reduziert unnötige Zeichenarbeit.
 
 - Mac- und HTML5-Oszilloskop auf 30 Bilder pro Sekunde begrenzen. Ausgeblendete oder minimierte Mac-Fenster pausieren ihre Visualisierungen und aktualisieren die Spielzeit einmal pro Sekunde; bei Rückkehr folgt die Anzeige ohne Neustart des Audios.
