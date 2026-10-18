@@ -1,3 +1,12 @@
+Vicious SID Player 1.9.40 ergänzt Batch-WAV-Export mit bewusster Mixwahl auf Mac und iPhone.
+
+- Aktuellen Subtune, alle Subtunes einer Datei, Hörfolge oder sichtbare Bibliothek vorab prüfen; auf dem Mac zusätzlich die ausgewählte gespeicherte Liste. Einträge wählen und aufgelöste Dauerquellen, Dateinamen und Ausgabegröße vor dem Rendern sehen.
+- Vollständigen Mix, aktuelle Mute-/Solo-Auswahl oder eine SID-Stimme rendern, mit Filterwahl, gemeinsamen Modell-/Takt-/Fade-Optionen und optionalem A/B-Ausschnitt. Einzelstimmen erhalten den Chipfilterzustand; Rundung und Clipping erlauben keine Zusage bitgenauer Addition.
+- Vorhandene Batch-Dateien erhalten kollisionsfreie neue Namen und bleiben auch bei einem Rennen nach der Vorschau geschützt. Abbruch entfernt die unfertige Ausgabe und erhält fertige Dateien. Mac-Speicherfenster und iPhone-Teilen verwenden denselben Exportplan, ohne die Wiedergabe zu verändern.
+- Dateien mit erstem und drittem SID-Slot erhalten nun beide Chips in Stereo-Wiedergabe und WAV-Ausgabe.
+
+Siehe [Prüfstand](docs/validation-1.9.40.md).
+
 Vicious SID Player 1.9.39 ergänzt Piano-/Frequenz- und Registeransichten je Chip sowie A/B-Schleifen auf Mac, iPhone und HTML5.
 
 - Effektive PAL-/NTSC-Frequenzen, angenäherte Noten und emulierte Registerwerte anzeigen. Noise, kombinierte Wellenformen und Digi-Töne haben sichtbare Tonhöhengrenzen; Register sind ausschließlich lesbar.

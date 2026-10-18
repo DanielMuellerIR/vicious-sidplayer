@@ -110,6 +110,12 @@ public final class SongLengthResolver: @unchecked Sendable {
             computed: cache.length(md5: md5, subtune: subtune, clockMode: clockMode), personalDuration: personalDuration)
     }
 
+    public func durationResolution(md5: String, subtune: Int, databaseLengths: [Double]?,
+                                   clockMode: SidClockMode = .auto, personalDuration: Double? = nil) -> SongLengthSelection.Resolution {
+        SongLengthSelection.resolve(databaseLengths: databaseLengths, subtune: subtune,
+            computed: cache.length(md5: md5, subtune: subtune, clockMode: clockMode), personalDuration: personalDuration)
+    }
+
     // MARK: - Schritt 1: entscheiden
 
     /// Bestimmt, was fuer den laufenden Subtune zu tun ist.
@@ -281,6 +287,12 @@ public final class SongLengthResolver: @unchecked Sendable {
 /// Scrubber-Laenge, Auto-Next-Schwelle, die Restzeit auf dem Sperrbildschirm
 /// und die Dauer des WAV-Exports.
 public enum SongLengthSelection {
+    public enum Source: String, Equatable, Sendable { case personal, database, computed, fallback }
+    public struct Resolution: Equatable, Sendable {
+        public let seconds: Double
+        public let source: Source
+    }
+
     static func validPersonalDuration(_ seconds: Double?) -> Double? {
         guard let seconds, seconds.isFinite, seconds > 0, seconds <= WavRenderer.maximumDurationSeconds else { return nil }
         return seconds
@@ -289,10 +301,19 @@ public enum SongLengthSelection {
     /// Fuer Suchfilter: ein Fallback oder ein negativer Loop-Cache ist keine
     /// bekannte Dauer. Die Quellreihenfolge bleibt dieselbe wie im Player.
     public static func knownDuration(databaseLengths: [Double]?, subtune: Int, computed: Double?, personalDuration: Double? = nil) -> Double? {
-        if let personal = validPersonalDuration(personalDuration) { return personal }
-        if let lengths = databaseLengths, lengths.indices.contains(subtune), lengths[subtune].isFinite, lengths[subtune] >= 0 { return lengths[subtune] }
-        if let computed, computed.isFinite, computed > 0 { return computed }
-        return nil
+        let resolution = resolve(databaseLengths: databaseLengths, subtune: subtune,
+                                 computed: computed, personalDuration: personalDuration)
+        return resolution.source == .fallback ? nil : resolution.seconds
+    }
+
+    public static func resolve(databaseLengths: [Double]?, subtune: Int, computed: Double?,
+                               personalDuration: Double? = nil, fallback: Double = fallbackSeconds) -> Resolution {
+        if let personal = validPersonalDuration(personalDuration) { return Resolution(seconds: personal, source: .personal) }
+        if let lengths = databaseLengths, lengths.indices.contains(subtune), lengths[subtune].isFinite, lengths[subtune] >= 0 {
+            return Resolution(seconds: lengths[subtune], source: .database)
+        }
+        if let computed, computed.isFinite, computed > 0 { return Resolution(seconds: computed, source: .computed) }
+        return Resolution(seconds: fallback, source: .fallback)
     }
 
     /// Fallback-Limit, wenn weder Datenbank noch Berechnung etwas liefern.

@@ -347,48 +347,19 @@ private struct PlaybackOptionsView: View {
 
 // MARK: - WAV-Export
 
-/// Rendert den laufenden Subtune in eine WAV-Datei und uebergibt sie an den
-/// System-Teilen-Dialog (Dateien, AirDrop, Mail …).
 private struct WAVExportButton: View {
     @EnvironmentObject private var model: AppModel
-
-    @State private var isExporting = false
-    @State private var exportedFile: ExportedFile?
+    @State private var presentation: WAVExportPresentation?
 
     var body: some View {
-        Button {
-            startExport()
-        } label: {
-            HStack(spacing: 8) {
-                if isExporting {
-                    ProgressView()
-                    Text("WAV wird gerendert …")
-                } else {
-                    Image(systemName: "square.and.arrow.up")
-                    Text("Als WAV exportieren")
-                }
-            }
-            .frame(maxWidth: .infinity)
+        Button { presentation = model.makeWAVExportPresentation() } label: {
+            Label("Als WAV exportieren", systemImage: "square.and.arrow.up")
+                .frame(maxWidth: .infinity, minHeight: 44)
         }
         .buttonStyle(.bordered)
-        // Waehrend des Renderns gesperrt, und ohne geladenen Titel gibt es
-        // nichts zu exportieren.
-        .disabled(isExporting || model.currentTrackID == nil)
-        .sheet(item: $exportedFile) { file in
-            ShareSheet(url: file.url)
-        }
-    }
-
-    private func startExport() {
-        isExporting = true
-        Task {
-            let url = await model.exportCurrentTrackAsWAV()
-            isExporting = false
-            if let url {
-                exportedFile = ExportedFile(url: url)
-            }
-            // Schlaegt der Export fehl, meldet das Modell den Fehler ueber
-            // `errorMessage`; die Wurzel-View zeigt ihn an.
+        .disabled(model.currentTrackID == nil)
+        .sheet(item: $presentation) { presentation in
+            WAVExportView(presentation: presentation)
         }
     }
 }

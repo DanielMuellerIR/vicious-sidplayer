@@ -68,7 +68,7 @@ Der Titelpfad gilt relativ zum Autoplay-Ordner. Absolute Pfade, `..` und alles, 
 - **Favoriten**: Ein dauerhafter Stern pro Titel mit „nur Favoriten“-Filter.
 - **Solo, Stimmen-/Chip-Mute und Filter-Bypass**: Alle neun Stimmen eines 3SID-Stücks auf Mac, iPhone und in HTML5 getrennt steuern. Mehrere Solos spielen gemeinsam; Stimmen- und Chip-Mute haben Vorrang. „Solos aufheben“ erhält die Mutes. Die Analyseauswahl gilt für die Sitzung; auch stumme Stimmen werden weiter emuliert.
 - **Piano, Register und A/B-Schleifen**: Neben dem Scope je SID-Chip Piano / Hz oder Register wählen. Die Register-Tonhöhe ist angenähert; Noise, kombinierte Wellenformen und Digi-Töne haben sichtbare Grenzen. A und B mit mindestens 0,25 Sekunden Abstand setzen und die Sitzungsschleife einschalten. Ein Sprung außerhalb schaltet sie aus; Datei- oder Subtunewechsel löschen die Marker. Der native Einschlaftimer hat Vorrang.
-- **WAV-Export**: Den aktuellen Song schneller als Echtzeit als WAV-Datei rendern — aus der GUI (⌘E) oder headless von der Kommandozeile (siehe [Headless / CLI](#headless--cli-für-skripte-und-ai-agenten)).
+- **WAV-Export (macOS und iPhone)**: Ausgewählte Titel und Subtunes aus der aktuellen Datei, Hörfolge oder sichtbaren Bibliothek vorab prüfen; auf dem Mac zusätzlich die ausgewählte gespeicherte Liste. Aufgelöste Endzeiten, manuelle Dauer oder den aktuellen A/B-Ausschnitt verwenden. Vollständigen Mix, aktuellen Mute-/Solo-Mix oder eine SID-Stimme mit ausdrücklicher Filterwahl rendern. Der gemeinsame Chipfilter läuft auch bei einer einzelnen Stimme weiter; getrennte Dateien lassen sich wegen Rundung und Clipping nicht garantiert bitgenau addieren. Der Batch erhält vorhandene Dateien und behält bei Abbruch fertige Ausgaben. Auf dem Mac öffnet ⌘E die Konfiguration mit nativen Speicher-/Ordnerdialogen; das iPhone teilt fertige Dateien. Headless-WAV-Rendering bleibt über die Kommandozeile verfügbar (siehe [Headless / CLI](#headless--cli-für-skripte-und-ai-agenten)).
 - **Dark / Light Mode**: Folgt automatisch der Systemeinstellung (Standard); in den Einstellungen (⌘,) lässt sich fest Hell oder Dunkel wählen, ⌘T schaltet um.
 - **Lokale Hörfolgendaten im Browser**: Benannte Listen, Lieblings-Subtunes, Reihenfolge und Position liegen im Browserspeicher. Nach dem Neuladen dieselben SID-Dateien oder den Ordner erneut auswählen; Musik wird nie in der Seite gespeichert. Ein eindeutiger Inhaltsvergleich kann eine verschobene Datei wieder zuordnen. Die Wiederherstellung bereitet die Wiedergabe ohne automatischen Start vor. Unlesbare Daten bleiben erhalten; fehlender oder voller Speicher wird gemeldet.
 - **Playlist mit Duplikaterkennung**: Bereits geladene Titel werden nicht doppelt aufgenommen. Die Playlist kann jederzeit geleert werden.
@@ -117,7 +117,7 @@ Titel, Komponist und Info in der Seitenleiste sowie lange Titelnamen zeigen ihre
 | ⌘P | Play / Pause |
 | ⌘→ | Nächster Hörfolgeneintrag |
 | ⌘← | Vorheriger Hörfolgeneintrag |
-| ⌘E | Aktuellen Song als WAV exportieren |
+| ⌘E | WAV-Export konfigurieren |
 | ⌘T | Hell-/Dunkelmodus umschalten (wechselt auf feste Wahl; zurück zu *Automatisch* über die Einstellungen) |
 | ⌘, | Einstellungen (Erscheinungsbild, Autoplay-Ordner) |
 
@@ -219,7 +219,7 @@ Der Emulations-Kern läuft auch ohne GUI. Das Werkzeug `sidcheck` macht ihn für
 ```bash
 swift build -c release          # baut .build/release/sidcheck
 
-# Tune schneller als Echtzeit als WAV rendern (16-bit PCM mono, 44,1 kHz)
+# Tune schneller als Echtzeit als WAV rendern (16-bit PCM, 44,1 kHz; Stereo bei Multi-SID)
 .build/release/sidcheck tune.sid --wav out.wav 180 0     # 180 Sekunden, Subtune 0
 
 # SID-Register-Zustand (Frequenz, Gate, Waveform, Hüllkurve je Stimme) als JSON

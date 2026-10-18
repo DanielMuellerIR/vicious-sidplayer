@@ -7,10 +7,12 @@ import Glibc
 
 // Headless-WAV-Export: rendert einen Subtune schneller als Echtzeit (die
 // Emulation ist nicht an die Audio-Hardware gebunden) in eine WAV-Datei.
-// Format: 16-bit PCM, mono (der Emulator liefert ein Mono-Signal), 44,1 kHz.
+// Format: 16-Bit-PCM, mono für 1SID und stereo für Multi-SID, 44,1 kHz.
 // Genutzt vom GUI-Export (Menue "Wiedergabe") und vom CLI (sidcheck --wav) —
 // AI-Agent-/Skript-steuerbar ohne laufende GUI.
 public enum WavRenderer {
+
+    public enum DestinationMode: Equatable, Sendable { case replace, createNew }
 
     /// Gemeinsame Obergrenze fuer CLI-Wiedergabe und WAV-Export. Eine Stunde ist
     /// fuer SID-Analyse grosszuegig, verhindert aber versehentliche Mehrstunden-
@@ -22,6 +24,8 @@ public enum WavRenderer {
         case invalidDuration
         case invalidSampleRate
         case invalidFadeOut
+        case invalidStart
+        case invalidMix
         case fileTooLarge
         case cannotCreateTemporaryFile
         public var errorDescription: String? {
@@ -29,6 +33,8 @@ public enum WavRenderer {
             case .invalidDuration: return "Ungültige Dauer für den WAV-Export."
             case .invalidSampleRate: return "Ungültige Sample-Rate für den WAV-Export."
             case .invalidFadeOut: return "Ungültiger Fadeout für den WAV-Export."
+            case .invalidStart: return "Ungültige Startposition für den WAV-Export."
+            case .invalidMix: return "Ungültige Stimmenauswahl für den WAV-Export."
             case .fileTooLarge: return "Die WAV-Datei überschreitet die Größenbegrenzung des RIFF-Formats."
             case .cannotCreateTemporaryFile: return "Temporäre WAV-Datei konnte nicht angelegt werden."
             }
@@ -66,10 +72,17 @@ public enum WavRenderer {
                               modelOverride: Int? = nil,
                               clockMode: SidClockMode = .auto,
                               fadeOutSeconds: Double = 0,
+                              startSeconds: Double = 0,
+                              mutedChannels: [Bool] = Array(repeating: false, count: 9),
+                              filterEnabled: Bool = true,
+                              destinationMode: DestinationMode = .replace,
+                              progress: @Sendable (Int, Int) -> Void = { _, _ in },
                               to url: URL) throws {
         guard fadeOutSeconds.isFinite, (0...30).contains(fadeOutSeconds) else { throw RenderError.invalidFadeOut }
+        guard startSeconds.isFinite, (0...ViciousProcessor.maximumSeekSeconds).contains(startSeconds) else { throw RenderError.invalidStart }
+        guard mutedChannels.count == 9 else { throw RenderError.invalidMix }
         let totalFrames = try frameCount(seconds: seconds, sampleRate: sampleRate)
-        let channels = sidFile.secondSidAddress != 0 ? 2 : 1
+        let channels = sidFile.secondSidAddress != 0 || sidFile.thirdSidAddress != 0 ? 2 : 1
         guard sampleRate * Double(channels * MemoryLayout<Int16>.size) <= Double(UInt32.max) else {
             throw RenderError.invalidSampleRate
         }
@@ -86,21 +99,25 @@ public enum WavRenderer {
         processor.setModelOverride(modelOverride.map { Double($0) })
         // Subtune sicher in den gueltigen Bereich klemmen (0-basiert).
         let sub = max(0, min(subtune, sidFile.metadata.subtunesCount - 1))
+        processor.setMutedChannels(mutedChannels)
+        processor.setFilterEnabled(filterEnabled)
         processor.initSubtune(sub: sub)
         processor.setVolume(vol: 1.0)
-        if fadeOutSeconds > 0 { processor.setFadeEnvelope(PlaybackFadeEnvelope(songEnd: seconds, seconds: fadeOutSeconds)) }
+        try processor.seekCancellable(seconds: startSeconds) { try Task.checkCancellation() }
+        if fadeOutSeconds > 0 { processor.setFadeEnvelope(PlaybackFadeEnvelope(songEnd: startSeconds + seconds, seconds: fadeOutSeconds)) }
 
         // Erst in eine eindeutige Nachbardatei streamen. Dadurch bleibt ein
         // vorhandenes Ziel bei Render-/I/O-Fehlern unangetastet; erst die fertig
         // synchronisierte Datei wird atomar an ihre Stelle gesetzt.
         let fm = FileManager.default
         let temporaryURL = url.deletingLastPathComponent().appendingPathComponent(
-            ".\(url.lastPathComponent).\(UUID().uuidString).tmp"
+            ".vicious-wav-\(UUID().uuidString).tmp"
         )
         guard fm.createFile(atPath: temporaryURL.path, contents: nil) else {
             throw RenderError.cannotCreateTemporaryFile
         }
 
+        defer { try? fm.removeItem(at: temporaryURL) }
         var handle: FileHandle?
         do {
             let opened = try FileHandle(forWritingTo: temporaryURL)
@@ -112,6 +129,7 @@ public enum WavRenderer {
             ))
 
             var renderedFrames = 0
+            progress(0, totalFrames)
             while renderedFrames < totalFrames {
                 try Task.checkCancellation()
                 let blockFrames = min(framesPerBlock, totalFrames - renderedFrames)
@@ -132,13 +150,15 @@ public enum WavRenderer {
                 let block = pcm.withUnsafeBytes { Data($0) }
                 try opened.write(contentsOf: block)
                 renderedFrames += blockFrames
+                progress(renderedFrames, totalFrames)
             }
 
+            try Task.checkCancellation()
             try opened.synchronize()
             try opened.close()
             handle = nil
 
-            try replaceAtomically(temporaryURL, at: url)
+            try publishAtomically(temporaryURL, at: url, mode: destinationMode)
         } catch {
             try? handle?.close()
             try? fm.removeItem(at: temporaryURL)
@@ -146,16 +166,16 @@ public enum WavRenderer {
         }
     }
 
-    /// POSIX `rename` ersetzt eine vorhandene Datei atomar, solange Quelle und
-    /// Ziel auf demselben Dateisystem liegen. Die Temp-Datei liegt deshalb
-    /// bewusst direkt neben dem Ziel. Foundation `replaceItemAt` ist hier nicht
-    /// portabel: swift-corelibs-foundation kann unter Linux Erfolg melden und
-    /// dabei die Zieldatei entfernen.
-    private static func replaceAtomically(_ source: URL, at destination: URL) throws {
+    /// Rename ersetzt ein bewusst gewähltes Ziel atomar. Batch verwendet
+    /// dagegen einen Hardlink auf die fertige eigene Nachbardatei: Existiert
+    /// das Ziel inzwischen, scheitert link mit EEXIST und erhält seine Bytes.
+    /// Foundation replaceItemAt ist unter Linux dafür nicht zuverlässig.
+    private static func publishAtomically(_ source: URL, at destination: URL, mode: DestinationMode) throws {
         let errorCode: Int32 = source.withUnsafeFileSystemRepresentation { sourcePath in
             destination.withUnsafeFileSystemRepresentation { destinationPath in
                 guard let sourcePath, let destinationPath else { return EINVAL }
-                if rename(sourcePath, destinationPath) == 0 { return 0 }
+                let result = mode == .replace ? rename(sourcePath, destinationPath) : link(sourcePath, destinationPath)
+                if result == 0 { return 0 }
                 return errno
             }
         }

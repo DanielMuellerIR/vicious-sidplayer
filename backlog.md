@@ -1,6 +1,6 @@
 # Aktiver Backlog
 
-Die Erweiterungen ab v1.9.26 werden im [Erweiterungsplan](docs/feature-roadmap.md) verfolgt. Die Pakete bis Piano-/Registeransicht und A/B-Schleifen sind in v1.9.39 auf Mac, iPhone-Simulator und HTML5 umgesetzt und abgenommen ([Prüfstand](docs/validation-1.9.39.md)). Als Nächstes folgt Batch-WAV-Export mit bewusster Mixwahl.
+Die Erweiterungen ab v1.9.26 werden im [Erweiterungsplan](docs/feature-roadmap.md) verfolgt. Piano-/Registeransicht und A/B-Schleifen sind in v1.9.39 auf Mac, iPhone-Simulator und HTML5 abgenommen. Batch-WAV-Export mit Mixwahl ist in v1.9.40 auf Mac und iPhone abgenommen ([Prüfstand](docs/validation-1.9.40.md)). Als Nächstes folgen weitere native Exportformate.
 
 1. ~~STIL-Integration~~ **auf dem Mac erledigt am 2026-08-23 (v1.9.12).** Parser,
    Zuordnung über die HVSC-Wurzel und Auto-Fund stehen im Core (`STIL.swift`,

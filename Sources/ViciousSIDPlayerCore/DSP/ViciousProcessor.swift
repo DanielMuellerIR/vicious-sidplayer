@@ -1078,8 +1078,11 @@ public final class ViciousProcessor: Sendable {
         let l: Double
         let r: Double
         if SIDamount == 2 {
-            l = chipOut[0] * 0.75 + chipOut[1] * 0.25
-            r = chipOut[0] * 0.25 + chipOut[1] * 0.75
+            // PSID v4 kann Slot 2 auslassen und den zweiten Chip in Slot 3
+            // angeben. Für Stereo zählt der aktive Chip, nicht der Slotindex.
+            let secondChip = SID_address[1] != 0 ? 1 : 2
+            l = chipOut[0] * 0.75 + chipOut[secondChip] * 0.25
+            r = chipOut[0] * 0.25 + chipOut[secondChip] * 0.75
         } else {
             l = chipOut[0] * 0.75 + chipOut[1] * 0.5 + chipOut[2] * 0.25
             r = chipOut[0] * 0.25 + chipOut[1] * 0.5 + chipOut[2] * 0.75

@@ -11,11 +11,13 @@ import UIKit
 // `UIViewControllerRepresentable` ist der Standardweg, einen UIKit-Controller in
 // SwiftUI einzubetten — keine private API, App-Store-tauglich.
 struct ShareSheet: UIViewControllerRepresentable {
-    /// Die zu teilende Datei (liegt im temporaeren Ordner der App).
-    let url: URL
+    /// Fertige Dateien aus demselben Exportlauf.
+    let urls: [URL]
+    init(url: URL) { self.urls = [url] }
+    init(urls: [URL]) { self.urls = urls }
 
     func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        UIActivityViewController(activityItems: urls, applicationActivities: nil)
     }
 
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {
@@ -23,9 +25,8 @@ struct ShareSheet: UIViewControllerRepresentable {
     }
 }
 
-/// Kleiner Umschlag, damit sich eine URL per `.sheet(item:)` praesentieren
-/// laesst — `URL` allein ist nicht `Identifiable`.
-struct ExportedFile: Identifiable {
+/// Der Ergebnislauf behält seine fertigen URLs, bis der Teilen-Dialog schließt.
+struct ExportedFiles: Identifiable {
     let id = UUID()
-    let url: URL
+    let urls: [URL]
 }

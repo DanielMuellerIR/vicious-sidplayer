@@ -49,6 +49,7 @@ public struct MainView: View {
         _playbackOptions = StateObject(wrappedValue: PlaybackOptionsController(fileURL: support?.appendingPathComponent(PlaybackSettingsStore.fileName), startup: startup))
     }
     @State private var playbackOptionsPresentation: PlaybackOptionsPresentation?
+    @State private var wavExportPresentation: WAVExportPresentation?
     @State private var sidebarPage = LibrarySidebarPage.library
     @State private var selectedListeningListID: UUID?
     @State private var listeningLibraryEntries: [ListeningEntry] = []
@@ -778,6 +779,9 @@ public struct MainView: View {
         .disabled(isImportApplying || !didFinishCollectionStartup)
         .sheet(isPresented: $showCollectionTransfer) {
             if let collectionTransfer { PersonalCollectionView(controller: collectionTransfer) }
+        }
+        .sheet(item: $wavExportPresentation) { presentation in
+            WAVExportView(presentation: presentation)
         }
         .onChange(of: showCollectionTransfer) { shown in
             if !shown, collectionTransfer?.requiresRestart != true { collectionTransfer = nil; collectionSubscription = nil }
@@ -2352,47 +2356,36 @@ public struct MainView: View {
         #endif
     }
 
-    // Exportiert den aktuellen Track (aktueller Subtune, aktuelles SID-Modell)
-    // als WAV-Datei — Ziel via Save-Panel, Render im Hintergrund (schneller als
-    // Echtzeit, WavRenderer im Core). Dauer = SCRUB_MAX, wie der Scrubber.
     private func exportCurrentTrackAsWAV() {
-        guard let fileURL = playlist.track(at: currentTrackIdx)?.url else {
+        guard let track = playlist.track(at: currentTrackIdx) else {
             errorMessage = "Kein Track für den WAV-Export ausgewählt."
             return
         }
-        #if canImport(AppKit)
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.wav]
-        panel.nameFieldStringValue = fileURL.deletingPathExtension().lastPathComponent + ".wav"
-        panel.message = "Aktuellen Song als WAV exportieren (Subtune \(coordinator.currentSubtune + 1))"
-        guard panel.runModal() == .OK, let dest = panel.url else { return }
-
-        let subtune = coordinator.currentSubtune
-        let model = coordinator.modelOverride
-        let clock = coordinator.clockMode
-        let fade = playbackOptions.document.fadeOutSeconds
-        // Echte Songlaenge, wenn bekannt — sonst das Standard-Limit.
-        let seconds = currentDuration
-        errorMessage = nil
-        // Render abseits des Main-Threads — ein 6-min-Tune braucht nur Sekunden,
-        // soll die UI aber trotzdem nicht blockieren.
-        Task.detached(priority: .userInitiated) {
-            do {
-                let data = try Data(contentsOf: fileURL)
-                let sid = try SidParser.parse(data: data)
-                try WavRenderer.render(sidFile: sid, subtune: subtune, seconds: seconds,
-                                       modelOverride: model, clockMode: clock, fadeOutSeconds: fade, to: dest)
-                await MainActor.run {
-                    // Fertige Datei im Finder zeigen (erwartetes Export-Feedback).
-                    NSWorkspace.shared.activateFileViewerSelecting([dest])
-                }
-            } catch {
-                await MainActor.run {
-                    errorMessage = "WAV-Export fehlgeschlagen: \(error.localizedDescription)"
-                }
+        func sources(_ entries: [ListeningEntry]) -> [WAVExportSource] {
+            entries.compactMap { entry in
+                entry.url(relativeTo: library?.root, allowExternal: true).map { WAVExportSource(url: $0, subtune: entry.subtune) }
             }
         }
-        #endif
+        var choices = [
+            WAVExportChoice(id: 0, title: String(localized: "Aktueller Subtune"),
+                sources: [WAVExportSource(url: track.url, subtune: coordinator.currentSubtune)], slice: coordinator.playbackLoop.range),
+            WAVExportChoice(id: 1, title: String(localized: "Alle Subtunes dieses Titels"), sources: [WAVExportSource(url: track.url)])
+        ]
+        if let queue = listening.queue, !queue.items.isEmpty {
+            choices.append(WAVExportChoice(id: 2, title: String(localized: "Hörfolge"), sources: sources(queue.items)))
+        }
+        let visible = LibrarySearchSelection.entries(in: playlist, scope: .visible(searchText: searchText, favoritesOnly: favoritesOnly),
+            favorites: favorites, records: metadataIndex.records, duration: knownLibraryDuration, heard: { history.hasHeard(md5: $0.md5) })
+        if !visible.isEmpty { choices.append(WAVExportChoice(id: 3, title: String(localized: "Sichtbare Bibliothek"), sources: sources(visible))) }
+        if let id = selectedListeningListID, let list = listening.document.lists.first(where: { $0.id == id }) {
+            choices.append(WAVExportChoice(id: 4, title: list.name, sources: sources(list.entries)))
+        }
+        wavExportPresentation = WAVExportPresentation(choices: choices,
+            durations: WAVExportDurationContext(resolver: lengthResolver, database: songlengthDB,
+                settings: playbackOptions.document, clockMode: coordinator.clockMode),
+            options: WAVExportOptions(modelOverride: coordinator.modelOverride, clockMode: coordinator.clockMode,
+                filterEnabled: coordinator.filterEnabled, fadeOutSeconds: playbackOptions.document.fadeOutSeconds),
+            analysisMix: coordinator.analysisMix)
     }
 
     // Media-Tasten (F7/F8/F9 bzw. Touch Bar / AirPods): Registriert die App im

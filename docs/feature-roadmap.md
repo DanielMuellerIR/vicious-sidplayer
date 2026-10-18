@@ -16,7 +16,7 @@ Dieser Plan setzt die [Erweiterungsanalyse](feature-opportunities.md) um. Jede S
 | 06b | Sammlungsaustausch in HTML5 | 4–6 h | Abgeschlossen in v1.9.36; nativer Rundlauf und Browser-Speicherschutz geprüft |
 | 07 | Solo und getrennte Multi-SID-Steuerung | 4–6 h | In v1.9.37 auf Mac, iPhone und HTML5 abgenommen |
 | 08 | Piano-, Registeransicht und A/B-Schleifen | 8–12 h | In v1.9.39 auf Mac, iPhone und HTML5 abgenommen ([Prüfstand](validation-1.9.39.md)) |
-| 09 | Batch-WAV-Export und Mixwahl | 6–10 h | Geplant |
+| 09 | Batch-WAV-Export und Mixwahl | 6–10 h | In v1.9.40 auf Mac und iPhone abgenommen ([Prüfstand](validation-1.9.40.md)) |
 | 10 | Weitere Exportformate | 4–8 h | Geplant |
 | 11 | Sammlungsprüfung und Wiederfinden | 6–10 h | Geplant |
 | 12 | Formatkompatibilität und klare Grenzen | 6–12 h | Geplant |

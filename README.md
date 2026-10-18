@@ -68,7 +68,7 @@ Track paths are relative to the autoplay folder. Absolute paths, `..` and anythi
 - **Favorites**: A persistent star per track with a favorites-only filter.
 - **Solo, voice/chip muting and filter bypass**: Control all nine voices in a 3SID tune separately on Mac, iPhone and HTML5. Multiple solos play together; voice and chip mutes take priority. Clearing solos keeps your mutes. Analysis choices last for the session, and emulation continues while muted.
 - **Piano, registers and A/B loops**: Select Piano / Hz or Registers beside the scope, per SID chip. Register pitch is approximate; noise, combined waveforms and digi samples have explicit limits. Set A and B at least 0.25 seconds apart and enable the session loop. A seek outside the interval turns it off; changing the file or subtune clears the markers. The native sleep timer takes priority.
-- **WAV export**: Render the current tune to a WAV file faster than real time — from the GUI (⌘E) or headless from the command line (see [Headless / CLI](#headless--cli-for-scripts-and-ai-agents)).
+- **WAV export (macOS and iPhone)**: Preview selected tunes and subtunes from the current file, listening sequence or visible library; macOS also offers the selected saved list. Use resolved end times, a manual duration or the current A/B interval. Choose the full mix, current mute/solo mix or one SID voice, with an explicit filter setting. Each voice is rendered with the shared chip filter running; separate files are not guaranteed to add up bit for bit because of rounding and clipping. Batch export preserves existing files and keeps completed files when cancelled. macOS uses ⌘E and native save/folder panels; iPhone shares the finished files. Headless WAV rendering remains available from the command line (see [Headless / CLI](#headless--cli-for-scripts-and-ai-agents)).
 - **Dark / light mode**: Follows the system setting automatically (default); a fixed light or dark appearance can be chosen in the settings (⌘,) or toggled with ⌘T.
 - **Local browser listening data**: Named lists, favorite subtunes, queue order and position are saved in browser storage. After reloading, select the same SID files or folder again to restore access; music is never stored in the page. An unambiguous content match can reconnect a moved file. Restoration prepares playback without starting it. Unreadable data stays untouched; unavailable or full storage is reported.
 - **Playlist with duplicate detection**: Already loaded tunes are not added twice. The playlist can be cleared at any time.
@@ -117,7 +117,7 @@ Title, composer, and info in the sidebar, as well as long track names, also show
 | ⌘P | Play / pause |
 | ⌘→ | Next listening entry |
 | ⌘← | Previous listening entry |
-| ⌘E | Export current tune as WAV |
+| ⌘E | Open WAV export configuration |
 | ⌘T | Toggle dark / light theme (switches to a fixed appearance; back to *Auto* via settings) |
 | ⌘, | Settings (appearance, autoplay folder) |
 
@@ -216,7 +216,7 @@ The emulation core runs without the GUI. The `sidcheck` tool exposes it for shel
 ```bash
 swift build -c release          # builds .build/release/sidcheck
 
-# Render a tune to WAV faster than real time (16-bit PCM mono, 44.1 kHz)
+# Render a tune to WAV faster than real time (16-bit PCM, 44.1 kHz; stereo for multi-SID)
 .build/release/sidcheck tune.sid --wav out.wav 180 0     # 180 seconds, subtune 0
 
 # Dump the SID register state (frequency, gate, waveform, envelope per voice)

@@ -70,6 +70,45 @@ final class ListeningHistoryIntegrationTests: XCTestCase {
         XCTAssertNil(coordinator.playbackLoop.range)
     }
 
+    func testExportPresentationKeepsPlaybackQueueHistoryAndLoopUntouched() async throws {
+        let model = try await makeModel()
+        model.select(trackID: "Tune.sid"); model.setSubtune(2)
+        let coordinator = model.coordinator
+        coordinator.elapsedSeconds = 0.2; coordinator.setLoopStart()
+        coordinator.elapsedSeconds = 0.6; coordinator.setLoopEnd(); coordinator.setLoopEnabled(true)
+        let queue = model.listening.queue, history = model.history.document
+        let presentation = try XCTUnwrap(model.makeWAVExportPresentation())
+        let current = try XCTUnwrap(presentation.choices.first { $0.id == 0 })
+        XCTAssertEqual(current.sources.first?.subtune, 2)
+        XCTAssertEqual(current.slice, 0.2...0.6)
+        XCTAssertEqual(presentation.choices.first { $0.id == 1 }?.sources.first?.subtune, nil)
+        XCTAssertEqual(model.listening.queue, queue)
+        XCTAssertEqual(model.history.document, history)
+        XCTAssertFalse(coordinator.isPlaying)
+        XCTAssertEqual(coordinator.currentSubtune, 2)
+        XCTAssertEqual(coordinator.playbackLoop.range, 0.2...0.6)
+        XCTAssertTrue(coordinator.playbackLoop.isEnabled)
+    }
+
+    func testExportDurationSnapshotUsesPersonalEndTimeAndFullFingerprint() async throws {
+        let model = try await makeModel()
+        model.select(trackID: "Tune.sid"); model.setSubtune(2)
+        let md5 = try XCTUnwrap(model.currentMD5)
+        let target = PlaybackEndTimeTarget(md5: md5, subtune: 2, title: "Tune")
+        try model.playbackOptions.setEndTime("0.4", target: target)
+        let presentation = try XCTUnwrap(model.makeWAVExportPresentation())
+        try model.playbackOptions.setEndTime("1.5", target: target)
+        let sources = try XCTUnwrap(presentation.choices.first { $0.id == 0 }?.sources)
+        let items = try await Task.detached {
+            try WAVExportPlanner.prepare(sources: sources, durations: presentation.durations)
+        }.value
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items.first?.md5, md5)
+        XCTAssertEqual(items.first?.seconds, 0.4)
+        XCTAssertEqual(items.first?.durationSource, .personal)
+        XCTAssertFalse(model.coordinator.isPlaying)
+    }
+
     func testLoopPreventsNormalCompletionButSleepExpiryStopsIt() async throws {
         let model = try await makeModel()
         model.select(trackID: "Tune.sid")
