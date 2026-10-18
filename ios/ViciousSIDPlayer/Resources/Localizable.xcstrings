@@ -156,7 +156,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Advance automatically at the end of a tune"
+            "value": "Automatically advance at song end"
           }
         }
       }
@@ -5565,6 +5565,198 @@
           "stringUnit": {
             "state": "translated",
             "value": "Could not read the file: %@"
+          }
+        }
+      }
+    },
+    "Werkzeuge und Details": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Werkzeuge und Details"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tools and details"
+          }
+        }
+      }
+    },
+    "Abschnitt-Schleife aktiv": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abschnitt-Schleife aktiv"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Section loop active"
+          }
+        }
+      }
+    },
+    "Abschnitt wiederholen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abschnitt wiederholen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Repeat a section"
+          }
+        }
+      }
+    },
+    "Startpunkt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Startpunkt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start point"
+          }
+        }
+      }
+    },
+    "Endpunkt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Endpunkt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "End point"
+          }
+        }
+      }
+    },
+    "Abschnitt löschen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abschnitt löschen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear section"
+          }
+        }
+      }
+    },
+    "Start %@ · Ende %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start %@ · Ende %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start %@ · End %@"
+          }
+        }
+      }
+    },
+    "Start und Ende markieren einen Abschnitt zum Wiederholen, mindestens 0,25 s. Ein Sprung außerhalb beendet die Schleife.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start und Ende markieren einen Abschnitt zum Wiederholen, mindestens 0,25 s. Ein Sprung außerhalb beendet die Schleife."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark the start and end of a section to repeat, at least 0.25 s apart. Seeking outside ends the loop."
+          }
+        }
+      }
+    },
+    "Takt: Auto": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Takt: Auto"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clock: Auto"
+          }
+        }
+      }
+    },
+    "Suche leeren": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suche leeren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear search"
+          }
+        }
+      }
+    },
+    "Max. ": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Max. "
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Max. "
+          }
+        }
+      }
+    },
+    "Unbekannte Songlänge, Limit %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unbekannte Songlänge, Limit %@"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown song length, limit %@"
           }
         }
       }

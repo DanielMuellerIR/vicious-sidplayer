@@ -1,5 +1,8 @@
 import Foundation
+import OSLog
 import ViciousSIDPlayerCore
+
+private let playbackLogger = Logger(subsystem: "com.viben.ViciousSIDPlayer", category: "Playback")
 
 // Die Wiedergabehaelfte des AppModels: Transport, Songlaengen, Sperrbildschirm,
 // Sitzung und WAV-Export.
@@ -16,9 +19,10 @@ extension AppModel {
 
     // MARK: - Titel laden
 
-    /// Bereitet die Bibliotheksauswahl vor. Erst die Play-Aktion startet Audio.
+    /// Eine laufende Wiedergabe folgt der Auswahl; Pause und Stop bereiten nur vor.
     func select(trackID: String) {
-        loadTrack(id: trackID, autoplay: false)
+        playbackLogger.notice("Bibliotheksauswahl; laufende Wiedergabe: \(self.coordinator.isPlaying)")
+        loadTrack(id: trackID, autoplay: coordinator.isPlaying)
     }
 
     /// Gemeinsamer Ladeweg. Entspricht `loadTrack(index:autoplay:)` der Mac-App.
@@ -57,7 +61,7 @@ extension AppModel {
             coordinator.stop()
             setCurrentTrackID(id)
             pendingListeningRestore = false
-            coordinator.setSid(sidFile)
+            coordinator.setSid(sidFile, fallbackTitle: fileURL.deletingPathExtension().lastPathComponent)
             if subtune > 0 { coordinator.setSubtune(sub: subtune) }
             coordinator.setVolume(volume)
             if updateListeningQueue { makeDefaultListeningQueue(trackID: id) }
@@ -98,6 +102,7 @@ extension AppModel {
     func togglePlayPause() {
         guard !collectionTransfer.isApplying else { collectionImportMayResume = false; return }
         if coordinator.isPlaying {
+            playbackLogger.notice("Pause durch Transport-Bedienung")
             services.audioSession.cancelAutomaticResume()
             observeHistory(force: true, playing: false)
             coordinator.pause()
@@ -206,6 +211,7 @@ extension AppModel {
         applyPlaybackOptions()
         services.audioSession.activate()
         coordinator.play()
+        playbackLogger.notice("Wiedergabestart; bewusst: \(manual), erfolgreich: \(self.coordinator.isPlaying)")
         observeHistory(force: true)
     }
 

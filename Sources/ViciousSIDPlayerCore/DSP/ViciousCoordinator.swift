@@ -187,11 +187,14 @@ public final class ViciousCoordinator: ObservableObject {
 
     public init() {}
 
-    public func setSid(_ fileData: SidFileData) {
+    // Der Parser kennt keinen Dateinamen; beide Apps liefern ihn als Rückfall.
+    public func setSid(_ fileData: SidFileData, fallbackTitle: String? = nil) {
         stop()
         playbackLoop.clear()
         self.activeSid = fileData
-        self.trackName = fileData.metadata.title
+        let fallback = fallbackTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !fileData.metadata.hasTitle, let fallback, !fallback.isEmpty { self.trackName = fallback }
+        else { self.trackName = fileData.metadata.title }
         self.composer = fileData.metadata.author
         self.info = fileData.metadata.info
         self.subtunesCount = fileData.metadata.subtunesCount

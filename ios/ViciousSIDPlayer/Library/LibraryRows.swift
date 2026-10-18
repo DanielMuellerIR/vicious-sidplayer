@@ -123,7 +123,7 @@ struct FolderRowView: View {
     }
 }
 
-/// Titelzeile. Antippen bereitet den Titel vor; erst Play startet ihn.
+/// Kompakte Titelzeile mit Metadaten und Dauer nebeneinander.
 struct TrackRowView: View {
     let row: LibraryTrackRow
     let isCurrent: Bool
@@ -142,26 +142,28 @@ struct TrackRowView: View {
                     .font(.footnote)
                     .foregroundStyle(isCurrent ? Color.accentColor : Color.secondary)
                     .frame(width: 16)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(metadata?.title ?? row.track.name)
-                        .lineLimit(1)
-                    Text(metadata?.author ?? String(localized: "Autor unbekannt"))
-                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    if let metadata {
-                        Text("\(metadata.chipCount) SID · \(metadata.modelDescription) · \(LibraryMetadata.durationDescription(duration))")
-                            .font(.caption2).foregroundStyle(.secondary).lineLimit(2)
-                    } else {
-                        Text("Metadaten unbekannt").font(.caption2).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(metadata?.title ?? row.track.name)
+                            .font(.callout).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                        if let duration {
+                            Text(LibraryMetadata.durationDescription(duration))
+                                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        }
                     }
-                    if let title = metadata?.title, title != row.track.name {
-                        Text(row.track.name).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    HStack(spacing: 6) {
+                        if let author = metadata?.author {
+                            Text(author).lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                        if let metadata {
+                            Text(verbatim: "\(metadata.chipCount) SID · \(metadata.modelDescription)").lineLimit(1)
+                        }
                     }
+                    .font(.caption).foregroundStyle(.secondary)
                     if showsFolderPath, !row.track.folderPath.isEmpty {
-                        Text(row.track.folderPath)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.head)
+                        Text(row.track.folderPath).font(.caption2).foregroundStyle(.secondary)
+                            .lineLimit(1).truncationMode(.head)
                     }
                 }
                 Spacer(minLength: 8)
@@ -173,9 +175,11 @@ struct TrackRowView: View {
                 }
             }
             .padding(.leading, CGFloat(row.depth) * 14)
+            .frame(minHeight: 42)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
         .fontWeight(isCurrent ? .semibold : .regular)
     }
 }

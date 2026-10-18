@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import OSLog
 
 // Die Audio-Sitzung des Systems — alles, was von aussen in unsere Wiedergabe
 // hineinregiert.
@@ -58,6 +59,7 @@ final class AudioSessionController {
 
     // MARK: - Interner Zustand
 
+    private let logger = Logger(subsystem: "com.viben.ViciousSIDPlayer", category: "Playback")
     private var didConfigure = false
 
     /// Haben WIR wegen einer Unterbrechung pausiert? Nur dann darf `.shouldResume`
@@ -173,6 +175,7 @@ final class AudioSessionController {
 
         switch type {
         case .began:
+            logger.notice("Audio-Unterbrechung beginnt")
             // Nur merken, wenn wirklich etwas lief — sonst wuerde die App nach
             // dem Anruf Musik starten, die der Nutzer nie angefordert hat.
             didPauseForInterruption = (isPlayingProvider?() ?? false)
@@ -182,6 +185,7 @@ final class AudioSessionController {
             let options = AVAudioSession.InterruptionOptions(rawValue: optionsRaw ?? 0)
             let shouldResume = options.contains(.shouldResume) && didPauseForInterruption
             didPauseForInterruption = false
+            logger.notice("Audio-Unterbrechung beendet; Fortsetzen: \(shouldResume)")
             guard shouldResume else { return }
             // Die Sitzung ist waehrend der Unterbrechung deaktiviert worden.
             activate()
@@ -199,6 +203,7 @@ final class AudioSessionController {
               reason == .oldDeviceUnavailable else { return }
         // Kopfhoerer gezogen oder Bluetooth-Verbindung weg. Pausieren, und zwar
         // ohne Merker: beim Wiedereinstecken laeuft NICHTS von allein weiter.
+        logger.notice("Ausgabeweg weggefallen; Wiedergabe pausiert")
         didPauseForInterruption = false
         pauseHandler?()
     }
@@ -207,6 +212,7 @@ final class AudioSessionController {
     /// eingestellt hatten, ist weg — also Kategorie neu setzen und den
     /// Wiedergabecode die Engine neu aufbauen lassen.
     private func handleMediaServicesReset() {
+        logger.notice("Audiodienst neu gestartet")
         didConfigure = false
         didPauseForInterruption = false
         applyConfiguration()

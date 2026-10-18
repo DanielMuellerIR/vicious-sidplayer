@@ -46,12 +46,13 @@ Die Erweiterungen ab v1.9.26 werden im [Erweiterungsplan](docs/feature-roadmap.m
    Eine bestimmte reale 6581-Revision ist kein Abnahmeziel. Gezieltes Tuning
    ersetzt weiterhin den vollständigen reSIDfp-Port (Entscheidung 2026-07-15).
 
-## iOS-Nacharbeit (Stand 2026-07-26)
+## iOS-Nacharbeit (Stand 2026-10-18)
 
-- **Gerätetest steht aus**, Prüfliste in [`ios/GERAETETEST.md`](ios/GERAETETEST.md).
-  Bis dahin gelten Hintergrundwiedergabe, Sperrbildschirm, AirPods, Anrufverhalten,
-  Kopfhörerabziehen und der File-Provider-Import aus Nextcloud/iCloud als **unbelegt** —
-  nicht als kaputt, aber eben auch nicht als geprüft.
+- **Teilrückmeldung vom Gerät liegt vor:** Musik lief bei gesperrtem Display weiter;
+  automatische Wechsel und unerwartete Stopps sind noch nicht zuverlässig
+  abgenommen. AirPods, Anruf, Kopfhörertrennung und File-Provider-Import wurden
+  dabei nicht erneut geprüft. Die vollständige Prüfliste steht in [`ios/GERAETETEST.md`](ios/GERAETETEST.md).
+  Die einzelnen offenen Gerätefälle bleiben als **unbelegt** vermerkt.
 - **Software-Vorbereitung in v1.9.48 geprüft:** Ausdrückliche Remote-Pause
   während einer Audio-Unterbrechung und eine neue Prepare-only-Titelauswahl
   verhindern das spätere automatische Starten. Sechs gezielte Fälle und
@@ -71,12 +72,18 @@ Die Erweiterungen ab v1.9.26 werden im [Erweiterungsplan](docs/feature-roadmap.m
   bleibt als dauerhaft relevante Entscheidungsgrundlage im Repo.
 - Querformat funktioniert, ist aber nicht ausgereizt (Hochformat war die Vorgabe).
 - App-Icon ist programmatisch erzeugt und zweckmäßig, kein gestaltetes Motiv.
-- **Prepare-only bestätigt und umgesetzt am 2026-10-07 (v1.9.24):**
-  Sitzungswiederherstellung und Bibliotheksauswahl bereiten den Titel vor;
-  erst Play startet die Wiedergabe. Eine neue Auswahl stoppt den bisherigen
-  Titel. Fehlerhafte oder verschwundene Dateien erhalten den bisherigen
-  Zustand. Wechsel aus Stop/Pause/Wiedergabe, expliziter Start und Fehlerfälle
-  sind im Simulator getestet.
+- **Bibliotheksauswahl überarbeitet in v1.9.49:** Während laufender Musik
+  startet die Auswahl den neuen Titel sofort. Aus Stop/Pause sowie bei der
+  Sitzungswiederherstellung wird der Titel weiterhin nur vorbereitet.
+  Fehlerhafte oder verschwundene Dateien erhalten den bisherigen Zustand.
+  80 Simulator-Tests bestehen; die normale Wiedergabeansicht passt auch mit
+  drei Chips und Subtunes auf beide geprüften iPhone-Größen.
+  Siehe [Prüfstand](docs/validation-1.9.49.md).
+- **Sporadischer Geräte-Stopp bleibt offen:** Rückkehr nach dem Entsperren und
+  ein automatischer Wechsel wurden als Auslöser gemeldet. Mehrere
+  Hintergrund-/Shuffle-/Subtune-Ketten bestehen im Simulator. Systemlogs ohne
+  Titel und Pfade erfassen künftig Start, Pause, Songende und Audioereignisse;
+  daraus wird noch keine bestätigte Korrektur der Gerätebeobachtung abgeleitet.
 
 - Der Import liest jede Datei vollständig in den Speicher (nötig für MD5-Dedupe und
   für das koordinierte Lesen von File-Provider-Platzhaltern). Bei SID-Dateien

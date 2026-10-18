@@ -1695,7 +1695,7 @@ public struct MainView: View {
             observeHistory(force: true, playing: false)
             coordinator.stop()
             currentTrackIdx = index
-            coordinator.setSid(sidFile)
+            coordinator.setSid(sidFile, fallbackTitle: track.url.deletingPathExtension().lastPathComponent)
             if subtune > 0 { coordinator.setSubtune(sub: subtune) }
             coordinator.setVolume(volume)
             pendingInitialRestore = nil

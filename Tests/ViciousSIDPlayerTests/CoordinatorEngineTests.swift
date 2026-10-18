@@ -29,6 +29,20 @@ final class CoordinatorEngineTests: XCTestCase {
     }
 
     @MainActor
+    func testFilenameFallbackOnlyReplacesMissingHeaderTitles() throws {
+        let coordinator = ViciousCoordinator()
+        let empty = try SidParser.parse(data: silentSID())
+        coordinator.setSid(empty, fallbackTitle: "BotB 35682")
+        XCTAssertEqual(coordinator.trackName, "BotB 35682")
+        coordinator.setSid(empty, fallbackTitle: "  ")
+        XCTAssertEqual(coordinator.trackName, empty.metadata.title)
+        var data = silentSID()
+        data.replaceSubrange(22..<27, with: "Title".utf8)
+        coordinator.setSid(try SidParser.parse(data: data), fallbackTitle: "Filename")
+        XCTAssertEqual(coordinator.trackName, "Title")
+    }
+
+    @MainActor
     func testLongSeekKeepsMainActorFreeAndStopInvalidatesPreparation() async throws {
         let coordinator = ViciousCoordinator()
         coordinator.setSid(try SidParser.parse(data: silentSID()))

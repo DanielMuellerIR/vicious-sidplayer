@@ -28,6 +28,7 @@ struct LibraryView: View {
     @State private var showImporter = false
     @State private var showCollectionTransfer = false
     @State private var page = ListeningPage.library
+    @FocusState private var searchIsFocused: Bool
     @State private var showListeningName = false
     @State private var listeningName = ""
     @State private var entriesToSave: [ListeningEntry] = []
@@ -78,12 +79,8 @@ struct LibraryView: View {
                 }
 
                 if page == .library {
-                    MetadataSearchTools(metadata: model.metadataIndex, saved: model.savedSearches,
-                        query: $model.searchText, favoritesOnly: $model.favoritesOnly)
+                    searchBar
                     content
-                        .searchable(text: $model.searchText, prompt: Text("Titel, Autor oder Suchfelder"))
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
                 } else if page == .history {
                     ListeningHistoryView { model.searchText = "heard:never"; page = .library }
                 } else {
@@ -91,7 +88,8 @@ struct LibraryView: View {
                 }
             }
             .navigationTitle("Bibliothek")
-            .toolbar { if page == .library { toolbarContent } }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { toolbarContent }
             .sheet(isPresented: $showListeningName) {
                 ListeningNameSheet(name: $listeningName) {
                     _ = model.saveListeningList(name: listeningName, entries: entriesToSave)
@@ -108,10 +106,38 @@ struct LibraryView: View {
                 onCompletion: handleImport
             )
             .onAppear(perform: rebuildTrackIndex)
+            .onChange(of: page) { _, _ in searchIsFocused = false }
             .onChange(of: model.tracks) { _, _ in
                 rebuildTrackIndex()
             }
         }
+    }
+
+    private var searchBar: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 6) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
+                    TextField("Titel, Autor oder Suchfelder", text: $model.searchText)
+                        .autocorrectionDisabled().textInputAutocapitalization(.never)
+                        .focused($searchIsFocused).submitLabel(.search)
+                        .onSubmit { searchIsFocused = false }
+                        .accessibilityIdentifier("library-search")
+                    if !model.searchText.isEmpty {
+                        Button { model.searchText = "" } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                                .frame(width: 44, height: 44)
+                        }.accessibilityLabel("Suche leeren")
+                    }
+                }
+                .padding(.horizontal, 10).frame(minHeight: 44)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+                MetadataSearchTools(saved: model.savedSearches,
+                    query: $model.searchText, favoritesOnly: $model.favoritesOnly)
+            }
+            MetadataSearchStatus(metadata: model.metadataIndex, saved: model.savedSearches, query: model.searchText)
+        }
+        .padding(.horizontal, 12).padding(.bottom, 6)
     }
 
     // MARK: - Inhalt
@@ -143,6 +169,7 @@ struct LibraryView: View {
             }
         }
         .listStyle(.plain)
+        .environment(\.defaultMinListRowHeight, 44)
     }
 
     /// Ordnerbaum.
@@ -165,6 +192,7 @@ struct LibraryView: View {
             }
         }
         .listStyle(.plain)
+        .environment(\.defaultMinListRowHeight, 44)
         // Nach unten ziehen gleicht die Bibliothek mit dem ab, was tatsaechlich
         // im Documents-Ordner liegt — noetig, wenn jemand ueber den Finder
         // Dateien abgelegt oder geloescht hat.
@@ -187,8 +215,10 @@ struct LibraryView: View {
                             showsFolderPath: showsFolderPath,
                             metadata: model.metadataIndex.records[trackID]?.metadata,
                             duration: model.metadataIndex.records[trackID]?.metadata.flatMap(model.knownLibraryDuration)) {
+            searchIsFocused = false
             model.select(trackID: trackID)
         }
+        .listRowInsets(EdgeInsets(top: 5, leading: 12, bottom: 5, trailing: 12))
         .contextMenu {
             Button("Als Nächstes") { model.enqueueNext(trackID: trackID) }
             Menu("Zu Hörfolge hinzufügen") {

@@ -3,8 +3,8 @@ import ViciousSIDPlayerCore
 
 // „Now Playing" — der Wiedergabe-Tab.
 //
-// Aufbau von oben nach unten: Titelangaben, Oszilloskop, Subtune-Auswahl,
-// Positionsleiste, Transport, Wiedergabeoptionen, Analysewerkzeuge, Export.
+// Die tägliche Bedienung passt kompakt über die Tab-Leiste. Seltene
+// Analysewerkzeuge und ausführliche Anmerkungen bleiben ausklappbar.
 //
 // Die schnellen Stimmenwerte werden beim Zeichnen gelesen und nicht publiziert.
 // Die Unteransichten beobachten nur Titel- und Transportzustand; Layout und
@@ -15,6 +15,7 @@ struct NowPlayingView: View {
     @Environment(\.colorScheme) private var systemScheme
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var optionsPresentation: PlaybackOptionsPresentation?
+    @State private var showsDetails = false
 
     private var palette: PlayerPalette {
         PlayerPalette(themeMode: model.themeMode, systemScheme: systemScheme)
@@ -22,53 +23,42 @@ struct NowPlayingView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 18) {
-                    TrackHeaderView(coordinator: model.coordinator)
-
-                    OscilloscopeView(coordinator: model.coordinator,
-                                     palette: palette,
-                                     isSceneActive: model.isSceneActive && isVisible)
-                        .frame(height: verticalSizeClass == .compact ? 180 : 280)
-
-                    SubtuneSelectorView(coordinator: model.coordinator) { index in
-                        model.setSubtune(index)
-                    }
-
-                    if let id = model.currentTrackID {
-                        Button {
-                            model.listening.toggleSubtuneFavorite(trackID: id, subtune: model.coordinator.currentSubtune)
+            GeometryReader { geometry in
+                ScrollView {
+                    VStack(spacing: 8) {
+                        TrackHeaderView(coordinator: model.coordinator)
+                        OscilloscopeView(coordinator: model.coordinator, palette: palette,
+                                         isSceneActive: model.isSceneActive && isVisible)
+                            .frame(height: scopeHeight(available: geometry.size.height))
+                        SubtuneSelectorView(coordinator: model.coordinator) { model.setSubtune($0) }
+                        ScrubberView(coordinator: model.coordinator, duration: model.currentDuration,
+                                     isFallback: model.currentDurationResolution.source == .fallback) { model.seek(to: $0) }
+                        TransportControlsView(coordinator: model.coordinator, accent: palette.accent)
+                        PlaybackOptionsView()
+                        AnalysisControlsView(coordinator: model.coordinator,
+                                             onModelChange: model.setModelOverride, onClockChange: model.setClockMode)
+                        DisclosureGroup(isExpanded: $showsDetails) {
+                            VStack(alignment: .leading, spacing: 14) {
+                                Text("Abschnitt wiederholen").font(.subheadline.weight(.semibold))
+                                PlaybackLoopControls(coordinator: model.coordinator)
+                                if !model.coordinator.info.isEmpty {
+                                    Text(model.coordinator.info).font(.footnote).foregroundStyle(.secondary)
+                                        .textSelection(.enabled)
+                                }
+                                STILNotesView()
+                                AudioExportButton()
+                            }
+                            .padding(.top, 8)
                         } label: {
-                            Label(model.listening.isSubtuneFavorite(trackID: id, subtune: model.coordinator.currentSubtune)
-                                ? String(localized: "Subtune gemerkt") : String(localized: "Subtune merken"), systemImage: "star")
+                            Label(model.coordinator.playbackLoop.isEnabled
+                                  ? String(localized: "Abschnitt-Schleife aktiv") : String(localized: "Werkzeuge und Details"),
+                                  systemImage: model.coordinator.playbackLoop.isEnabled ? "repeat" : "wrench.and.screwdriver")
+                                .font(.footnote).frame(minHeight: 44)
                         }
-                        .buttonStyle(.bordered)
-                        .disabled(model.listening.isReadOnly || !model.listening.isLoaded)
+                        .accessibilityIdentifier("playback-details")
                     }
-
-                    ScrubberView(coordinator: model.coordinator,
-                                 duration: model.currentDuration) { seconds in
-                        model.seek(to: seconds)
-                    }
-
-                    PlaybackLoopControls(coordinator: model.coordinator)
-
-                    TransportControlsView(coordinator: model.coordinator,
-                                          accent: palette.accent)
-
-                    PlaybackOptionsView()
-
-                    AnalysisControlsView(coordinator: model.coordinator,
-                                         palette: palette,
-                                         onModelChange: model.setModelOverride,
-                                         onClockChange: model.setClockMode)
-
-                    STILNotesView()
-
-                    AudioExportButton()
+                    .padding(.horizontal, 12).padding(.vertical, 8)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
             }
             .navigationTitle("Wiedergabe")
             .navigationBarTitleDisplayMode(.inline)
@@ -84,6 +74,14 @@ struct NowPlayingView: View {
             }
         }
     }
+    private func scopeHeight(available: CGFloat) -> CGFloat {
+        // Drei 44-pt-Stimmenzeilen plus Analysewahl; Multi-SID braucht die Chipwahl darüber.
+        let controlsHeight: CGFloat = 3 * 44 + 44 + 6
+        let minimum = controlsHeight + (model.coordinator.activeSIDChips.count > 1 ? 44 : 0)
+        if verticalSizeClass == .compact { return minimum }
+        return min(250, max(minimum, available * 0.34 - (model.coordinator.subtunesCount > 1 ? 44 : 0)))
+    }
+
 }
 
 private struct PlaybackOptionsPresentation: Identifiable {
@@ -93,29 +91,32 @@ private struct PlaybackOptionsPresentation: Identifiable {
 
 // MARK: - Titelangaben
 
-/// Titel, Autor und Info-Zeile aus dem PSID-Header der Datei.
+/// Titel und Autor; weitere Headerangaben stehen in den ausklappbaren Details.
 private struct TrackHeaderView: View {
     @ObservedObject var coordinator: ViciousCoordinator
+    @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        VStack(spacing: 4) {
-            Text(coordinator.trackName)
-                .font(.title3.weight(.semibold))
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(coordinator.composer)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(coordinator.info)
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(coordinator.trackName).font(.headline)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(coordinator.composer).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            if let id = model.currentTrackID {
+                let favorite = model.listening.isSubtuneFavorite(trackID: id, subtune: coordinator.currentSubtune)
+                Button { model.listening.toggleSubtuneFavorite(trackID: id, subtune: coordinator.currentSubtune) } label: {
+                    Image(systemName: favorite ? "star.fill" : "star")
+                        .font(.system(size: 22)).frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(favorite ? Text("Subtune gemerkt") : Text("Subtune merken"))
+                .disabled(model.listening.isReadOnly || !model.listening.isLoaded)
+            }
         }
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .combine)
     }
 }
 
@@ -222,6 +223,7 @@ private struct SubtuneSelectorView: View {
 private struct ScrubberView: View {
     @ObservedObject var coordinator: ViciousCoordinator
     let duration: Double
+    var isFallback = false
     let onSeek: (Double) -> Void
 
     @State private var dragPosition: Double?
@@ -250,7 +252,8 @@ private struct ScrubberView: View {
             HStack {
                 Text(AppModel.formatTime(dragPosition ?? coordinator.elapsedSeconds))
                 Spacer()
-                Text(AppModel.formatTime(duration))
+                Text(isFallback ? String(localized: "Max. ")+AppModel.formatTime(duration) : AppModel.formatTime(duration))
+                    .accessibilityLabel(isFallback ? Text("Unbekannte Songlänge, Limit \(AppModel.formatTime(duration))") : Text(AppModel.formatTime(duration)))
             }
             .font(.caption.monospacedDigit())
             .foregroundStyle(.secondary)
@@ -326,39 +329,32 @@ private struct PlaybackOptionsView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        VStack(spacing: 12) {
-            optionsLayout {
-                Toggle(isOn: $model.shuffle) {
-                    Label("Zufall", systemImage: "shuffle")
-                }
-                .toggleStyle(.button)
-                .accessibilityLabel("Zufallswiedergabe")
-
-                Toggle(isOn: $model.autoNext) {
-                    Label("Auto-Next", systemImage: "text.line.first.and.arrowtriangle.forward")
-                }
-                .toggleStyle(.button)
-                .accessibilityLabel("Am Songende automatisch weiter")
-
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            HStack(spacing: 10) {
-                Image(systemName: "speaker.fill")
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-                Slider(value: $model.volume, in: 0...1)
-                    .accessibilityLabel("Lautstärke")
-                Image(systemName: "speaker.wave.3.fill")
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: 8) { toggles; volume }
+        } else {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) { toggles; volume }
+                VStack(spacing: 8) { toggles; volume }
             }
         }
     }
 
-    private var optionsLayout: AnyLayout {
-        dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
-            : AnyLayout(HStackLayout(spacing: 12))
+    private var toggles: some View {
+        HStack(spacing: 6) {
+            Toggle(isOn: $model.shuffle) { Image(systemName: "shuffle").frame(minWidth: 20, minHeight: 32) }
+                .accessibilityLabel("Zufallswiedergabe")
+            Toggle(isOn: $model.autoNext) { Text("Auto-Next").font(.footnote).frame(minHeight: 32) }
+                .accessibilityLabel("Am Songende automatisch weiter")
+        }
+        .toggleStyle(.button)
+    }
+
+    private var volume: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "speaker.wave.2.fill").font(.footnote).foregroundStyle(.secondary).accessibilityHidden(true)
+            Slider(value: $model.volume, in: 0...1).accessibilityLabel("Lautstärke")
+        }
+        .frame(minWidth: 120, minHeight: 44)
     }
 }
 

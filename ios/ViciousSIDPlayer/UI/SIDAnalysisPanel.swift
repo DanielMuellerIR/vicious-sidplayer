@@ -81,28 +81,30 @@ struct PlaybackLoopControls: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             controlsLayout {
-                Button { coordinator.setLoopStart() } label: { Text("A setzen").lineLimit(1).frame(minHeight: 44) }
+                Button { coordinator.setLoopStart() } label: { Text("Startpunkt").lineLimit(1).frame(minHeight: 44) }
                     .accessibilityIdentifier("loop-set-a").disabled(!coordinator.hasSID)
-                Button { coordinator.setLoopEnd() } label: { Text("B setzen").lineLimit(1).frame(minHeight: 44) }
+                Button { coordinator.setLoopEnd() } label: { Text("Endpunkt").lineLimit(1).frame(minHeight: 44) }
                     .disabled(coordinator.playbackLoop.start == nil)
                     .accessibilityIdentifier("loop-set-b")
+            }
+            HStack {
                 Button { coordinator.setLoopEnabled(!coordinator.playbackLoop.isEnabled) } label: {
-                    Label("A/B", systemImage: coordinator.playbackLoop.isEnabled ? "repeat.circle.fill" : "repeat.circle")
+                    Label("Wiederholen", systemImage: coordinator.playbackLoop.isEnabled ? "repeat.circle.fill" : "repeat.circle")
                         .font(.footnote).frame(minWidth: 44, minHeight: 44)
                 }
                     .tint(coordinator.playbackLoop.isEnabled ? .accentColor : .secondary)
                     .disabled(coordinator.playbackLoop.range == nil)
                     .accessibilityIdentifier("loop-enabled")
-                    .accessibilityLabel("A/B")
+                    .accessibilityLabel("Abschnitt wiederholen")
                     .accessibilityValue(coordinator.playbackLoop.isEnabled ? Text("An") : Text("Aus"))
-                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
+                Spacer(minLength: 0)
                 Button { coordinator.clearLoop() } label: { Image(systemName: "xmark.circle").frame(minWidth: 44, minHeight: 44) }
-                    .accessibilityLabel("A/B-Marker löschen")
+                    .accessibilityLabel("Abschnitt löschen")
             }
             .buttonStyle(.bordered)
-            Text(verbatim: "A \(time(coordinator.playbackLoop.start)) · B \(time(coordinator.playbackLoop.end))")
+            Text("Start \(time(coordinator.playbackLoop.start)) · Ende \(time(coordinator.playbackLoop.end))")
                 .font(.caption.monospaced()).foregroundStyle(.secondary)
-            Text("Mindestens 0,25 s. Ein Sprung außerhalb A/B schaltet die Schleife aus.")
+            Text("Start und Ende markieren einen Abschnitt zum Wiederholen, mindestens 0,25 s. Ein Sprung außerhalb beendet die Schleife.")
                 .font(.caption2).foregroundStyle(.secondary)
             if coordinator.isPreparingLoop { Text("Schleife wird vorbereitet …").font(.caption) }
             if let error = coordinator.loopError { Text(error).font(.caption).foregroundStyle(.red) }

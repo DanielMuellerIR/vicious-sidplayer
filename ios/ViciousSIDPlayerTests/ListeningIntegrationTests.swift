@@ -295,6 +295,148 @@ final class ListeningIntegrationTests: XCTestCase {
         XCTAssertEqual(model.currentTrackID, entry.trackID)
     }
 
+    func testMissingHeaderTitleUsesTheFilenameInPlayback() async throws {
+        let model = try await makeModel()
+        let url = try XCTUnwrap(model.trackURL(for: "B.sid"))
+        var data = try Data(contentsOf: url)
+        data.replaceSubrange(22..<54, with: repeatElement(UInt8(0), count: 32))
+        try data.write(to: url)
+        model.select(trackID: "B.sid")
+        XCTAssertEqual(model.coordinator.trackName, "B")
+        XCTAssertFalse(model.coordinator.isPlaying)
+    }
+
+    func testForegroundRefreshPreservesRunningPlayback() async throws {
+        let model = try await makeModel(); model.select(trackID: "Alpha/A.sid")
+        model.configureSystemPlayback()
+        model.togglePlayPause(); model.cancelLengthEstimate()
+        XCTAssertTrue(model.coordinator.isPlaying)
+        let engineGeneration = model.coordinator.audioEngineGeneration
+        for _ in 0..<3 {
+            model.scenePhaseChanged(to: .inactive)
+            model.scenePhaseChanged(to: .background)
+            model.scenePhaseChanged(to: .active)
+            await model.services.libraryReloadTask?.value
+            XCTAssertEqual(model.currentTrackID, "Alpha/A.sid")
+            XCTAssertTrue(model.coordinator.isPlaying)
+            XCTAssertEqual(model.coordinator.audioEngineGeneration, engineGeneration)
+        }
+    }
+
+    func testUnknownLoopAdvancesThroughTheBackgroundPlaybackTimer() async throws {
+        let model = try await makeModel()
+        let url = try XCTUnwrap(model.trackURL(for: "Alpha/A.sid"))
+        var data = try Data(contentsOf: url); data[14] = 0; data[15] = 1
+        try data.write(to: url)
+        model.select(trackID: "Alpha/A.sid"); model.cancelLengthEstimate()
+        XCTAssertEqual(model.currentDuration, 360)
+        XCTAssertTrue(model.autoNext)
+        model.configureSystemPlayback()
+        model.togglePlayPause()
+        model.scenePhaseChanged(to: .background)
+        // Die UI-Zeitspiegelung darf den eingespeisten Endzeitpunkt nicht
+        // überschreiben. Audio und der echte 1-Hz-Abschlusslauf bleiben aktiv.
+        model.coordinator.setUIUpdateInterval(120)
+        model.coordinator.elapsedSeconds = 360
+        let deadline = Date().addingTimeInterval(6)
+        while model.currentTrackID == "Alpha/A.sid", Date() < deadline {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+        XCTAssertEqual(model.currentTrackID, "B.sid", "Zeit \(model.coordinator.elapsedSeconds), Timer \(model.services.playbackLoop != nil)")
+        XCTAssertTrue(model.coordinator.isPlaying)
+        model.scenePhaseChanged(to: .active)
+        await model.services.libraryReloadTask?.value
+        XCTAssertEqual(model.currentTrackID, "B.sid")
+        XCTAssertTrue(model.coordinator.isPlaying)
+    }
+
+    func testAutomaticPlaybackContinuesAcrossFourTrackEndsAndForegroundRefresh() async throws {
+        let model = try await makeModel()
+        for id in ["Alpha/A.sid", "B.sid", "C.sid"] {
+            let url = try XCTUnwrap(model.trackURL(for: id))
+            var data = try Data(contentsOf: url); data[14] = 0; data[15] = 1
+            try data.write(to: url)
+            let target = PlaybackEndTimeTarget(md5: SonglengthDB.md5Hex(of: data), subtune: 0, title: id)
+            try model.playbackOptions.setEndTime("1.2", target: target)
+        }
+        model.configureSystemPlayback()
+        model.select(trackID: "Alpha/A.sid"); model.togglePlayPause()
+        model.scenePhaseChanged(to: .background)
+        for expected in ["B.sid", "C.sid", "Alpha/A.sid", "B.sid"] {
+            let oldID = model.currentTrackID
+            let deadline = Date().addingTimeInterval(6)
+            while model.currentTrackID == oldID, Date() < deadline { try await Task.sleep(nanoseconds: 100_000_000) }
+            XCTAssertEqual(model.currentTrackID, expected,
+                "Zeit \(model.coordinator.elapsedSeconds), spielt \(model.coordinator.isPlaying), Timer \(model.services.playbackLoop != nil), Fehler \(model.errorMessage ?? "—")")
+            XCTAssertTrue(model.coordinator.isPlaying)
+            XCTAssertNotNil(model.services.playbackLoop)
+            if expected == "B.sid" {
+                model.scenePhaseChanged(to: .active)
+                await model.services.libraryReloadTask?.value
+            }
+        }
+    }
+
+    func testAutomaticSubtunesContinueIntoTheRemainingLibrary() async throws {
+        let model = try await makeModel()
+        model.configureSystemPlayback()
+        for id in ["Alpha/A.sid", "B.sid", "C.sid"] {
+            let url = try XCTUnwrap(model.trackURL(for: id))
+            let data = try Data(contentsOf: url)
+            for sub in 0..<3 {
+                try model.playbackOptions.setEndTime("1.2", target: PlaybackEndTimeTarget(
+                    md5: SonglengthDB.md5Hex(of: data), subtune: sub, title: id))
+            }
+        }
+        model.select(trackID: "Alpha/A.sid"); model.togglePlayPause()
+        model.scenePhaseChanged(to: .background)
+        for expected in [("Alpha/A.sid", 1), ("Alpha/A.sid", 2), ("B.sid", 0), ("B.sid", 1)] {
+            let oldID = model.currentTrackID, oldSubtune = model.coordinator.currentSubtune
+            let deadline = Date().addingTimeInterval(6)
+            while model.currentTrackID == oldID && model.coordinator.currentSubtune == oldSubtune && Date() < deadline {
+                try await Task.sleep(nanoseconds: 100_000_000)
+            }
+            XCTAssertEqual(model.currentTrackID, expected.0)
+            XCTAssertEqual(model.coordinator.currentSubtune, expected.1)
+            XCTAssertTrue(model.coordinator.isPlaying)
+            XCTAssertNotNil(model.services.playbackLoop)
+            if expected.1 == 1 {
+                model.scenePhaseChanged(to: .active)
+                await model.services.libraryReloadTask?.value
+            }
+        }
+    }
+
+    func testShuffledLibraryKeepsAdvancingAfterForegroundRefresh() async throws {
+        let model = try await makeModel()
+        model.configureSystemPlayback()
+        for id in ["Alpha/A.sid", "B.sid", "C.sid"] {
+            let url = try XCTUnwrap(model.trackURL(for: id))
+            var data = try Data(contentsOf: url); data[14] = 0; data[15] = 1
+            try data.write(to: url)
+            try model.playbackOptions.setEndTime("1.2", target: PlaybackEndTimeTarget(
+                md5: SonglengthDB.md5Hex(of: data), subtune: 0, title: id))
+        }
+        model.shuffle = true
+        model.select(trackID: "Alpha/A.sid"); model.togglePlayPause()
+        model.scenePhaseChanged(to: .background)
+        var observed = [try XCTUnwrap(model.currentTrackID)]
+        for step in 0..<5 {
+            let oldID = model.currentTrackID, deadline = Date().addingTimeInterval(6)
+            while model.currentTrackID == oldID, Date() < deadline { try await Task.sleep(nanoseconds: 100_000_000) }
+            let newID = try XCTUnwrap(model.currentTrackID)
+            XCTAssertNotEqual(newID, oldID)
+            observed.append(newID)
+            XCTAssertTrue(model.coordinator.isPlaying)
+            XCTAssertNotNil(model.services.playbackLoop)
+            if step == 0 {
+                model.scenePhaseChanged(to: .active)
+                await model.services.libraryReloadTask?.value
+            }
+        }
+        XCTAssertEqual(Set(observed.prefix(3)), Set(["Alpha/A.sid", "B.sid", "C.sid"]))
+    }
+
     private func postInterruption(_ type: AVAudioSession.InterruptionType, shouldResume: Bool = false) {
         NotificationCenter.default.post(name: AVAudioSession.interruptionNotification,
                                         object: AVAudioSession.sharedInstance(),

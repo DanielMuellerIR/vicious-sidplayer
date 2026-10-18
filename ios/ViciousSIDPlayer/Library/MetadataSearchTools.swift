@@ -2,7 +2,6 @@ import SwiftUI
 import ViciousSIDPlayerCore
 
 struct MetadataSearchTools: View {
-    @ObservedObject var metadata: LibraryMetadataController
     @ObservedObject var saved: SavedLibrarySearchController
     @Binding var query: String
     @Binding var favoritesOnly: Bool
@@ -11,44 +10,30 @@ struct MetadataSearchTools: View {
     @State private var showHelp = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Menu {
-                    ForEach(saved.document.searches) { search in
-                        Button(search.name) { query = search.query; favoritesOnly = search.favoritesOnly }
+        Menu {
+            ForEach(saved.document.searches) { search in
+                Button(search.name) { query = search.query; favoritesOnly = search.favoritesOnly }
+            }
+            Divider()
+            Button("Suchhilfe", systemImage: "questionmark.circle") { showHelp = true }
+            Button("Suche sichern") { name = ""; editorRequest = SavedSearchEditorRequest(editingID: nil) }
+                .disabled(saved.isReadOnly || !saved.isLoaded || LibrarySearchQuery(query).error != nil)
+            Menu("Verwalten") {
+                ForEach(saved.document.searches) { search in
+                    Menu(search.name) {
+                        Button("Umbenennen") { name = search.name; editorRequest = SavedSearchEditorRequest(editingID: search.id) }
+                        Button("Löschen", role: .destructive) { saved.remove(search.id) }
                     }
-                    Divider()
-                    Button("Suche sichern") { name = ""; editorRequest = SavedSearchEditorRequest(editingID: nil) }
-                        .disabled(saved.isReadOnly || !saved.isLoaded || LibrarySearchQuery(query).error != nil)
-                    Menu("Verwalten") {
-                        ForEach(saved.document.searches) { search in
-                            Menu(search.name) {
-                                Button("Umbenennen") { name = search.name; editorRequest = SavedSearchEditorRequest(editingID: search.id) }
-                                Button("Löschen", role: .destructive) { saved.remove(search.id) }
-                            }
-                        }
-                    }.disabled(saved.isReadOnly || saved.document.searches.isEmpty)
-                } label: {
-                    Label("Suchansichten", systemImage: "line.3.horizontal.decrease.circle")
-                        .frame(minHeight: 44).contentShape(Rectangle())
                 }
-                .accessibilityIdentifier("saved-library-searches")
-                Spacer()
-                Button { showHelp = true } label: {
-                    Label("Suchhilfe", systemImage: "questionmark.circle")
-                        .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
-                }
-            }
-            if let error = LibrarySearchQuery(query).error { Label(error, systemImage: "exclamationmark.triangle") }
-            if metadata.isIndexing { Text("Metadaten: \(metadata.indexedCount)/\(metadata.totalCount)").foregroundStyle(.secondary) }
-            if metadata.storageError != nil { Text("Metadatencache konnte nicht gesichert werden.") }
-            if let error = saved.error {
-                Text(error)
-                if !saved.isReadOnly { Button("Erneut sichern") { saved.retrySave() } }
-            }
+            }.disabled(saved.isReadOnly || saved.document.searches.isEmpty)
+        } label: {
+            Label("Suchansichten", systemImage: "line.3.horizontal.decrease.circle")
+                .labelStyle(.iconOnly)
+                .frame(width: 44, height: 44).contentShape(Rectangle())
         }
+        .accessibilityIdentifier("saved-library-searches")
         .font(.caption)
-        .padding(.horizontal, 16).padding(.vertical, 6)
+
         .sheet(item: $editorRequest) { request in
             NavigationStack {
                 Form { TextField("Name", text: $name).accessibilityIdentifier("saved-search-name") }
@@ -86,6 +71,26 @@ struct MetadataSearchTools: View {
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Fertig") { showHelp = false } } }
             }
         }
+    }
+}
+
+struct MetadataSearchStatus: View {
+    @ObservedObject var metadata: LibraryMetadataController
+    @ObservedObject var saved: SavedLibrarySearchController
+    let query: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let error = LibrarySearchQuery(query).error { Label(error, systemImage: "exclamationmark.triangle") }
+            if metadata.isIndexing { Text("Metadaten: \(metadata.indexedCount)/\(metadata.totalCount)").foregroundStyle(.secondary) }
+            if metadata.storageError != nil { Text("Metadatencache konnte nicht gesichert werden.") }
+            if let error = saved.error {
+                Text(error)
+                if !saved.isReadOnly { Button("Erneut sichern") { saved.retrySave() } }
+            }
+        }
+        .font(.caption)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

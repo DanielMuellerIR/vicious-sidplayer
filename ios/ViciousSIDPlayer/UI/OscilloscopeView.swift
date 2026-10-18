@@ -55,34 +55,107 @@ struct OscilloscopeView: View {
                 .pickerStyle(.segmented).labelsHidden()
                 .padding(.horizontal, 8).padding(.top, 6)
             }
-        Picker("Analyseansicht", selection: $analysisMode) {
-            Text("Scope").tag(0); Text("Piano / Hz").tag(1); Text("Register").tag(2)
-        }.pickerStyle(.segmented).accessibilityIdentifier("analysis-view")
-        if analysisMode == 0 {
-        TimelineView(.animation(minimumInterval: Self.minimumFrameInterval, paused: isPaused)) { timeline in
-            Canvas { context, size in
-                draw(context: &context,
-                     size: size,
-                     time: timeline.date.timeIntervalSinceReferenceDate)
+            analysisPicker
+            if analysisMode == 0 {
+                scope
+            } else {
+                SIDAnalysisPanel(coordinator: coordinator, chip: displayedChip, mode: analysisMode, isSceneActive: isSceneActive)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(palette.scopeBackground, in: RoundedRectangle(cornerRadius: 12))
             }
-        }
-        .background(palette.scopeBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(palette.scopeBorder, lineWidth: 1)
-        )
-        .accessibilityLabel("Oszilloskop")
-        .accessibilityHint("Zeigt die Wellenform der drei SID-Stimmen.")
-        } else {
-            SIDAnalysisPanel(coordinator: coordinator, chip: displayedChip, mode: analysisMode, isSceneActive: isSceneActive)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(palette.scopeBackground, in: RoundedRectangle(cornerRadius: 12))
-        }
         }
         .onChange(of: coordinator.activeSIDChips) { _, chips in
             if !chips.contains(selectedChip) { selectedChip = chips[0] }
         }
+    }
+
+    private var analysisPicker: some View {
+        HStack(spacing: 4) {
+            Picker("Analyseansicht", selection: $analysisMode) {
+                Text("Scope").tag(0); Text("Piano / Hz").tag(1); Text("Register").tag(2)
+            }
+            .pickerStyle(.segmented).accessibilityIdentifier("analysis-view")
+            mixMenu
+        }
+    }
+
+    private var mixMenu: some View {
+        Menu {
+            ForEach(coordinator.activeSIDChips, id: \.self) { chip in
+                Section("SID \(chip + 1)") {
+                    Toggle("Chip stumm", isOn: Binding(get: { coordinator.analysisMix.chipMuted[chip] },
+                        set: { _ in coordinator.toggleChipMuted(chip) }))
+                    ForEach(0..<3, id: \.self) { voice in
+                        let channel = chip * 3 + voice
+                        Menu("Stimme \(voice + 1)") {
+                            Toggle("Stumm", isOn: Binding(get: { coordinator.analysisMix.channelMuted[channel] },
+                                set: { _ in coordinator.toggleChannelMuted(channel) }))
+                            Toggle("Solo", isOn: Binding(get: { coordinator.analysisMix.soloChannels.contains(channel) },
+                                set: { _ in coordinator.toggleChannelSolo(channel) }))
+                        }
+                    }
+                }
+            }
+            Button("Solos aufheben") { coordinator.clearSolos() }
+                .disabled(coordinator.analysisMix.soloChannels.isEmpty)
+        } label: {
+            Image(systemName: "slider.horizontal.3").font(.system(size: 18))
+                .frame(width: 44, height: 44)
+        }
+        .accessibilityLabel("Mischung")
+    }
+
+    private var scope: some View {
+        HStack(spacing: 4) {
+            TimelineView(.animation(minimumInterval: Self.minimumFrameInterval, paused: isPaused)) { timeline in
+                Canvas { context, size in
+                    draw(context: &context,
+                         size: size,
+                         time: timeline.date.timeIntervalSinceReferenceDate)
+                }
+            }
+            .background(palette.scopeBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(palette.scopeBorder, lineWidth: 1)
+            )
+            .accessibilityLabel("Oszilloskop")
+            .accessibilityHint("Zeigt die Wellenform der drei SID-Stimmen.")
+            VStack(spacing: 0) {
+                ForEach(0..<3, id: \.self) { voice in
+                    voiceControls(voice).frame(maxHeight: .infinity)
+                }
+            }
+            .frame(width: 88)
+        }
+    }
+
+    private func voiceControls(_ voice: Int) -> some View {
+        let channel = displayedChip * 3 + voice
+        let muted = coordinator.analysisMix.channelMuted[channel]
+        let solo = coordinator.analysisMix.soloChannels.contains(channel)
+        return HStack(spacing: 0) {
+            Button { coordinator.toggleChannelMuted(channel) } label: {
+                Image(systemName: muted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                    .font(.system(size: 18))
+                    .frame(width: 44, height: 44).contentShape(Rectangle())
+            }
+            .foregroundStyle(muted ? .red : palette.traceColors[voice])
+            .accessibilityLabel(Text("SID \(displayedChip + 1), Stimme \(voice + 1) stummschalten"))
+            .accessibilityValue(muted ? Text("An") : Text("Aus"))
+            .accessibilityIdentifier("channel-\(channel)-mute")
+            Button { coordinator.toggleChannelSolo(channel) } label: {
+                Text(verbatim: "S").font(.footnote.weight(.semibold))
+                    .frame(width: 44, height: 44).contentShape(Rectangle())
+                    .background(solo ? Color.orange.opacity(0.18) : Color.clear, in: RoundedRectangle(cornerRadius: 8))
+            }
+            .foregroundStyle(solo ? Color.orange : Color.secondary)
+            .accessibilityLabel(Text("SID \(displayedChip + 1), Stimme \(voice + 1) Solo"))
+            .accessibilityValue(solo ? Text("An") : Text("Aus"))
+            .accessibilityIdentifier("channel-\(channel)-solo")
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Zeichnen
@@ -209,11 +282,10 @@ struct OscilloscopeView: View {
 
         // Technische Statuszeile je Stimme. Bewusst nicht uebersetzt: das sind
         // Registernamen aus dem SID-Datenblatt, keine Bedienoberflaeche.
-        let gateText = gate != 0 ? "GATE:ON " : "GATE:OFF"
         let frequencyText = frequencyHz > 20.0 ? "\(Int(frequencyHz.rounded())) Hz" : "0 Hz"
         let envelopeText = "\(Int((envelope * 100.0).rounded()))%"
-        let mutedText = isMuted ? " | MUTED" : ""
-        let line = "V\(voice + 1) | \(Self.waveformName(waveform)) | [\(gateText)] | \(frequencyText) | Env: \(envelopeText)\(mutedText)"
+        let mutedText = isMuted ? " · M" : ""
+        let line = "V\(voice + 1) \(Self.waveformName(waveform)) · \(frequencyText) · \(envelopeText) · G\(gate)\(mutedText)"
 
         let resolved = context.resolve(
             Text(line)

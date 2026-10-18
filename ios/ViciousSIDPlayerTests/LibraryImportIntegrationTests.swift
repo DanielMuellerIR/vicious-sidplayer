@@ -493,7 +493,7 @@ final class LibraryImportIntegrationTests: XCTestCase {
         XCTAssertTrue(fm.fileExists(atPath: root.appendingPathComponent("A/one.sid").path))
     }
 
-    func testSelectionPreparesAndOnlyPlayStartsIncludingPausedAndPlayingChanges() async throws {
+    func testSelectionPreparesWhilePausedAndContinuesPlayingChanges() async throws {
         try write("A/one.sid", payload: [0x60, 0xEA, 0xEA, 0x60])
         try write("B/two.sid", payload: [0x60, 0xEA, 0xEA, 0x60])
         await importSource()
@@ -511,11 +511,12 @@ final class LibraryImportIntegrationTests: XCTestCase {
         model.togglePlayPause()
         XCTAssertTrue(model.coordinator.isPlaying)
         model.select(trackID: "A/one.sid")
-        XCTAssertFalse(model.coordinator.isPlaying)
+        XCTAssertTrue(model.coordinator.isPlaying)
         XCTAssertEqual(model.coordinator.elapsedSeconds, 0)
 
         let bad = try XCTUnwrap(model.libraryRoot).appendingPathComponent("Bad.sid")
         try Data([1, 2, 3]).write(to: bad)
+        model.coordinator.stop()
         model.togglePlayPause()
         model.select(trackID: "Bad.sid")
         XCTAssertNotNil(model.errorMessage)

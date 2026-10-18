@@ -1,5 +1,8 @@
 import Foundation
+import OSLog
 import ViciousSIDPlayerCore
+
+private let queueLogger = Logger(subsystem: "com.viben.ViciousSIDPlayer", category: "Playback")
 
 extension AppModel {
     func activateListeningLibrary(removeMissing: Bool = false) {
@@ -72,6 +75,7 @@ extension AppModel {
         guard var queue = listening.queue else { return }
         for _ in 0..<max(1, queue.items.count) {
             guard let entry = forward ? queue.next(allowCycle: repeatSequence) : queue.previous(allowCycle: repeatSequence) else {
+                queueLogger.notice("Hörfolge erreicht ihr Ende; Einträge: \(queue.items.count), Umlauf: \(queue.wraps)")
                 listening.setQueue(queue)
                 observeHistory(force: true, playing: false)
                 if forward { coordinator.stop() } else { coordinator.seek(seconds: 0) }
@@ -82,6 +86,7 @@ extension AppModel {
         }
         observeHistory(force: true, playing: false)
         coordinator.stop(); syncPlaybackLoop(); saveSessionState(); updateNowPlaying(force: true)
+        queueLogger.notice("Kein weiterer Eintrag abspielbar; Einträge: \(queue.items.count)")
         errorMessage = String(localized: "Kein weiterer Eintrag dieser Hörfolge ist abspielbar.")
     }
 

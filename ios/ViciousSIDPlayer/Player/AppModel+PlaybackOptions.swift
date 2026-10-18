@@ -1,5 +1,8 @@
 import Foundation
+import OSLog
 import ViciousSIDPlayerCore
+
+private let completionLogger = Logger(subsystem: "com.viben.ViciousSIDPlayer", category: "Playback")
 
 extension AppModel {
     var personalDuration: Double? { playbackOptions.document.endTime(md5: currentMD5, subtune: coordinator.currentSubtune) }
@@ -12,6 +15,7 @@ extension AppModel {
             autoNext: autoNext, hasPersonalEnd: personalDuration != nil))
     }
     func stopPlayback() {
+        completionLogger.notice("Stop; Timer abgelaufen: \(self.playbackOptions.didExpire), Subtune-Endaktion: \(self.playbackOptions.stopAfterSubtune)")
         collectionImportMayResume = false
         observeHistory(force: true, playing: false)
         coordinator.stop(); stopPlaybackLoop(); services.lastSessionBucket = -1
@@ -26,6 +30,7 @@ extension AppModel {
             autoNext: autoNext, repeatMode: playbackOptions.document.repeatMode,
             hasExplicitEnd: personalDuration != nil || playbackOptions.document.fadeOutSeconds > 0,
             stopAfterSubtune: playbackOptions.stopAfterSubtune, loopEnabled: coordinator.playbackLoop.isEnabled) else { return }
+        completionLogger.notice("Songende; Aktion: \(String(describing: action), privacy: .public), Auto-Next: \(self.autoNext)")
         switch action {
         case .stop:
             if playbackOptions.stopAfterSubtune { playbackOptions.finishSubtuneStop() } else { stopPlayback() }

@@ -1,3 +1,11 @@
+Vicious SID Player 1.9.49 verbessert die iPhone-Auswahl und nutzt den Bildschirm kompakter.
+
+- Eine Bibliotheksauswahl während laufender Musik startet den neuen Titel sofort. Aus Pause oder Stop sowie nach Wiederherstellung bleibt er vorbereitet. Ohne SID-Header-Titel zeigen die nativen Apps den Dateinamen.
+- Kompakte Bibliothekszeilen und feste Sammlungs-Tabs über der Suche zeigen mehr Musik. Mute und Solo stehen neben den Kurven; Abschnittsschleife und Details sind ausklappbar. „Startpunkt“, „Endpunkt“ und „Wiederholen“ erklären die bisherigen A/B-Controls.
+- Das unbekannte Songende ist als „Max. 6:00“ sichtbar. Erweiterte Wechseltests und datensparsame Systemlogs helfen bei der weiteren Prüfung eines gemeldeten Geräte-Stopps; dessen Ursache ist noch nicht abschließend belegt.
+
+Siehe [Prüfstand](docs/validation-1.9.49.md).
+
 Vicious SID Player 1.9.48 beachtet ausdrückliche Pause-Befehle während iPhone-Audio-Unterbrechungen.
 
 - Ein Pause-Befehl während Siri oder einer anderen Audio-Unterbrechung widerruft das spätere automatische Fortsetzen, auch wenn die Unterbrechung den Player bereits pausiert hat.

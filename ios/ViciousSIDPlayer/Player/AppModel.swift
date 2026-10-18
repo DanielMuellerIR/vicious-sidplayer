@@ -149,11 +149,12 @@ final class AppModel: ObservableObject {
     ///
     /// Die Leiter selbst steht im Core (`SongLengthSelection`) — genau deshalb
     /// kann sie hier nicht mehr von der Mac-Fassung abweichen.
-    var currentDuration: Double {
-        return SongLengthSelection.duration(databaseLengths: currentTrackLengths,
-                                            subtune: coordinator.currentSubtune,
-                                            computed: computedLength,
-                                            fallback: Self.fallbackDurationSeconds, personalDuration: personalDuration, embeddedLengths: currentEmbeddedLengths)
+    var currentDuration: Double { currentDurationResolution.seconds }
+
+    var currentDurationResolution: SongLengthSelection.Resolution {
+        SongLengthSelection.resolve(databaseLengths: currentTrackLengths,
+                                    subtune: coordinator.currentSubtune, computed: computedLength,
+                                    personalDuration: personalDuration, embeddedLengths: currentEmbeddedLengths)
     }
 
     /// Fallback, wenn weder HVSC-Eintrag noch berechnete Laenge vorliegen —
