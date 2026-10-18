@@ -82,6 +82,8 @@ public struct OscilloscopeView: View {
                             .frame(width: 100, height: 24)
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel("SID-Filter")
+                    .accessibilityValue(coordinator.filterEnabled ? "An" : "Aus")
                     .help("SID-Filter an/aus; der Filterzustand läuft weiter")
                     .position(x: 52, y: geo.size.height - 12)
                 }

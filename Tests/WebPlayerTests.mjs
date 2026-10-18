@@ -15,6 +15,7 @@ const auditSource = await readFile(new URL('../src/collection-audit.js', import.
 const auditUI = await readFile(new URL('../src/collection-audit-ui.js', import.meta.url), 'utf8');
 const analysisSource = await readFile(new URL('../src/analysis.js', import.meta.url), 'utf8');
 const analysisUI = await readFile(new URL('../src/analysis-ui.js', import.meta.url), 'utf8');
+const accessibilityUI = await readFile(new URL('../src/accessibility.js', import.meta.url), 'utf8');
 const historyUI = await readFile(new URL('../src/history-ui.js', import.meta.url), 'utf8');
 const listeningUI = await readFile(new URL('../src/listening-ui.js', import.meta.url), 'utf8');
 const appSource = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
@@ -98,16 +99,26 @@ function audioMock() {
 
 async function ui() {
   class Element {
-    listeners = {}; style = {}; dataset = {}; disabled = true; value = ''; children = [];
+    listeners = {}; handlers = {}; attributes = new Map(); style = {}; dataset = {}; disabled = true; value = ''; children = [];
     classes = new Set();
     classList = { add: (...names) => names.forEach(n => this.classes.add(n)),
       remove: (...names) => names.forEach(n => this.classes.delete(n)), contains: name => this.classes.has(name) };
-    addEventListener(name, fn) { this.listeners[name] = fn; }
-    appendChild(child) { this.children.push(child); }
-    append(...children) { this.children.push(...children); }
+    addEventListener(name, fn) {
+      (this.handlers[name] ||= []).push(fn);
+      this.listeners[name] = (...args) => [...this.handlers[name]].map(handler => handler(...args))[0];
+    }
+    removeEventListener(name, fn) { this.handlers[name] = (this.handlers[name] || []).filter(handler => handler !== fn); }
+    appendChild(child) {
+      if (child.parentElement) child.parentElement.children = child.parentElement.children.filter(item => item !== child);
+      this.children.push(child); if (typeof child === 'object') child.parentElement = this;
+    }
+    append(...children) { children.forEach(child => this.appendChild(child)); }
+    prepend(child) { this.appendChild(child); this.children.unshift(this.children.pop()); }
     replaceChildren(...children) { this.children = children; }
     removeAttribute() {}
-    setAttribute() {} querySelectorAll() { return []; } getContext() { return {}; }
+    setAttribute(name, value) { this.attributes.set(name, value); }
+    getAttribute(name) { return this.attributes.get(name) ?? null; }
+    querySelector() { return null; } querySelectorAll() { return []; } getContext() { return {}; }
     showModal() { this.open = true; } close() { this.open = false; } focus() {}
   }
   let release;
@@ -132,6 +143,7 @@ async function ui() {
   vm.runInContext(collectionSource, context);
   vm.runInContext(storageSource, context);
   vm.runInContext(auditSource, context);
+  vm.runInContext(accessibilityUI, context);
   vm.runInContext(historyUI, context);
   vm.runInContext(listeningUI, context);
   vm.runInContext(collectionUI, context);

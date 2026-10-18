@@ -2,7 +2,7 @@ const webAnalysisMix = new WebAnalysisMix();
 let webAnalysisChip = 0;
 function activeWebSIDChips() { return currentMetadata?.activeSIDChips || [0]; }
 function initializeWebAnalysisUI() {
-  $('analysis-open').addEventListener('click', () => { renderWebAnalysisUI(); $('analysis-dialog').showModal(); });
+  $('analysis-open').addEventListener('click', () => { renderWebAnalysisUI(); showWebDialog($('analysis-dialog'), { fallbackID: 'analysis-open' }); });
   $('analysis-close').addEventListener('click', () => $('analysis-dialog').close());
   $('scope-chip').addEventListener('change', () => { webAnalysisChip = Number($('scope-chip').value); phases.fill(0); renderWebAnalysisUI(); renderWebAnalysisValues(true); });
   $('analysis-clear-solo').addEventListener('click', () => { webAnalysisMix.clearSolos(); applyWebAnalysisMix(); });

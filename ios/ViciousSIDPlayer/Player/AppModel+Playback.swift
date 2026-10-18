@@ -78,7 +78,7 @@ extension AppModel {
             updateNowPlaying(force: true)
             return true
         } catch {
-            errorMessage = "Datei konnte nicht gelesen werden: \(error.localizedDescription)"
+            errorMessage = String(format: String(localized: "Datei konnte nicht gelesen werden: %@"), error.localizedDescription)
             return false
         }
     }

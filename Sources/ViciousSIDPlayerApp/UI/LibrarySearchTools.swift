@@ -31,7 +31,8 @@ struct LibrarySearchTools: View {
                 }
                 .controlSize(.small)
                 .accessibilityIdentifier("saved-library-searches")
-                Menu {
+                // Menu braucht den Texttitel, damit VoiceOver die Suchhilfe benennt.
+                Menu("Suchhilfe") {
                     Text("Wörter durchsuchen Dateiname, Ordner und Metadaten.")
                     Text("Felder: title:, author:, released:, chips:, model:")
                     Text("Dauer von Subtune 1: min:1:00 max:3:00")
@@ -42,8 +43,9 @@ struct LibrarySearchTools: View {
                     Button("Beispiel: 3SID") { query = "chips:3" }
                     Button("Beispiel: kurze Titel") { query = "max:3:00" }
                     Button("Beispiel: unbekannte Dauer") { query = "duration:unknown" }
-                } label: { Image(systemName: "questionmark.circle") }
+                }
                 .menuStyle(.borderlessButton).fixedSize()
+                .accessibilityLabel("Suchhilfe")
                 .help("Suchfelder und Beispiele")
             }
             if let error = LibrarySearchQuery(query).error { Text(error).foregroundStyle(isLight ? Color.macLightWarning : .orange) }

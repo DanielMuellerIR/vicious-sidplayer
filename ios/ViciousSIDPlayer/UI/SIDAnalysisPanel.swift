@@ -76,10 +76,11 @@ struct SIDAnalysisPanel: View {
 
 struct PlaybackLoopControls: View {
     @ObservedObject var coordinator: ViciousCoordinator
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     private func time(_ value: Double?) -> String { value.map { String(format: "%.2f s", $0) } ?? "—" }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
+            controlsLayout {
                 Button { coordinator.setLoopStart() } label: { Text("A setzen").lineLimit(1).frame(minHeight: 44) }
                     .accessibilityIdentifier("loop-set-a").disabled(!coordinator.hasSID)
                 Button { coordinator.setLoopEnd() } label: { Text("B setzen").lineLimit(1).frame(minHeight: 44) }
@@ -94,7 +95,7 @@ struct PlaybackLoopControls: View {
                     .accessibilityIdentifier("loop-enabled")
                     .accessibilityLabel("A/B")
                     .accessibilityValue(coordinator.playbackLoop.isEnabled ? Text("An") : Text("Aus"))
-                Spacer(minLength: 0)
+                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
                 Button { coordinator.clearLoop() } label: { Image(systemName: "xmark.circle").frame(minWidth: 44, minHeight: 44) }
                     .accessibilityLabel("A/B-Marker löschen")
             }
@@ -106,5 +107,10 @@ struct PlaybackLoopControls: View {
             if coordinator.isPreparingLoop { Text("Schleife wird vorbereitet …").font(.caption) }
             if let error = coordinator.loopError { Text(error).font(.caption).foregroundStyle(.red) }
         }
+    }
+
+    private var controlsLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 8))
     }
 }

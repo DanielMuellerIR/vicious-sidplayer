@@ -6,14 +6,13 @@ import ViciousSIDPlayerCore
 // Aufbau von oben nach unten: Titelangaben, Oszilloskop, Subtune-Auswahl,
 // Positionsleiste, Transport, Wiedergabeoptionen, Analysewerkzeuge, Export.
 //
-// Der Bildschirm ist bewusst in kleine Unteransichten zerlegt. Das ist kein
-// Selbstzweck: der Koordinator meldet waehrend der Wiedergabe rund 50-mal pro
-// Sekunde neue Werte. SwiftUI zeichnet daraufhin genau die Ansichten neu, die
-// ihn beobachten. Waere alles eine einzige grosse View, wuerde bei jedem dieser
-// Ticks der komplette Bildschirm samt Reglern und Knoepfen neu berechnet.
+// Die schnellen Stimmenwerte werden beim Zeichnen gelesen und nicht publiziert.
+// Die Unteransichten beobachten nur Titel- und Transportzustand; Layout und
+// Bedienung bleiben unabhängig vom Zeichentakt der Kurven.
 struct NowPlayingView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.colorScheme) private var systemScheme
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var optionsPresentation: PlaybackOptionsPresentation?
 
     private var palette: PlayerPalette {
@@ -29,7 +28,7 @@ struct NowPlayingView: View {
                     OscilloscopeView(coordinator: model.coordinator,
                                      palette: palette,
                                      isSceneActive: model.isSceneActive)
-                        .frame(height: 280)
+                        .frame(height: verticalSizeClass == .compact ? 180 : 280)
 
                     SubtuneSelectorView(coordinator: model.coordinator) { index in
                         model.setSubtune(index)
@@ -70,7 +69,7 @@ struct NowPlayingView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
             }
-            .navigationTitle("Now Playing")
+            .navigationTitle("Wiedergabe")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -102,19 +101,20 @@ private struct TrackHeaderView: View {
             Text(coordinator.trackName)
                 .font(.title3.weight(.semibold))
                 .multilineTextAlignment(.center)
-                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
             Text(coordinator.composer)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .lineLimit(1)
+                .fixedSize(horizontal: false, vertical: true)
             Text(coordinator.info)
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
-                .lineLimit(1)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -171,9 +171,12 @@ private struct SubtuneSelectorView: View {
                     onSelect(previous)
                 } label: {
                     Image(systemName: "chevron.left.circle.fill")
-                        .font(.title3)
+                        .font(.system(size: 22))
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .accessibilityLabel("Vorheriger Subtune")
+                .accessibilityValue(Text("Subtune \(coordinator.currentSubtune + 1) von \(coordinator.subtunesCount)"))
 
                 VStack(spacing: 0) {
                     Text("Subtune")
@@ -191,9 +194,12 @@ private struct SubtuneSelectorView: View {
                     onSelect(next)
                 } label: {
                     Image(systemName: "chevron.right.circle.fill")
-                        .font(.title3)
+                        .font(.system(size: 22))
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .accessibilityLabel("Nächster Subtune")
+                .accessibilityValue(Text("Subtune \(coordinator.currentSubtune + 1) von \(coordinator.subtunesCount)"))
             }
             .buttonStyle(.plain)
             .foregroundStyle(.tint)
@@ -260,18 +266,20 @@ private struct TransportControlsView: View {
     let accent: Color
 
     var body: some View {
-        HStack(spacing: 28) {
+        HStack(spacing: 16) {
             Button {
                 model.playPrevious()
             } label: {
-                Image(systemName: "backward.end.fill").font(.title2)
+                Image(systemName: "backward.end.fill").font(.system(size: 22))
+                    .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
             }
             .accessibilityLabel("Vorheriger Titel")
 
             Button {
                 model.skip(by: -10)
             } label: {
-                Image(systemName: "gobackward.10").font(.title3)
+                Image(systemName: "gobackward.10").font(.system(size: 20))
+                    .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
             }
             .accessibilityLabel("10 Sekunden zurück")
 
@@ -290,14 +298,16 @@ private struct TransportControlsView: View {
             Button {
                 model.skip(by: 10)
             } label: {
-                Image(systemName: "goforward.10").font(.title3)
+                Image(systemName: "goforward.10").font(.system(size: 20))
+                    .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
             }
             .accessibilityLabel("10 Sekunden vor")
 
             Button {
                 model.playNext()
             } label: {
-                Image(systemName: "forward.end.fill").font(.title2)
+                Image(systemName: "forward.end.fill").font(.system(size: 22))
+                    .frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
             }
             .accessibilityLabel("Nächster Titel")
         }
@@ -312,10 +322,11 @@ private struct TransportControlsView: View {
 /// Zufallswiedergabe, automatisch weiter und Lautstaerke.
 private struct PlaybackOptionsView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         VStack(spacing: 12) {
-            HStack(spacing: 12) {
+            optionsLayout {
                 Toggle(isOn: $model.shuffle) {
                     Label("Zufall", systemImage: "shuffle")
                 }
@@ -328,8 +339,8 @@ private struct PlaybackOptionsView: View {
                 .toggleStyle(.button)
                 .accessibilityLabel("Am Songende automatisch weiter")
 
-                Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 10) {
                 Image(systemName: "speaker.fill")
@@ -342,6 +353,11 @@ private struct PlaybackOptionsView: View {
                     .accessibilityHidden(true)
             }
         }
+    }
+
+    private var optionsLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 12))
     }
 }
 

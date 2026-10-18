@@ -1,3 +1,12 @@
+Vicious SID Player 1.9.45 improves keyboard access, spoken control names and compact layouts.
+
+- Focus Mac library search with ⌘F and switch collection pages with ⌘1–4. Control groups wrap in narrow windows; the mini player keeps the same window.
+- Navigate HTML5 collection tabs with arrow keys, Home and End. File loading, sliders and full metadata are accessible from the keyboard. Dialogs contain focus and restore it after closing; VoiceOver modifiers leave player shortcuts alone.
+- Use larger iPhone subtune, transport and mini-player targets. Long metadata wraps fully; accessibility text switches analysis and playback controls to vertical groups, and landscape uses a shorter scope.
+- Give search help, folder controls, filter state and subtune position explicit accessibility names and values. iPhone VoiceOver and external-keyboard acceptance remain part of the real-device checklist.
+
+See [validation](docs/validation-1.9.45.md).
+
 Vicious SID Player 1.9.44 adds SID v5 parsing and explicit compatibility limits.
 
 - Decode Windows-1252 metadata in all supported versions. V5 accepts longer shared metadata, all seven multi-SID address layouts with up to three chips, and a common SID model.

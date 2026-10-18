@@ -35,6 +35,7 @@ struct MiniPlayerBar: View {
                     }
                     Spacer(minLength: 0)
                 }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -42,8 +43,8 @@ struct MiniPlayerBar: View {
 
             Button(action: onTogglePlayPause) {
                 Image(systemName: coordinator.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.title3)
-                    .frame(width: 32, height: 32)
+                    .font(.system(size: 20))
+                    .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -54,8 +55,8 @@ struct MiniPlayerBar: View {
 
             Button(action: onNext) {
                 Image(systemName: "forward.end.fill")
-                    .font(.body)
-                    .frame(width: 32, height: 32)
+                    .font(.system(size: 17))
+                    .frame(width: 44, height: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

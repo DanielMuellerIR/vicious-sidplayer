@@ -12,6 +12,7 @@ import ViciousSIDPlayerCore
 //  - „Filter aus" ist ein Analysewerkzeug, kein Klangregler: der Filterzustand
 //    bleibt warm, gefilterte Stimmen laufen nur voruebergehend ungefiltert.
 struct AnalysisControlsView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject var coordinator: ViciousCoordinator
     let palette: PlayerPalette
     /// `nil` = Auto (die Datei entscheidet), sonst 6581 oder 8580.
@@ -26,20 +27,21 @@ struct AnalysisControlsView: View {
 
             ForEach(coordinator.activeSIDChips, id: \.self) { chip in
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack {
+                    chipHeaderLayout {
                         Text(verbatim: "SID \(chip + 1) · \(coordinator.modelForChip(chip))")
                             .font(.footnote.weight(.semibold))
-                        Spacer()
+                        if !dynamicTypeSize.isAccessibilitySize { Spacer() }
                         Button { coordinator.toggleChipMuted(chip) } label: {
                             Label("Chip stumm", systemImage: coordinator.analysisMix.chipMuted[chip] ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                                .font(.footnote).frame(minHeight: 44)
+                                .font(.footnote)
+                                .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil, minHeight: 44)
                         }
                         .buttonStyle(.bordered)
                         .tint(coordinator.analysisMix.chipMuted[chip] ? .red : .accentColor)
                         .accessibilityLabel(Text("SID \(chip + 1) Chip stumm"))
                         .accessibilityValue(coordinator.analysisMix.chipMuted[chip] ? Text("An") : Text("Aus"))
                     }
-                    HStack(spacing: 6) {
+                    voiceLayout {
                         ForEach(0..<3, id: \.self) { voice in voiceControls(chip: chip, voice: voice) }
                     }
                 }
@@ -111,6 +113,16 @@ struct AnalysisControlsView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var voiceLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 6))
+    }
+
+    private var chipHeaderLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout())
     }
 
     private func voiceControls(chip: Int, voice: Int) -> some View {

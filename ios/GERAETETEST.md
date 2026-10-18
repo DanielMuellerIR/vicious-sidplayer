@@ -5,6 +5,9 @@ echten Sperrbildschirm, keine AirPods, keinen eingehenden Anruf und keine
 Kopfhörerbuchse. Wer hier „geprüft“ schreibt, ohne ein echtes iPhone in der Hand
 gehabt zu haben, hat nichts geprüft.
 
+Auch VoiceOver muss auf einem echten Gerät geprüft werden: [Apple unterstützt
+VoiceOver nicht im iOS-Simulator](https://developer.apple.com/documentation/accessibility/performing-accessibility-testing-for-your-app).
+
 ## Vorbereitung
 
 ```bash
@@ -115,6 +118,21 @@ etwa nach einem Absturz im Audiosystem. Auslösen lässt sich das nicht auf Knop
 - [ ] Nach dem Zurückkommen spielt derselbe Titel an derselben Stelle weiter
       (höchstens eine Lücke), statt dauerhaft stumm zu bleiben. Seit v1.9.16 legt
       die App dabei die `AVAudioEngine` neu an; vorher benutzte sie die tote weiter.
+
+### 10. VoiceOver und externe Tastatur
+
+- [ ] Mit VoiceOver zwischen Bibliothek, Wiedergabe und Einstellungen wechseln.
+      Titel, Suchhilfe, Hörfolgen, Verlauf und Sammlungsprüfung sind verständlich
+      benannt und erreichbar; ein geschlossener Dialog verliert den Fokus nicht.
+- [ ] Subtunes, Position, Mute, Solo und Filter bedienen. Der angesagte Zustand
+      entspricht der Auswahl; die Oszilloskopanzeige erzeugt keinen ständigen
+      Strom von Ansagen.
+- [ ] Sammlung importieren/exportieren und Audio-Export öffnen, konfigurieren und
+      schließen. Fehlermeldungen werden vorgelesen und lassen sich verlassen.
+- [ ] Mit einer externen Tastatur und aktivierter Tastatursteuerung dieselben
+      Hauptabläufe ohne Berührung bedienen, einschließlich Texteingabe und Dialogen.
+- [ ] Hoch-/Querformat und maximale Bedienungshilfen-Schrift auf dem Gerät prüfen.
+      Vollständige Metadaten und alle Controls bleiben durch Scrollen erreichbar.
 
 ## Was tun, wenn etwas nicht stimmt
 

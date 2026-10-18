@@ -28,10 +28,16 @@ struct MetadataSearchTools: View {
                             }
                         }
                     }.disabled(saved.isReadOnly || saved.document.searches.isEmpty)
-                } label: { Label("Suchansichten", systemImage: "line.3.horizontal.decrease.circle") }
+                } label: {
+                    Label("Suchansichten", systemImage: "line.3.horizontal.decrease.circle")
+                        .frame(minHeight: 44).contentShape(Rectangle())
+                }
                 .accessibilityIdentifier("saved-library-searches")
                 Spacer()
-                Button { showHelp = true } label: { Label("Suchhilfe", systemImage: "questionmark.circle") }.labelStyle(.iconOnly)
+                Button { showHelp = true } label: {
+                    Label("Suchhilfe", systemImage: "questionmark.circle")
+                        .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
+                }
             }
             if let error = LibrarySearchQuery(query).error { Label(error, systemImage: "exclamationmark.triangle") }
             if metadata.isIndexing { Text("Metadaten: \(metadata.indexedCount)/\(metadata.totalCount)").foregroundStyle(.secondary) }

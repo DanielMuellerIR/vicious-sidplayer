@@ -16,17 +16,13 @@
   <div class="controls">
     <div class="group">
       <span>TUNE:</span>
-      <select id="track-select">
+      <select id="track-select" aria-label="Selected SID file">
         <!-- Playlist option entries -->
       </select>
-      <label class="file-btn">
-        LOAD .SID
-        <input type="file" id="file-input" accept=".sid" multiple>
-      </label>
-      <label class="file-btn" id="folder-label">
-        FOLDER
-        <input type="file" id="folder-input" multiple>
-      </label>
+      <button class="file-btn" id="load-sid" type="button" aria-label="Load SID files">LOAD .SID</button>
+      <input type="file" id="file-input" accept=".sid" multiple hidden>
+      <button class="file-btn" id="folder-label" type="button" aria-label="Load a SID folder">FOLDER</button>
+      <input type="file" id="folder-input" multiple hidden>
       <label id="playlist-label">
         <input type="checkbox" id="auto-next" checked>
         <span>AUTO NEXT</span>
@@ -40,9 +36,9 @@
     </div>
     <div class="group">
       <div id="subtune-controls" style="display: none; align-items: center; gap: 6px; margin-right: 8px;">
-        <button id="prev-subtune">◀</button>
+        <button id="prev-subtune" aria-label="Previous subtune" aria-describedby="subtune-label">◀</button>
         <span id="subtune-label" style="font-size: 12px; color: var(--text-primary);">SUBTUNE: 1/1</span>
-        <button id="next-subtune">▶</button>
+        <button id="next-subtune" aria-label="Next subtune" aria-describedby="subtune-label">▶</button>
       </div>
       <button id="previous-track" aria-label="Previous listening entry">⏮</button>
       <button id="next-track" aria-label="Next listening entry">⏭</button>
@@ -54,10 +50,10 @@
   <!-- ─── Timeline / Scrubber ─────────────────────────────────── -->
   <div class="timeline-container">
     <span class="scrub-lbl" id="time-current">0:00</span>
-    <input type="range" id="position-scrubber" min="0" max="360" value="0" disabled>
+    <input type="range" id="position-scrubber" aria-label="Playback position" min="0" max="360" value="0" disabled>
     <span class="scrub-lbl" id="time-total">6:00</span>
     <span class="scrub-lbl" style="margin-left: 8px;">VOL:</span>
-    <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="0.3" style="width: 70px;">
+    <input type="range" id="volume-slider" aria-label="Volume" min="0" max="1" step="0.05" value="0.3" style="width: 70px;">
   </div>
 
   <!-- ─── Main Content Area ───────────────────────────────────── -->
@@ -65,49 +61,57 @@
     <!-- Sidebar / Playlist -->
     <div class="sidebar">
       <div class="sidebar-tabs" role="tablist" aria-label="Collection view">
-        <button id="tab-library" role="tab">Music</button>
-        <button id="tab-lists" role="tab">Lists</button>
-        <button id="tab-queue" role="tab">Queue</button>
-        <button id="tab-history" role="tab">History</button>
+        <button id="tab-library" role="tab" aria-controls="library-panel" tabindex="0">Music</button>
+        <button id="tab-lists" role="tab" aria-controls="lists-panel" tabindex="-1">Lists</button>
+        <button id="tab-queue" role="tab" aria-controls="queue-panel" tabindex="-1">Queue</button>
+        <button id="tab-history" role="tab" aria-controls="history-panel" tabindex="-1">History</button>
       </div>
       <div id="listening-status" class="listening-status" role="status"></div>
-      <div class="sidebar-tools"><button id="collection-open">Import / export personal collection</button><button id="audit-open">Check collection / find missing files</button></div>
-      <div class="sidebar-tools" id="library-tools">
-        <input id="library-search" type="search" placeholder="Search titles or folders" aria-label="Search titles or folders">
-        <label><input type="checkbox" id="favorites-only"> Favorites only</label>
-        <label><input type="checkbox" id="never-heard"> Never heard</label>
-        <div class="tool-row"><button id="play-library">Play all</button><button id="play-selection">Play results</button><button id="play-favorites">Favorites</button></div>
-        <div class="tool-row"><input id="folder-path" placeholder="Folder path" aria-label="Folder path"><button id="play-folder">Play folder</button></div>
-        <div class="tool-row"><button id="save-selection">Save results</button><button id="clear-library">Clear</button></div>
-        <select id="append-list" aria-label="List for adding tracks"><option value="">Add tracks to a list…</option></select>
+      <div class="collection-panel" id="library-panel" role="tabpanel" aria-labelledby="tab-library">
+        <div class="sidebar-tools" id="collection-actions"><button id="collection-open">Import / export personal collection</button><button id="audit-open">Check collection / find missing files</button></div>
+        <div class="sidebar-tools" id="library-tools">
+          <input id="library-search" type="search" placeholder="Search titles or folders" aria-label="Search titles or folders">
+          <label><input type="checkbox" id="favorites-only"> Favorites only</label>
+          <label><input type="checkbox" id="never-heard"> Never heard</label>
+          <div class="tool-row"><button id="play-library">Play all</button><button id="play-selection">Play results</button><button id="play-favorites">Favorites</button></div>
+          <div class="tool-row"><input id="folder-path" placeholder="Folder path" aria-label="Folder path"><button id="play-folder">Play folder</button></div>
+          <div class="tool-row"><button id="save-selection">Save results</button><button id="clear-library">Clear</button></div>
+          <select id="append-list" aria-label="List for adding tracks"><option value="">Add tracks to a list…</option></select>
+        </div>
+        <div class="track-list" id="track-list">
+          <!-- Javascript renders track rows here -->
+        </div>
+        <div class="tool-row pagination" id="entries-pagination"><button id="entries-previous" aria-label="Previous page">‹</button><span id="entries-page"></span><button id="entries-next" aria-label="Next page">›</button></div>
       </div>
-      <div class="sidebar-tools" id="lists-tools" hidden>
-        <select id="list-picker" aria-label="Saved listening list"></select>
-        <div class="tool-row"><button id="new-list">New</button><button id="rename-list">Rename</button><button id="delete-list">Delete</button></div>
-        <div class="tool-row"><button id="play-list">Play list</button><button id="append-subtune">Add current subtune</button></div>
-        <small>List changes apply the next time you start it.</small>
+      <div class="collection-panel" id="lists-panel" role="tabpanel" aria-labelledby="tab-lists" hidden>
+        <div class="sidebar-tools" id="lists-tools" hidden>
+          <select id="list-picker" aria-label="Saved listening list"></select>
+          <div class="tool-row"><button id="new-list">New</button><button id="rename-list">Rename</button><button id="delete-list">Delete</button></div>
+          <div class="tool-row"><button id="play-list">Play list</button><button id="append-subtune">Add current subtune</button></div>
+          <small>List changes apply the next time you start it.</small>
+        </div>
       </div>
-      <div class="sidebar-tools" id="queue-tools" hidden>
-        <strong id="queue-title"></strong><span id="queue-position"></span>
-        <div class="tool-row"><button id="save-queue">Save as list</button><button id="end-queue">End queue</button></div>
+      <div class="collection-panel" id="queue-panel" role="tabpanel" aria-labelledby="tab-queue" hidden>
+        <div class="sidebar-tools" id="queue-tools" hidden>
+          <strong id="queue-title"></strong><span id="queue-position"></span>
+          <div class="tool-row"><button id="save-queue">Save as list</button><button id="end-queue">End queue</button></div>
+        </div>
       </div>
-      <div class="sidebar-tools" id="history-tools" hidden>
-        <select id="history-section" aria-label="Personal data view"><option value="events">Listening history</option><option value="bookmarks">Bookmarks</option><option value="notes">Personal notes</option></select>
-        <div class="tool-row"><button id="add-bookmark">Bookmark</button><button id="add-note">Note</button><button id="clear-history">Clear history</button></div>
-        <small>Up to 2,000 plays / 180 days. Heard status stays until you clear history.</small>
-        <div id="history-status" role="status"></div>
+      <div class="collection-panel" id="history-panel" role="tabpanel" aria-labelledby="tab-history" hidden>
+        <div class="sidebar-tools" id="history-tools" hidden>
+          <select id="history-section" aria-label="Personal data view"><option value="events">Listening history</option><option value="bookmarks">Bookmarks</option><option value="notes">Personal notes</option></select>
+          <div class="tool-row"><button id="add-bookmark">Bookmark</button><button id="add-note">Note</button><button id="clear-history">Clear history</button></div>
+          <small>Up to 2,000 plays / 180 days. Heard status stays until you clear history.</small>
+          <div id="history-status" role="status"></div>
+        </div>
       </div>
-      <div class="track-list" id="track-list">
-        <!-- Javascript renders track rows here -->
-      </div>
-      <div class="tool-row pagination"><button id="entries-previous">‹</button><span id="entries-page"></span><button id="entries-next">›</button></div>
-      <div class="status">
+      <div class="status" tabindex="0" role="group" aria-label="Current SID information">
         <div class="line"><span>TITLE:</span><span id="meta-title">---</span></div>
         <div class="line"><span>COMPOSER:</span><span id="meta-author">---</span></div>
         <div class="line"><span>INFO:</span><span id="meta-info">---</span></div>
         <div class="line"><span>CLOCK:</span><span id="meta-clock">PAL (AUTO)</span></div>
         <button id="favorite-subtune" disabled>☆ Favorite subtune</button>
-        <div id="error-display" class="error-msg" style="display: none;"></div>
+        <div id="error-display" role="alert" class="error-msg" style="display: none;"></div>
       </div>
     </div>
 
@@ -143,7 +147,7 @@
   </div>
 </div>
 
-<dialog id="history-editor">
+<dialog id="history-editor" aria-labelledby="history-editor-title">
   <form id="history-editor-form">
     <h2 id="history-editor-title">Personal note</h2>
     <p id="history-editor-reference"></p>

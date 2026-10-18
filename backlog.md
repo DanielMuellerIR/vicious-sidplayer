@@ -1,6 +1,6 @@
 # Aktiver Backlog
 
-Die Erweiterungen ab v1.9.26 werden im [Erweiterungsplan](docs/feature-roadmap.md) verfolgt. Formatkompatibilität und klare Grenzen sind in v1.9.44 auf Mac, iPhone-Simulator und HTML5 abgenommen ([Prüfstand](docs/validation-1.9.44.md)). Als Nächstes folgen Tastatur, VoiceOver und anpassungsfähiges Layout, danach Energie und Zeichenlast.
+Die Erweiterungen ab v1.9.26 werden im [Erweiterungsplan](docs/feature-roadmap.md) verfolgt. Tastatur, VoiceOver und anpassungsfähiges Layout sind in v1.9.45 auf Mac, HTML5 und iPhone-Simulator abgenommen ([Prüfstand](docs/validation-1.9.45.md)); iPhone-VoiceOver und externe Tastatur bleiben echte Geräteabnahme. Als Nächstes folgen Energie und Zeichenlast.
 
 1. ~~STIL-Integration~~ **auf dem Mac erledigt am 2026-08-23 (v1.9.12).** Parser,
    Zuordnung über die HVSC-Wurzel und Auto-Fund stehen im Core (`STIL.swift`,

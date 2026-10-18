@@ -17,7 +17,7 @@ function initializeCollectionUI() {
     collectionUI.areas = new Set(collectionAreas.filter(a => a !== 'history'));
     collectionUI.choices.clear(); collectionUI.acceptedPaths.clear();
     $('collection-file').value = ''; $('collection-skip').checked = false; $('collection-export-ack').checked = false;
-    $('collection-error').textContent = ''; renderCollectionUI(); $('collection-dialog').showModal();
+    $('collection-error').textContent = ''; renderCollectionUI(); showWebDialog($('collection-dialog'), { fallbackID: 'collection-open' });
   });
   $('collection-close').addEventListener('click', () => $('collection-dialog').close());
   $('collection-dialog').addEventListener('cancel', event => { if (webCollectionBusy || collectionUI.applying) event.preventDefault(); });

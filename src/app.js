@@ -50,6 +50,7 @@ function currentWebDuration() { return listeningSIDDuration(currentMetadata, cur
 function refreshWebDuration() {
   positionScrubber.max = String(currentWebDuration());
   timeTotal.textContent = fmtTime(currentWebDuration());
+  refreshWebMediaAccessibility();
   timeTotal.title = listeningSIDDuration(currentMetadata, currentSubtune) === null ? 'Fallback duration' : 'Duration embedded in the SID file';
 }
 
@@ -126,6 +127,8 @@ $('player').inert = true;
 const webListeningReady = initializeListeningUI().then(() => { $('player').inert = false; refreshPlaylistUI(); });
 
 // ─── Event Listeners ────────────────────────────────────────────────────────
+$('load-sid').addEventListener('click', () => fileInput.click());
+folderLabel.addEventListener('click', () => folderInput.click());
 fileInput.addEventListener('change', (e) => {
   player.resumeContext();
   const files = Array.from(e.target.files || []);
@@ -154,6 +157,7 @@ trackSelect.addEventListener('change', (e) => {
 volumeSlider.addEventListener('input', (e) => {
   userVolume = Number(e.target.value);
   player.setVolume(userVolume);
+  refreshWebMediaAccessibility();
 });
 
 playBtn.addEventListener('click', async () => {
@@ -204,6 +208,7 @@ nextSubtuneBtn.addEventListener('click', () => {
 
 // Keyboard Shortcuts
 window.addEventListener('keydown', (e) => {
+  if (e.defaultPrevented || e.isComposing || e.ctrlKey || e.altKey || e.metaKey || document.querySelector('dialog[open]') || document.activeElement?.isContentEditable) return;
   if (document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(document.activeElement.tagName)) return;
 
   const key = e.key.toLowerCase();
@@ -228,6 +233,8 @@ window.addEventListener('keydown', (e) => {
     }
   }
 
+  refreshWebMediaAccessibility();
+
   // Left/Right -> seek 5s
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     e.preventDefault();
@@ -238,6 +245,7 @@ window.addEventListener('keydown', (e) => {
     lastVisuals.playtime = pt;
     positionScrubber.value = pt;
     timeCurrent.textContent = fmtTime(pt);
+    refreshWebMediaAccessibility();
   }
 
   // Up/Down -> change tracks
@@ -648,6 +656,7 @@ function draw() {
   if (!isSeeking && positionScrubber) {
     positionScrubber.value = String(Math.min(playtime, currentWebDuration()));
     timeCurrent.textContent = fmtTime(playtime);
+    refreshWebMediaAccessibility();
   }
 
   const channelH = H / 3;
@@ -764,3 +773,5 @@ if (themeBtn) {
 
 // Start render loop
 requestAnimationFrame(draw);
+
+refreshWebMediaAccessibility();

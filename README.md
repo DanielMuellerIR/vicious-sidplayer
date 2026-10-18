@@ -75,7 +75,11 @@ Track paths are relative to the autoplay folder. Absolute paths, `..` and anythi
 - **Local browser listening data**: Named lists, favorite subtunes, queue order and position are saved in browser storage. After reloading, select the same SID files or folder again to restore access; music is never stored in the page. A moved file can be reconnected after explicitly approving a unique content match in the collection audit. Restoration prepares playback without starting it. Unreadable data stays untouched; unavailable or full storage is reported.
 - **Playlist with duplicate detection**: Already loaded tunes are not added twice. The playlist can be cleared at any time.
 - **Shuffle**: Random playback that persists across restarts; a random song starts on launch when enabled.
-- **Media keys**: Play/pause, stop, and track skipping via F7/F8/F9, the Touch Bar, and AirPods — the app registers as the system's *Now Playing* app.
+- With the standard sidebar, the full player can be narrowed to 800 points; control groups wrap onto additional rows. To include buttons and menus in the Tab order, enable **Keyboard navigation** in macOS Keyboard settings. VoiceOver names the controls and their current states.
+
+In HTML5, the collection tabs use Left/Right, Home and End; Tab enters the selected panel. Dialogs keep keyboard focus and return it when closed. Load buttons and sliders have accessible names; focus the metadata panel to read long text in full. On iPhone, transport and subtune buttons have at least 44-point targets; large accessibility text uses vertical control groups. VoiceOver and external-keyboard acceptance on iPhone require the [device checklist](ios/GERAETETEST.md).
+
+**Media keys**: Play/pause, stop, and track skipping via F7/F8/F9, the Touch Bar, and AirPods — the app registers as the system's *Now Playing* app.
 - **macOS updates**: Sparkle checks for signed updates in the background; “Nach Updates suchen…” in the app menu checks immediately. Installing an update requires your approval. The first Sparkle-enabled release needs a manual installation.
 - **No external assets**: The entire interface (including macOS window decorations and icons) is drawn procedurally in CSS and SwiftUI Canvas.
 
@@ -117,6 +121,9 @@ Title, composer, and info in the sidebar, as well as long track names, also show
 |---|---|
 | Space | Play / pause |
 | ⌘P | Play / pause |
+| ⌘F | Focus library search; restore the full window if needed |
+| ⌘1 / ⌘2 / ⌘3 / ⌘4 | Music / Lists / Queue / History |
+| ⌘⌥M | Switch between full and mini player in the same window |
 | ⌘→ | Next listening entry |
 | ⌘← | Previous listening entry |
 | ⌘E | Open audio export configuration |

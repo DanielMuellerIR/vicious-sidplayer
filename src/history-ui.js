@@ -80,7 +80,7 @@ function openWebHistoryEditor(kind, note = null) {
   $('history-editor-text').removeAttribute('maxlength');
   $('history-editor-text').value = kind === 'bookmark' ? `${metaTitle.textContent} · ${fmtTime(historyEditor.position)}`.slice(0, 200)
     : webHistoryStore.document.notes.find(n => historyContentKey(n.reference) === historyContentKey(reference))?.text || '';
-  $('history-editor').showModal(); $('history-editor-text').focus();
+  showWebDialog($('history-editor'), { initialFocus: $('history-editor-text'), fallbackID: 'history-section' });
 }
 async function playWebHistoryReference(reference, position) {
   if (!Number.isFinite(position) || position < 0 || position > 1200) { showError('Position jumps are supported up to 20:00 min. Your saved position is kept.'); return; }

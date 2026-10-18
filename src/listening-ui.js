@@ -13,7 +13,20 @@ async function initializeListeningUI() {
   pendingWebRestore = !!(listeningQueue || webListeningStore.document.session);
   if (listeningQueue && webListeningStore.document.shuffle) listeningQueue.restart(true, true);
   $('listening-shuffle').checked = webListeningStore.document.shuffle;
-  for (const page of ['library', 'lists', 'queue', 'history']) $('tab-' + page).addEventListener('click', () => switchListeningPage(page));
+  const pages = ['library', 'lists', 'queue', 'history'];
+  for (const [index, page] of pages.entries()) {
+    const tab = $('tab-' + page);
+    tab.addEventListener('click', () => switchListeningPage(page));
+    tab.addEventListener('keydown', event => {
+      if (event.ctrlKey || event.altKey || event.metaKey || event.isComposing) return;
+      const target = event.key === 'Home' ? 0 : event.key === 'End' ? pages.length - 1
+        : event.key === 'ArrowLeft' ? (index + pages.length - 1) % pages.length
+        : event.key === 'ArrowRight' ? (index + 1) % pages.length : null;
+      if (target === null) return;
+      event.preventDefault(); event.stopPropagation();
+      switchListeningPage(pages[target]); $('tab-' + pages[target]).focus();
+    });
+  }
   for (const id of ['library-search', 'favorites-only']) $(id).addEventListener('input', () => { listeningUI.offset = 0; refreshPlaylistUI(); });
   $('play-library').addEventListener('click', () => startWebScope('library'));
   $('play-selection').addEventListener('click', () => startWebScope('visible'));
@@ -79,7 +92,7 @@ function switchListeningPage(page) { listeningUI.page = page; listeningUI.offset
 function promptListeningName(heading, name, action) {
   if (webListeningStore.readOnly) return;
   listeningUI.nameAction = action; $('list-name-heading').textContent = heading;
-  $('list-name').value = name; $('list-name-dialog').showModal(); $('list-name').focus();
+  $('list-name').value = name; showWebDialog($('list-name-dialog'), { initialFocus: $('list-name'), fallbackID: 'list-picker' });
 }
 function createWebList(name, entries) {
   if (webListeningStore.readOnly) return;
@@ -234,7 +247,14 @@ function renderListeningUI() {
   const doc = webListeningStore.document, readonly = webListeningStore.readOnly, loaded = new Set(trackList.map(t => t.id));
   if (!selectedWebList()) listeningUI.selectedListID = doc.lists[0]?.id || null;
   for (const page of ['library', 'lists', 'queue', 'history']) {
-    $('tab-' + page).setAttribute('aria-selected', String(listeningUI.page === page)); $(page + '-tools').hidden = listeningUI.page !== page;
+    const selected = listeningUI.page === page;
+    $('tab-' + page).setAttribute('aria-selected', String(selected));
+    $('tab-' + page).tabIndex = selected ? 0 : -1;
+    $(page + '-panel').hidden = !selected; $(page + '-tools').hidden = !selected;
+  }
+  const panel = $(listeningUI.page + '-panel');
+  if ($('collection-actions').parentElement !== panel) {
+    panel.prepend($('collection-actions')); panel.append(trackListContainer, $('entries-pagination'));
   }
   for (const id of ['list-picker', 'append-list']) {
     const picker = $(id), previous = picker.value; picker.innerHTML = '';
@@ -299,7 +319,7 @@ function renderListeningUI() {
       if (listeningUI.page === 'lists') {
         row.appendChild(webButton('↗', () => enqueueWebEntry(entry), false, 'entry-action'));
         if (list.kind === 'regular') {
-          row.appendChild(webButton('#', () => { listeningUI.editingEntryID = entry.id; $('entry-subtune').max = metadata?.subtunesCount || 1; $('entry-subtune').value = (entry.subtune ?? 0) + 1; $('entry-subtune-dialog').showModal(); }, readonly, 'entry-action'));
+          row.appendChild(webButton('#', () => { listeningUI.editingEntryID = entry.id; $('entry-subtune').max = metadata?.subtunesCount || 1; $('entry-subtune').value = (entry.subtune ?? 0) + 1; showWebDialog($('entry-subtune-dialog'), { initialFocus: $('entry-subtune'), fallbackID: 'list-picker' }); }, readonly, 'entry-action'));
           row.appendChild(webButton('All', () => { entry.subtune = null; persistWebListening(); renderListeningUI(); }, readonly, 'entry-action'));
         }
       }

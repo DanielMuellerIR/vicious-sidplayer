@@ -129,6 +129,20 @@ struct ViciousSIDPlayerApp: App {
                 .disabled(!updates.canCheckForUpdates)
             }
 
+            CommandMenu("Sammlung") {
+                Button("Titel suchen") {
+                    NotificationCenter.default.post(name: NSNotification.Name("menuSearchLibrary"), object: nil)
+                }
+                .keyboardShortcut("f", modifiers: .command)
+                Divider()
+                ForEach(Array(LibrarySidebarPage.allCases.enumerated()), id: \.element) { index, page in
+                    Button(page.title) {
+                        NotificationCenter.default.post(name: NSNotification.Name("menuCollectionPage"), object: page)
+                    }
+                    .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
+                }
+            }
+
             CommandMenu("Wiedergabe") {
                 Button("Abspielen / Stoppen") {
                     NotificationCenter.default.post(name: NSNotification.Name("menuPlayStop"), object: nil)

@@ -1,11 +1,20 @@
 import SwiftUI
 import ViciousSIDPlayerCore
 
-enum LibrarySidebarPage: String, CaseIterable {
+enum LibrarySidebarPage: String, CaseIterable, Sendable {
     case library
     case lists
     case queue
     case history
+
+    var title: String {
+        switch self {
+        case .library: return "Musik"
+        case .lists: return "Listen"
+        case .queue: return "Hörfolge"
+        case .history: return "Verlauf"
+        }
+    }
 }
 
 struct ListeningSidebarView: View {

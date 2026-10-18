@@ -75,7 +75,11 @@ Der Titelpfad gilt relativ zum Autoplay-Ordner. Absolute Pfade, `..` und alles, 
 - **Lokale Hörfolgendaten im Browser**: Benannte Listen, Lieblings-Subtunes, Reihenfolge und Position liegen im Browserspeicher. Nach dem Neuladen dieselben SID-Dateien oder den Ordner erneut auswählen; Musik wird nie in der Seite gespeichert. Eine verschobene Datei lässt sich nach ausdrücklicher Bestätigung eines eindeutigen Inhaltsvergleichs in der Sammlungsprüfung wieder zuordnen. Die Wiederherstellung bereitet die Wiedergabe ohne automatischen Start vor. Unlesbare Daten bleiben erhalten; fehlender oder voller Speicher wird gemeldet.
 - **Playlist mit Duplikaterkennung**: Bereits geladene Titel werden nicht doppelt aufgenommen. Die Playlist kann jederzeit geleert werden.
 - **Shuffle**: Zufallswiedergabe, die über Neustarts erhalten bleibt; ist sie aktiv, startet beim App-Start ein zufälliger Song.
-- **Media-Tasten**: Play/Pause, Stop und Titelsprung über F7/F8/F9, Touch Bar und AirPods — die App registriert sich als *Now Playing*-App des Systems.
+- Mit der Standardseitenleiste lässt sich das volle Fenster auf 800 Punkte verengen; Controlgruppen wechseln dann in weitere Zeilen. Für Buttons und Menüs in der Tabfolge die **Tastaturnavigation** in den macOS-Tastatureinstellungen einschalten. VoiceOver benennt die Controls und ihren aktuellen Zustand.
+
+In HTML5 wählen Links/Rechts, Home und End die Sammlungs-Tabs; Tab führt in den ausgewählten Bereich. Dialoge halten den Tastaturfokus und geben ihn beim Schließen zurück. Ladeknöpfe und Regler haben sprechende Namen; der fokussierte Metadatenbereich zeigt lange Texte vollständig. Auf dem iPhone haben Transport- und Subtune-Tasten mindestens 44 Punkte große Treffflächen; große Bedienungshilfen-Schrift verwendet vertikale Controlgruppen. Die iPhone-Abnahme mit VoiceOver und externer Tastatur erfolgt über die [Geräteprüfliste](ios/GERAETETEST.md).
+
+**Media-Tasten**: Play/Pause, Stop und Titelsprung über F7/F8/F9, Touch Bar und AirPods — die App registriert sich als *Now Playing*-App des Systems.
 - **macOS-Updates**: Sparkle sucht im Hintergrund nach signierten Updates; „Nach Updates suchen…“ im App-Menü prüft sofort. Die Installation braucht deine Zustimmung. Die erste Sparkle-fähige Version muss einmal manuell installiert werden.
 - **Keine externen Assets**: Die gesamte Oberfläche (inkl. macOS-Fensterdekorationen und Icons) ist rein prozedural in CSS bzw. SwiftUI Canvas gezeichnet.
 
@@ -117,6 +121,9 @@ Titel, Komponist und Info in der Seitenleiste sowie lange Titelnamen zeigen ihre
 |---|---|
 | Leertaste | Play / Pause |
 | ⌘P | Play / Pause |
+| ⌘F | Bibliothekssuche fokussieren; bei Bedarf zum vollen Fenster wechseln |
+| ⌘1 / ⌘2 / ⌘3 / ⌘4 | Musik / Listen / Folge / Verlauf |
+| ⌘⌥M | Volle Ansicht und Mini-Player im selben Fenster umschalten |
 | ⌘→ | Nächster Hörfolgeneintrag |
 | ⌘← | Vorheriger Hörfolgeneintrag |
 | ⌘E | Audio-Export konfigurieren |

@@ -80,9 +80,8 @@ public struct MainView: View {
     // Breite der linken Playlist-Seitenleiste (anpassbar per Splitter).
     @AppStorage("sidebarWidth") private var sidebarWidth = 240.0
     private var sidebarLayoutWidth: CGFloat { CGFloat(max(180, min(600, sidebarWidth))) }
-    // Die Transportleiste braucht neben der Seitenleiste ihren eigenen Platz.
-    // Sonst schiebt SwiftUI bei breiter Seitenleiste den Inhalt aus dem Fenster.
-    private var fullPlayerMinimumWidth: CGFloat { max(1140, sidebarLayoutWidth + 1020) }
+    // Die Kopfzeile bricht zwischen Controlgruppen um; der Hauptbereich behält Platz für den Scrubber.
+    private var fullPlayerMinimumWidth: CGFloat { max(800, sidebarLayoutWidth + 560) }
     // Autoplay-Ordner aus den Einstellungen (Cmd+,). "" = Standard-Ordner.
     // Gleicher UserDefaults-Key wie in SettingsView — Aenderungen dort landen
     // hier sofort (onChange laedt die Playlist neu).
@@ -172,6 +171,7 @@ public struct MainView: View {
     // Beide filtern nur die Anzeige. Eine Hoerfolge aus diesen Treffern startet
     // der Nutzer ausdruecklich ueber „Auswahl“; danach bleibt sie unabhaengig.
     @State private var searchText = ""
+    @FocusState private var isSearchFocused: Bool
     @State private var favoritesOnly = false
     // Favoriten als stabile Titel-IDs, persistent in UserDefaults.
     @State private var favorites = PlaylistFavorites()
@@ -477,197 +477,11 @@ public struct MainView: View {
                 // Main Panel
                 VStack(spacing: 0) {
                     // Controls View
-                    HStack(spacing: 10) {
-                        Text("TUNE:")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(textSecCol)
-                        
-                        // Titelwaehler. Frueher ein `Picker` ueber die GANZE
-                        // Playlist — daraus baute macOS ein Menue mit einem
-                        // Eintrag je Titel. Bei 50.001 Titeln waren das rund
-                        // 5,2 GB Arbeitsspeicher, und die App stuerzte beim
-                        // Start im Ansichtsaufbau von SwiftUI ab (gemessen am
-                        // 2026-08-23). Jetzt zeigt das Menue hoechstens
-                        // `PlaylistMenuWindow.defaultLimit` Titel rund um den
-                        // laufenden — wer in einer grossen Sammlung sucht, tut
-                        // das in der Titelliste links.
-                        Menu {
-                            ForEach(tuneMenuIndices, id: \.self) { idx in
-                                if let track = playlist.track(at: idx) {
-                                    Button(track.name) { selectTrack(at: idx) }
-                                }
-                            }
-                            if playlist.count > PlaylistMenuWindow.defaultLimit {
-                                Divider()
-                                Text("… \(playlist.count - PlaylistMenuWindow.defaultLimit) weitere Titel: links in der Liste suchen")
-                            }
-                        } label: {
-                            Text(playlist.track(at: currentTrackIdx)?.name ?? "— Auswählen —")
-                                .lineLimit(1)
-                        }
-                        // 260 ist die Wunschbreite. Nachgeben darf der
-                        // Titelwaehler trotzdem: Bei Minimalbreite des Fensters
-                        // (1140 pt) war die Kopfzeile sonst zu eng, und der
-                        // Knopf „Öffnen…" daneben verlor seine Beschriftung —
-                        // er stand dann als leere Pille da (2026-08-23).
-                        .frame(minWidth: 150, idealWidth: 260, maxWidth: 260)
-                        .help("Titel wählen")
-
-                        Button("Öffnen…") {
-                            showFileImporter = true
-                        }
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(textCol)
-                        // Beschriftung nie wegkuerzen: Ein Knopf ohne Aufschrift
-                        // sagt nichts mehr.
-                        .fixedSize()
-                        .help("SID-Datei(en) öffnen")
-
-                        Toggle("AUTO NEXT", isOn: $autoNext)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(textCol)
-                            .fixedSize()   // "AUTO NEXT" einzeilig, kein haesslicher Umbruch
-                            .help("Am Ende zum nächsten Eintrag der Hörfolge. Dateieinträge spielen vorher ihre weiteren Subtunes.")
-
-                        Button {
-                            playbackOptionsPresentation = PlaybackOptionsPresentation(target: currentMD5.map {
-                                PlaybackEndTimeTarget(md5: $0, subtune: coordinator.currentSubtune, title: coordinator.trackName)
-                            })
-                        } label: { Image(systemName: "slider.horizontal.3").frame(width: 24, height: 24) }
-                        .accessibilityLabel("Wiedergabeoptionen")
-                        .accessibilityIdentifier("playback-options")
-                        .help("Repeat, Fadeout, eigene Endzeiten und Einschlaftimer")
-                        .popover(item: $playbackOptionsPresentation) { presentation in
-                            PlaybackOptionsView(controller: playbackOptions, target: presentation.target)
-                        }
-
-                        // SID-Chip-Modell: Auto folgt der Datei-Praeferenz, 6581/8580
-                        // erzwingen das jeweilige Modell (viele Tunes klingen nur auf
-                        // dem richtigen Chip korrekt). Wirkt live auf den laufenden Song.
-                        Picker("", selection: Binding(
-                            get: { coordinator.modelOverride ?? 0 },   // 0 = Auto
-                            set: { observeHistory(force: true, playing: false); coordinator.setModelOverride($0 == 0 ? nil : $0) }
-                        )) {
-                            Text("SID: Auto").tag(0)
-                            Text("6581").tag(6581)
-                            Text("8580").tag(8580)
-                        }
-                        .pickerStyle(DefaultPickerStyle())
-                        .frame(width: 110)
-                        .help("SID-Chip-Modell — Auto folgt der Datei")
-
-                        Picker("C64-Takt", selection: Binding(
-                            get: { coordinator.clockMode },
-                            set: { observeHistory(force: true, playing: false); coordinator.setClockMode($0) }
-                        )) {
-                            Text("Auto: \(SidClockMode.auto.resolve(coordinator.clockPreference).label)").tag(SidClockMode.auto)
-                            Text("PAL").tag(SidClockMode.pal)
-                            Text("NTSC").tag(SidClockMode.ntsc)
-                        }
-                        .labelsHidden()
-                        .frame(width: 120)
-                        .accessibilityIdentifier("clock-mode")
-                        .help("C64-Takt — Datei: \(coordinator.clockPreference.label). Auto verwendet bei unklarer Angabe PAL.")
-
-                        Spacer(minLength: 8)
-
-                        // Subtune-Umschaltung: eine SID-Datei kann mehrere Songs
-                        // ("Subtunes") enthalten. "2/5" = Subtune 2 von 5. Die Pfeile
-                        // schalten zum vorigen/naechsten Subtune (Akzentfarbe = klickbar).
-                        if coordinator.subtunesCount > 1 {
-                            HStack(spacing: 8) {
-                                Button(action: {
-                                    let prev = (coordinator.currentSubtune - 1 + coordinator.subtunesCount) % coordinator.subtunesCount
-                                    setPlaybackSubtune(prev, updateQueue: true)
-                                }) {
-                                    Image(systemName: "chevron.left.circle.fill")
-                                        .font(.system(size: 16))
-                                }
-                                .buttonStyle(BorderlessButtonStyle())
-                                .foregroundColor(accentCol)
-                                .help("Vorheriger Subtune")
-
-                                Text("\(coordinator.currentSubtune + 1)/\(coordinator.subtunesCount)")
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundColor(textCol)
-                                    .fixedSize()   // Zahl nie wegkuerzen, auch bei engem Balken
-                                    .help("Subtune — ein Song innerhalb dieser SID-Datei")
-
-                                Button(action: {
-                                    let next = (coordinator.currentSubtune + 1) % coordinator.subtunesCount
-                                    setPlaybackSubtune(next, updateQueue: true)
-                                }) {
-                                    Image(systemName: "chevron.right.circle.fill")
-                                        .font(.system(size: 16))
-                                }
-                                .buttonStyle(BorderlessButtonStyle())
-                                .foregroundColor(accentCol)
-                                .help("Nächster Subtune")
-                            }
-                            .padding(.horizontal, 4)
-                        }
-
-                        // Transport: Shuffle · Vorheriger Titel · 15 s zurueck · Play/Pause · 30 s vor · Naechster Titel · Stop.
-                        HStack(spacing: 12) {
-                            Button(action: { shuffle.toggle() }) {
-                                Image(systemName: "shuffle").font(.system(size: 15))
-                            }
-                            .buttonStyle(BorderlessButtonStyle())
-                            .foregroundColor(shuffle ? accentCol : textSecCol)
-                            .help(shuffle ? "Zufallswiedergabe: an" : "Zufallswiedergabe: aus")
-                            .accessibilityIdentifier("listening-shuffle")
-                            .accessibilityLabel("Zufallswiedergabe")
-                            .accessibilityValue(shuffle ? "An" : "Aus")
-
-                            Button(action: { playPreviousTrack() }) {
-                                Image(systemName: "backward.end.fill").font(.system(size: 14))
-                            }
-                            .buttonStyle(BorderlessButtonStyle())
-                            .foregroundColor(canNavigateListeningEntries ? textCol : textSecCol.opacity(0.35))
-                            .disabled(!canNavigateListeningEntries)
-                            .help("Vorheriger Eintrag der Hörfolge (⌘←)")
-                            .accessibilityIdentifier("previous-listening-entry")
-
-                            Button(action: { skip(by: -15) }) {
-                                Image(systemName: "gobackward.15").font(.system(size: 16))
-                            }
-                            .buttonStyle(BorderlessButtonStyle())
-                            .foregroundColor(textCol)
-                            .help("15 Sekunden zurück")
-
-                            Button(action: { togglePlayPause() }) {
-                                Image(systemName: coordinator.isPlaying ? "pause.fill" : "play.fill")
-                                    .font(.system(size: 18))
-                            }
-                            .buttonStyle(BorderlessButtonStyle())
-                            .foregroundColor(coordinator.isPlaying ? accentCol : .green)
-                            .help(coordinator.isPlaying ? "Pause" : "Wiedergabe")
-
-                            Button(action: { skip(by: 30) }) {
-                                Image(systemName: "goforward.30").font(.system(size: 16))
-                            }
-                            .buttonStyle(BorderlessButtonStyle())
-                            .foregroundColor(textCol)
-                            .help("30 Sekunden vor")
-
-                            Button(action: { playNextTrack() }) {
-                                Image(systemName: "forward.end.fill").font(.system(size: 14))
-                            }
-                            .buttonStyle(BorderlessButtonStyle())
-                            .foregroundColor(canNavigateListeningEntries ? textCol : textSecCol.opacity(0.35))
-                            .disabled(!canNavigateListeningEntries)
-                            .help("Nächster Eintrag der Hörfolge (⌘→)")
-                            .accessibilityIdentifier("next-listening-entry")
-
-                            Button(action: { stopPlayback() }) {
-                                Image(systemName: "stop.fill")
-                                    .font(.system(size: 14))
-                                    .offset(y: 2)   // wirkte optisch zu hoch — 2 px tiefer
-                            }
-                            .buttonStyle(BorderlessButtonStyle())
-                            .foregroundColor(.red)
-                            .help("Stopp (zurück an den Anfang)")
-                        }
+                    PlayerControlsLayout {
+                        trackHeaderControls(textCol: textCol, textSecCol: textSecCol)
+                        soundHeaderControls
+                        subtuneHeaderControls(textCol: textCol, accentCol: accentCol)
+                        transportHeaderControls(textCol: textCol, textSecCol: textSecCol, accentCol: accentCol)
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
@@ -690,6 +504,8 @@ public struct MainView: View {
                             set: { val in seek(to: val) }
                         ), in: 0...currentDuration)
                         .accentColor(accentCol)
+                        .accessibilityLabel("Wiedergabeposition")
+                        .accessibilityValue("\(formatTime(coordinator.elapsedSeconds)) von \(formatTime(currentDuration))")
                         .help("Position — auch im pausierten oder gestoppten Zustand nutzbar; Play startet dann von hier")
 
                         // Bekannte Songlänge aus persönlicher Vorgabe, HVSC, Datei oder Berechnung.
@@ -706,6 +522,8 @@ public struct MainView: View {
                             .foregroundColor(textSecCol)
                         
                         Slider(value: $volume, in: 0...1.0)
+                            .accessibilityLabel("Lautstärke")
+                            .accessibilityValue("\(Int(volume * 100)) Prozent")
                             .accentColor(accentCol)
                             .frame(width: 70)
                             .onChange(of: volume) { val in
@@ -1141,6 +959,8 @@ public struct MainView: View {
                         .foregroundColor(showFolderTree ? accentCol : textSecCol)
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Ordneransicht")
+                .accessibilityValue(showFolderTree ? "An" : "Aus")
                 .help(showFolderTree ? "Als flache Liste zeigen" : "Nach Ordnern gliedern")
             }
             // Alles auf- oder zuklappen — nur in der Ordneransicht
@@ -1152,6 +972,7 @@ public struct MainView: View {
                         .foregroundColor(textSecCol)
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Alle Ordner aufklappen")
                 .help("Alle Ordner aufklappen")
 
                 Button(action: collapseAllFolders) {
@@ -1160,6 +981,7 @@ public struct MainView: View {
                         .foregroundColor(textSecCol)
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Alle Ordner zuklappen")
                 .help("Alle Ordner zuklappen")
             }
             // Filter "nur Favoriten" (Stern) neben dem Papierkorb.
@@ -1170,6 +992,8 @@ public struct MainView: View {
                         .foregroundColor(favoritesOnly ? .yellow : textSecCol)
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Nur Favoriten zeigen")
+                .accessibilityValue(favoritesOnly ? "An" : "Aus")
                 .help(favoritesOnly ? "Alle Titel zeigen" : "Nur Favoriten zeigen")
 
                 Button(action: clearPlaylist) {
@@ -1178,6 +1002,7 @@ public struct MainView: View {
                         .foregroundColor(textSecCol)
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Playlist leeren")
                 .help("Playlist leeren")
             }
         }
@@ -1191,6 +1016,8 @@ public struct MainView: View {
                 .font(.system(size: 10))
                 .foregroundColor(textSecCol)
             TextField("Suchen", text: $searchText)
+                .focused($isSearchFocused)
+                .accessibilityLabel("Titel oder Ordner suchen")
                 .textFieldStyle(PlainTextFieldStyle())
                 .font(.system(size: 12))
                 .foregroundColor(textCol)
@@ -1201,6 +1028,7 @@ public struct MainView: View {
                         .foregroundColor(textSecCol)
                 }
                 .buttonStyle(PlainButtonStyle())
+                .accessibilityLabel("Suche löschen")
                 .help("Suche löschen")
             }
         }
@@ -1242,6 +1070,218 @@ public struct MainView: View {
                       onAppendToList: appendLibraryTrack)
             .disabled(!listening.isLoaded)
 
+        }
+    }
+
+    @ViewBuilder private func trackHeaderControls(textCol: Color, textSecCol: Color) -> some View {
+        HStack(spacing: 10) {
+            Text("TUNE:")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(textSecCol)
+                .fixedSize()
+
+            // Titelwaehler. Frueher ein `Picker` ueber die GANZE
+            // Playlist — daraus baute macOS ein Menue mit einem
+            // Eintrag je Titel. Bei 50.001 Titeln waren das rund
+            // 5,2 GB Arbeitsspeicher, und die App stuerzte beim
+            // Start im Ansichtsaufbau von SwiftUI ab (gemessen am
+            // 2026-08-23). Jetzt zeigt das Menue hoechstens
+            // `PlaylistMenuWindow.defaultLimit` Titel rund um den
+            // laufenden — wer in einer grossen Sammlung sucht, tut
+            // das in der Titelliste links.
+            Menu {
+                ForEach(tuneMenuIndices, id: \.self) { idx in
+                    if let track = playlist.track(at: idx) {
+                        Button(track.name) { selectTrack(at: idx) }
+                    }
+                }
+                if playlist.count > PlaylistMenuWindow.defaultLimit {
+                    Divider()
+                    Text("… \(playlist.count - PlaylistMenuWindow.defaultLimit) weitere Titel: links in der Liste suchen")
+                }
+            } label: {
+                Text(playlist.track(at: currentTrackIdx)?.name ?? "— Auswählen —")
+                    .lineLimit(1)
+            }
+            // Der Titel darf nachgeben; Beschriftungen und Aktionsknöpfe bleiben vollständig.
+            .frame(minWidth: 150, idealWidth: 260, maxWidth: 260)
+            .help("Titel wählen")
+
+            Button("Öffnen…") {
+                showFileImporter = true
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(textCol)
+            // Beschriftung nie wegkuerzen: Ein Knopf ohne Aufschrift
+            // sagt nichts mehr.
+            .fixedSize()
+            .help("SID-Datei(en) öffnen")
+
+            Toggle("AUTO NEXT", isOn: $autoNext)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(textCol)
+                .fixedSize()   // "AUTO NEXT" einzeilig, kein haesslicher Umbruch
+                .help("Am Ende zum nächsten Eintrag der Hörfolge. Dateieinträge spielen vorher ihre weiteren Subtunes.")
+
+            Button {
+                playbackOptionsPresentation = PlaybackOptionsPresentation(target: currentMD5.map {
+                    PlaybackEndTimeTarget(md5: $0, subtune: coordinator.currentSubtune, title: coordinator.trackName)
+                })
+            } label: { Image(systemName: "slider.horizontal.3").frame(width: 24, height: 24) }
+            .accessibilityLabel("Wiedergabeoptionen")
+            .accessibilityIdentifier("playback-options")
+            .help("Repeat, Fadeout, eigene Endzeiten und Einschlaftimer")
+            .popover(item: $playbackOptionsPresentation) { presentation in
+                PlaybackOptionsView(controller: playbackOptions, target: presentation.target)
+            }
+
+        }
+    }
+
+    @ViewBuilder private var soundHeaderControls: some View {
+        HStack(spacing: 10) {
+            // SID-Chip-Modell: Auto folgt der Datei-Praeferenz, 6581/8580
+            // erzwingen das jeweilige Modell (viele Tunes klingen nur auf
+            // dem richtigen Chip korrekt). Wirkt live auf den laufenden Song.
+            Picker("", selection: Binding(
+                get: { coordinator.modelOverride ?? 0 },   // 0 = Auto
+                set: { observeHistory(force: true, playing: false); coordinator.setModelOverride($0 == 0 ? nil : $0) }
+            )) {
+                Text("SID: Auto").tag(0)
+                Text("6581").tag(6581)
+                Text("8580").tag(8580)
+            }
+            .pickerStyle(DefaultPickerStyle())
+            .frame(width: 110)
+            .accessibilityLabel("SID-Chip-Modell")
+            .help("SID-Chip-Modell — Auto folgt der Datei")
+
+            Picker("C64-Takt", selection: Binding(
+                get: { coordinator.clockMode },
+                set: { observeHistory(force: true, playing: false); coordinator.setClockMode($0) }
+            )) {
+                Text("Auto: \(SidClockMode.auto.resolve(coordinator.clockPreference).label)").tag(SidClockMode.auto)
+                Text("PAL").tag(SidClockMode.pal)
+                Text("NTSC").tag(SidClockMode.ntsc)
+            }
+            .labelsHidden()
+            .frame(width: 120)
+            .accessibilityIdentifier("clock-mode")
+            .help("C64-Takt — Datei: \(coordinator.clockPreference.label). Auto verwendet bei unklarer Angabe PAL.")
+
+        }
+    }
+
+    @ViewBuilder private func subtuneHeaderControls(textCol: Color, accentCol: Color) -> some View {
+        // Subtune-Umschaltung: eine SID-Datei kann mehrere Songs
+        // ("Subtunes") enthalten. "2/5" = Subtune 2 von 5. Die Pfeile
+        // schalten zum vorigen/naechsten Subtune (Akzentfarbe = klickbar).
+        if coordinator.subtunesCount > 1 {
+            HStack(spacing: 8) {
+                Button(action: {
+                    let prev = (coordinator.currentSubtune - 1 + coordinator.subtunesCount) % coordinator.subtunesCount
+                    setPlaybackSubtune(prev, updateQueue: true)
+                }) {
+                    Image(systemName: "chevron.left.circle.fill")
+                        .font(.system(size: 16))
+                }
+                .buttonStyle(BorderlessButtonStyle())
+                .foregroundColor(accentCol)
+                .accessibilityLabel("Vorheriger Subtune")
+                .accessibilityValue("Subtune \(coordinator.currentSubtune + 1) von \(coordinator.subtunesCount)")
+                .help("Vorheriger Subtune")
+
+                Text("\(coordinator.currentSubtune + 1)/\(coordinator.subtunesCount)")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(textCol)
+                    .fixedSize()   // Zahl nie wegkuerzen, auch bei engem Balken
+                    .help("Subtune — ein Song innerhalb dieser SID-Datei")
+
+                Button(action: {
+                    let next = (coordinator.currentSubtune + 1) % coordinator.subtunesCount
+                    setPlaybackSubtune(next, updateQueue: true)
+                }) {
+                    Image(systemName: "chevron.right.circle.fill")
+                        .font(.system(size: 16))
+                }
+                .buttonStyle(BorderlessButtonStyle())
+                .foregroundColor(accentCol)
+                .accessibilityLabel("Nächster Subtune")
+                .accessibilityValue("Subtune \(coordinator.currentSubtune + 1) von \(coordinator.subtunesCount)")
+                .help("Nächster Subtune")
+            }
+            .padding(.horizontal, 4)
+        }
+
+    }
+
+    @ViewBuilder private func transportHeaderControls(textCol: Color, textSecCol: Color, accentCol: Color) -> some View {
+        // Transport: Shuffle · Vorheriger Titel · 15 s zurueck · Play/Pause · 30 s vor · Naechster Titel · Stop.
+        HStack(spacing: 12) {
+            Button(action: { shuffle.toggle() }) {
+                Image(systemName: "shuffle").font(.system(size: 15))
+            }
+            .buttonStyle(BorderlessButtonStyle())
+            .foregroundColor(shuffle ? accentCol : textSecCol)
+            .help(shuffle ? "Zufallswiedergabe: an" : "Zufallswiedergabe: aus")
+            .accessibilityIdentifier("listening-shuffle")
+            .accessibilityLabel("Zufallswiedergabe")
+            .accessibilityValue(shuffle ? "An" : "Aus")
+
+            Button(action: { playPreviousTrack() }) {
+                Image(systemName: "backward.end.fill").font(.system(size: 14))
+            }
+            .buttonStyle(BorderlessButtonStyle())
+            .foregroundColor(canNavigateListeningEntries ? textCol : textSecCol.opacity(0.35))
+            .disabled(!canNavigateListeningEntries)
+            .accessibilityLabel("Vorheriger Eintrag der Hörfolge")
+            .help("Vorheriger Eintrag der Hörfolge (⌘←)")
+            .accessibilityIdentifier("previous-listening-entry")
+
+            Button(action: { skip(by: -15) }) {
+                Image(systemName: "gobackward.15").font(.system(size: 16))
+            }
+            .buttonStyle(BorderlessButtonStyle())
+            .foregroundColor(textCol)
+            .accessibilityLabel("15 Sekunden zurück")
+            .help("15 Sekunden zurück")
+
+            Button(action: { togglePlayPause() }) {
+                Image(systemName: coordinator.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 18))
+            }
+            .buttonStyle(BorderlessButtonStyle())
+            .foregroundColor(coordinator.isPlaying ? accentCol : .green)
+            .accessibilityLabel(coordinator.isPlaying ? "Pause" : "Wiedergabe")
+            .help(coordinator.isPlaying ? "Pause" : "Wiedergabe")
+
+            Button(action: { skip(by: 30) }) {
+                Image(systemName: "goforward.30").font(.system(size: 16))
+            }
+            .buttonStyle(BorderlessButtonStyle())
+            .foregroundColor(textCol)
+            .accessibilityLabel("30 Sekunden vor")
+            .help("30 Sekunden vor")
+
+            Button(action: { playNextTrack() }) {
+                Image(systemName: "forward.end.fill").font(.system(size: 14))
+            }
+            .buttonStyle(BorderlessButtonStyle())
+            .foregroundColor(canNavigateListeningEntries ? textCol : textSecCol.opacity(0.35))
+            .disabled(!canNavigateListeningEntries)
+            .accessibilityLabel("Nächster Eintrag der Hörfolge")
+            .help("Nächster Eintrag der Hörfolge (⌘→)")
+            .accessibilityIdentifier("next-listening-entry")
+
+            Button(action: { stopPlayback() }) {
+                Image(systemName: "stop.fill")
+                    .font(.system(size: 14))
+                    .offset(y: 2)   // wirkte optisch zu hoch — 2 px tiefer
+            }
+            .buttonStyle(BorderlessButtonStyle())
+            .foregroundColor(.red)
+            .accessibilityLabel("Stopp")
+            .help("Stopp (zurück an den Anfang)")
         }
     }
 
@@ -2291,6 +2331,23 @@ public struct MainView: View {
     }
 
     private func setupMenuNotificationHandlers() {
+        NotificationCenter.default.addObserver(forName: NSNotification.Name("menuCollectionPage"), object: nil, queue: .main) { notification in
+            guard let page = notification.object as? LibrarySidebarPage else { return }
+            MainActor.assumeIsolated {
+                guard !isImportApplying, didFinishCollectionStartup,
+                      hostWindow?.attachedSheet == nil, playbackOptionsPresentation == nil else { return }
+                miniPlayer = false; sidebarPage = page; isSearchFocused = false
+                hostWindow?.makeKeyAndOrderFront(nil)
+            }
+        }
+        NotificationCenter.default.addObserver(forName: NSNotification.Name("menuSearchLibrary"), object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                guard !isImportApplying, didFinishCollectionStartup,
+                      hostWindow?.attachedSheet == nil, playbackOptionsPresentation == nil else { return }
+                miniPlayer = false; sidebarPage = .library
+                DispatchQueue.main.async { isSearchFocused = true }
+            }
+        }
         NotificationCenter.default.addObserver(forName: NSNotification.Name("menuPlayStop"), object: nil, queue: .main) { _ in
             // codereview-ok: Task{@MainActor} noetig fuer Aktor-Isolation; Entfernen bricht Compile (2026-07-01)
             Task { @MainActor in

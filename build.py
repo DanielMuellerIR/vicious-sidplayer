@@ -208,7 +208,7 @@ def build(minify: bool = True) -> Path:
     body_src = (SRC_DIR / 'body.html').read_text()
     app_src = '\n'.join((SRC_DIR / name).read_text() for name in (
         'listening.js', 'history.js', 'collection.js', 'personal-storage.js', 'collection-audit.js', 'analysis.js',
-        'history-ui.js', 'listening-ui.js', 'collection-ui.js', 'collection-audit-ui.js', 'analysis-ui.js', 'app.js'))
+        'accessibility.js', 'history-ui.js', 'listening-ui.js', 'collection-ui.js', 'collection-audit-ui.js', 'analysis-ui.js', 'app.js'))
 
     # Version einpflegen
     version = (HERE / 'VERSION').read_text().strip()
@@ -226,7 +226,7 @@ def build(minify: bool = True) -> Path:
 
     html = (
         '<!doctype html>'
-        '<html lang="de">'
+        '<html lang="en">'
         '<head>'
         '<meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'

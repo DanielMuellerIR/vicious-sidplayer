@@ -4,7 +4,7 @@ const auditLabels = { damaged: 'Damaged or unreadable', unsupported: 'Unsupporte
   missingSTIL: 'No STIL association', missingLength: 'Unknown duration', missing: 'Unavailable reference', moved: 'Found again',
   ambiguous: 'Ambiguous association', changed: 'Changed contents', unverified: 'Unknown identity' };
 function initializeAuditUI() {
-  $('audit-open').addEventListener('click', () => { $('audit-dialog').showModal(); renderAuditUI(); });
+  $('audit-open').addEventListener('click', () => { showWebDialog($('audit-dialog'), { fallbackID: 'audit-open' }); renderAuditUI(); });
   $('audit-close').addEventListener('click', () => $('audit-dialog').close());
   $('audit-dialog').addEventListener('cancel', event => { if (auditUI.applying) event.preventDefault(); });
   $('audit-dialog').addEventListener('close', () => { auditUI.controller?.abort(); auditUI.controller = null; });

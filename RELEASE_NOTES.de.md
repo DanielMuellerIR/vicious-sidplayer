@@ -1,3 +1,12 @@
+Vicious SID Player 1.9.45 verbessert Tastaturzugang, angesagte Controlnamen und enge Ansichten.
+
+- Die Mac-Bibliothekssuche mit ⌘F fokussieren und Sammlungsseiten mit ⌘1–4 wählen. Controlgruppen brechen in schmalen Fenstern um; der Mini-Player bleibt dasselbe Fenster.
+- HTML5-Sammlungs-Tabs mit Pfeiltasten, Home und End bedienen. Dateiladen, Regler und vollständige Metadaten sind per Tastatur zugänglich. Dialoge halten den Fokus und geben ihn nach dem Schließen zurück; VoiceOver-Modifiertasten lösen keine Player-Kürzel aus.
+- Größere iPhone-Subtune-, Transport- und Mini-Player-Tasten verwenden. Lange Metadaten brechen vollständig um; Bedienungshilfen-Schrift ordnet Analyse- und Wiedergabe-Controls vertikal an, Querformat verwendet ein niedrigeres Scope.
+- Suchhilfe, Ordner-Controls, Filterzustand und Subtune-Position erhalten ausdrückliche zugängliche Namen und Werte. VoiceOver und externe Tastatur auf dem iPhone bleiben Teil der echten Geräteabnahme.
+
+Siehe [Prüfstand](docs/validation-1.9.45.md).
+
 Vicious SID Player 1.9.44 ergänzt SID v5 und klare Kompatibilitätsgrenzen.
 
 - Windows-1252-Metadaten in allen unterstützten Versionen lesen. V5 unterstützt längere gemeinsame Metadaten, alle sieben Multi-SID-Adresskonfigurationen mit bis zu drei Chips und ein gemeinsames SID-Modell.
