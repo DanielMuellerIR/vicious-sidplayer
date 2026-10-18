@@ -157,7 +157,7 @@ struct AudioExportView: View {
             Button { applyDuration() } label: {
                 Text("Dauer übernehmen").frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
             }
-            Text("Leer lassen für eigene Endzeit → HVSC → Cache → 6-Minuten-Fallback. Eine manuelle Dauer gilt für alle Einträge.")
+            Text("Leer lassen für eigene Endzeit → HVSC → SID-Datei → Cache → 6-Minuten-Fallback. Eine manuelle Dauer gilt für alle Einträge.")
                 .font(.caption).foregroundStyle(.secondary)
             Button { controller.setSlice(controller.isUsingSlice ? nil : choice?.slice) } label: {
                 Label("A/B-Ausschnitt exportieren", systemImage: controller.isUsingSlice ? "checkmark.square.fill" : "square")
@@ -214,6 +214,7 @@ struct AudioExportView: View {
             switch item.durationSource {
             case .personal: source = String(localized: "Eigene Endzeit")
             case .database: source = "HVSC"
+            case .embedded: source = String(localized: "SID-Datei")
             case .computed: source = String(localized: "Berechnet")
             case .fallback: source = String(localized: "Fallback")
             }

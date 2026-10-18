@@ -92,6 +92,7 @@ public final class ViciousProcessor: Sendable {
     nonisolated(unsafe) private var subtune: Int = 0
     nonisolated(unsafe) private var subtune_amount: Int = 1
     nonisolated(unsafe) private var timermode = [UInt8](repeating: 0, count: 32)
+    nonisolated(unsafe) private var repeatedSpeedBits = false
     nonisolated(unsafe) private var preferred_SID_model: [Double] = [8580.0, 8580.0, 8580.0]
     // Das in der SID-Datei bevorzugte Modell + optionaler Nutzer-Override
     // (nil = Auto = der Datei-Praeferenz folgen). PSID v3/v4 koennen fuer den
@@ -251,12 +252,10 @@ public final class ViciousProcessor: Sendable {
         voiceBandpass = [Double](repeating: 0.0, count: 9)
     }
 
-    // PSID-Spec: Hat ein Tune mehr als 32 Subtunes, gilt fuer Subtune 33+ dasselbe
-    // Speed-/Timer-Flag wie fuer Subtune 32 (Bit 31). Das timermode-Array hat nur
-    // 32 Eintraege; ohne Begrenzung crasht timermode[subtune] mit Index-out-of-range,
-    // sobald ein solcher Tune auf Subtune >= 32 gestellt wird (72 HVSC-Dateien).
+    // V1 und PlaySID-spezifische Dateien wiederholen die 32 Bits. Die übrigen
+    // PSID-Versionen behalten für weitere Subtunes das letzte Timerbit.
     private func timerModeForCurrentSubtune() -> UInt8 {
-        return timermode[min(subtune, timermode.count - 1)]
+        timermode[repeatedSpeedBits ? subtune % 32 : min(subtune, 31)]
     }
 
     private func initEmulation(subt: Int) {
@@ -1149,9 +1148,11 @@ public final class ViciousProcessor: Sendable {
         playaddf = sidFile.playAddr
         playaddr = sidFile.playAddr
         subtune_amount = sidFile.subtuneAmount
+        repeatedSpeedBits = sidFile.usesRepeatedSpeedBits
 
         for i in 0..<32 {
-            timermode[i] = sidFile.timermodes[i] ? 1 : 0
+            // RSID reserviert die Speed-Bits als null, startet aber mit CIA-IRQ.
+            timermode[i] = (sidFile.isRSID || sidFile.timermodes[i]) ? 1 : 0
         }
 
         // Copy C64 binary code into memory buffer
@@ -1366,6 +1367,7 @@ public final class ViciousProcessor: Sendable {
         let initAddress: UInt16
         let play: UInt16
         let timers: [UInt8]
+        let repeatedSpeedBits: Bool
         let addresses: [UInt32]
         let models: [Double]
         let muted: [Bool]
@@ -1412,7 +1414,7 @@ public final class ViciousProcessor: Sendable {
     }
     private func loopContext() -> LoopContext {
         LoopContext(data: loopFileData, rate: samplerate, clock: clock, sub: subtune,
-                    load: loadaddr, initAddress: initaddr, play: playaddf, timers: timermode,
+                    load: loadaddr, initAddress: initaddr, play: playaddf, timers: timermode, repeatedSpeedBits: repeatedSpeedBits,
                     addresses: SID_address, models: preferred_SID_model, muted: voiceMuted, filter: filterEnabled)
     }
     public static func prepareLoop(sid: SidFileData, subtune: Int, sampleRate: Double,

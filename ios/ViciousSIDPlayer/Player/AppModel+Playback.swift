@@ -65,6 +65,7 @@ extension AppModel {
             // sowohl der HVSC-Datenbank als auch des berechneten Caches.
             let md5 = SonglengthDB.md5Hex(of: data)
             currentMD5 = md5
+            currentEmbeddedLengths = sidFile.embeddedSongLengths
             currentTrackLengths = songlengthDB?.lengths(forMD5: md5)
             resolveComputedLengthIfNeeded()
 
@@ -506,8 +507,8 @@ extension AppModel {
         switch lengthResolver.plan(md5: currentMD5,
                                    subtune: coordinator.currentSubtune,
                                    databaseLengths: currentTrackLengths,
-                                   fileURL: fileURL, clockMode: coordinator.clockMode, personalDuration: personalDuration) {
-        case .databaseProvidesLength, .personalProvidesLength, .noLengthKnown:
+                                   fileURL: fileURL, clockMode: coordinator.clockMode, personalDuration: personalDuration, embeddedLengths: currentEmbeddedLengths) {
+        case .databaseProvidesLength, .personalProvidesLength, .embeddedProvidesLength, .noLengthKnown:
             lengthEstimateTask?.cancel()
             lengthEstimateTask = nil
             lengthEstimateOwner = nil

@@ -1,3 +1,4 @@
+import { inspectSIDFile } from './sid-format.js';
 // C64 SID Player AudioWorkletProcessor
 //
 // SID emulation + 6502 CPU core adapted from jsSID 0.9.1 by Hermit
@@ -31,9 +32,6 @@ class SidPlayerProcessor {
     
     let SIDamount_vol = [0, 1, 0.6, 0.4];
     
-    let SIDtitle = new Uint8Array(0x20);
-    let SIDauthor = new Uint8Array(0x20);
-    let SIDinfo = new Uint8Array(0x20);
     let timermode = new Uint8Array(0x20);
     
     let loadaddr = 0x1000;
@@ -43,15 +41,13 @@ class SidPlayerProcessor {
     let subtune = 0;
     let subtune_amount = 1;
 
-    // Liest den Timer-Modus des aktuellen Subtunes. timermode hat nur 32 Eintraege,
-    // PSID erlaubt aber mehr Subtunes — fuer subtune >= 32 waere timermode[subtune]
-    // sonst undefined (und "undefined && true" === false), was das CIA-Timer-Pacing
-    // stilllegen wuerde. Daher den Index clampen, analog zum Swift-Port
-    // (timerModeForCurrentSubtune, min(subtune, count-1)).
+    let repeatedSpeedBits = false;
+    // V1 und PlaySID-spezifische Dateien wiederholen die 32 Bits; die übrigen
+    // PSID-Versionen verwenden Bit31 für alle weiteren Subtunes.
     function timerModeForSubtune() {
-      return timermode[Math.min(subtune, timermode.length - 1)];
+      return timermode[repeatedSpeedBits ? subtune % 32 : Math.min(subtune, 31)];
     }
-    
+
     let preferred_SID_model = [8580.0, 8580.0, 8580.0];
     let SID_model = 8580.0;
     let SID_address = [0xD400, 0, 0];
@@ -620,86 +616,33 @@ class SidPlayerProcessor {
     this.playSample = play;
     
     this.loadSID = function(filedata) {
+      const inspection = inspectSIDFile(filedata);
+      if (inspection.error) throw new Error(inspection.error.message);
+      const meta = inspection.header;
       loaded = 0;
       initialized = 0;
       preparedLoop = null;
       initSID();
-      
-      // dataOffset ist ein 16-Bit-Big-Endian-Feld an Header-Position 6-7.
-      // Frueher wurde nur das Low-Byte (filedata[7]) gelesen; bei Headern mit
-      // dataOffset > 0xFF haette das die PRG-Bytes falsch positioniert.
-      let offs = filedata[6] * 256 + filedata[7];
-      loadaddr = filedata[8] * 256 + filedata[9];
-      // Ladeadresse: Nur wenn das Header-Feld loadAddress 0 ist, stehen die
-      // ersten zwei Bytes des Datenblocks als Little-Endian-Ladeadresse vor dem
-      // C64-Binary (SID-Spec). Bei explizitem loadAddress beginnt der Datenblock
-      // DIREKT mit dem Binary — keine 2 Bytes ueberspringen, sonst Stille.
-      let binOffs = offs;
-      if (loadaddr === 0) {
-        loadaddr = filedata[offs] + filedata[offs + 1] * 256;
-        binOffs = offs + 2;
-      }
-
-      for (let i = 0; i < 32; i++) {
-        timermode[31 - i] = filedata[0x12 + (i >> 3)] & Math.pow(2, 7 - (i % 8));
-      }
-
-      // Clear memory
-      for (let i = 0; i < memory.length; i++) memory[i] = 0;
-
-      for (let i = binOffs; i < filedata.byteLength; i++) {
-        if (loadaddr + i - binOffs < memory.length) {
-          memory[loadaddr + i - binOffs] = filedata[i];
-        }
+      loadaddr = meta.loadAddr;
+      initaddr = meta.initAddr;
+      playaddr = playaddf = meta.playAddr;
+      subtune_amount = meta.subtunesCount;
+      repeatedSpeedBits = meta.usesRepeatedSpeedBits;
+      // RSID reserviert die Speed-Bits als null, startet aber mit CIA-IRQ.
+      for (let i = 0; i < 32; i++) timermode[i] = meta.isRSID || meta.timermodes[i] ? 1 : 0;
+      memory.fill(0);
+      // Der v5-Längenanhang gehört nicht zum C64-Programm.
+      for (let i = meta.binaryOffset; i < meta.binaryEnd; i++) {
+        if (loadaddr + i - meta.binaryOffset < memory.length) memory[loadaddr + i - meta.binaryOffset] = filedata[i];
       }
       loadedMemory.set(memory);
-      
-      let strend = 1;
-      for (let i = 0; i < 32; i++) {
-        if (strend !== 0) strend = SIDtitle[i] = filedata[0x16 + i];
-        else SIDtitle[i] = 0;
-      }
-      strend = 1;
-      for (let i = 0; i < 32; i++) {
-        if (strend !== 0) strend = SIDauthor[i] = filedata[0x36 + i];
-        else SIDauthor[i] = 0;
-      }
-      strend = 1;
-      for (let i = 0; i < 32; i++) {
-        if (strend !== 0) strend = SIDinfo[i] = filedata[0x56 + i];
-        else SIDinfo[i] = 0;
-      }
-      
-      initaddr = filedata[0xA] * 256 + filedata[0xB];
-      if (initaddr === 0) initaddr = loadaddr;
-      
-      playaddr = playaddf = filedata[0xC] * 256 + filedata[0xD];
-      // PSID-songs-Feld ist 16-bit Big-Endian bei 0x0E; vorher wurde nur das untere
-      // Byte (0x0F) gelesen -> bei 256 Subtunes 0 statt 256. Beide Bytes kombinieren,
-      // damit die Anzahl mit Swift-Seite und PSID-Spec uebereinstimmt.
-      subtune_amount = Math.min(256, Math.max(1, (filedata[0x0E] << 8) | filedata[0x0F]));
-      
-      const version = filedata[4] * 256 + filedata[5];
-      fileClock = version >= 2 ? (filedata[0x77] >> 2) & 3 : 0;
+      fileClock = ['unknown', 'pal', 'ntsc', 'both'].indexOf(meta.clockPreference);
       applyClock();
-      preferred_SID_model[0] = version >= 2 && (filedata[0x77] & 0x30) >= 0x20 ? 8580 : 6581;
-      const model = bits => bits >= 2 ? 8580 : bits === 1 ? 6581 : preferred_SID_model[0];
-      preferred_SID_model[1] = version >= 3 ? model((filedata[0x77] >> 6) & 3) : preferred_SID_model[0];
-      preferred_SID_model[2] = version >= 4 ? model(filedata[0x76] & 3) : preferred_SID_model[0];
-      const sidAddress = val => val >= 0x42 && (val < 0x80 || val >= 0xE0) ? 0xD000 + val * 16 : 0;
-      SID_address[1] = version >= 3 ? sidAddress(filedata[0x7A]) : 0;
-      SID_address[2] = version >= 4 ? sidAddress(filedata[0x7B]) : 0;
-
-      SIDamount = 1 + (SID_address[1] > 0) + (SID_address[2] > 0);
+      preferred_SID_model = meta.chipModels.slice();
+      SID_address = meta.addresses.slice();
+      SIDamount = meta.activeSIDChips.length;
       loaded = 1;
-      
-      return {
-        title: String.fromCharCode.apply(null, Array.from(SIDtitle)).replace(/\0/g, '').trim(),
-        author: String.fromCharCode.apply(null, Array.from(SIDauthor)).replace(/\0/g, '').trim(),
-        info: String.fromCharCode.apply(null, Array.from(SIDinfo)).replace(/\0/g, '').trim(),
-        subtunesCount: subtune_amount,
-        prefModel: preferred_SID_model[0]
-      };
+      return meta;
     };
     
     this.initSubtune = function(subt) {
@@ -761,7 +704,7 @@ class SidPlayerProcessor {
     // benutzt vorhandene Puffer, statt im Audiocallback einen Emulator zu bauen.
     this.captureLoop = end => ({
       context: { samplerate, clock, subtune, loadaddr, initaddr, playaddf,
-        timermode: timermode.slice(), addresses: SID_address.slice(), models: preferred_SID_model.slice(),
+        timermode: timermode.slice(), repeatedSpeedBits, addresses: SID_address.slice(), models: preferred_SID_model.slice(),
         muted: voiceMuted.slice(), loadedMemory: loadedMemory.slice() },
       endSample: Math.floor(end * samplerate),
       state: {initialized, finished, playtime, renderedSamples, framecnt, CPUtime, pPC, mix, PC, A, T, X, Y, SP, IR, addr, ST, cycles, storadd, SID_model, playaddr, frame_sampleperiod, usesCIATimer, combiwf, prevgate, chnadd, ctrl, wf, test, period, step, SR, accuadd, MSB, tmp, pw, lim, wfout, cutoff, resonance, filtin, output, memory: memory.slice(), ADSRstate: ADSRstate.slice(), ratecnt: ratecnt.slice(), envcnt: envcnt.slice(), expcnt: expcnt.slice(), prevSR: prevSR.slice(), phaseaccu: phaseaccu.slice(), prevaccu: prevaccu.slice(), sourceMSBrise: sourceMSBrise.slice(), sourceMSB: sourceMSB.slice(), noise_LFSR: noise_LFSR.slice(), prevwfout: prevwfout.slice(), prevwavdata: prevwavdata.slice(), prevlowpass: prevlowpass.slice(), prevbandpass: prevbandpass.slice(), voiceLowpass: voiceLowpass.slice(), voiceBandpass: voiceBandpass.slice()}
@@ -832,7 +775,7 @@ class SidPlayerProcessor {
       const c = snapshot?.context, state = snapshot?.state;
       if (!loaded || !initialized || !c || !state || c.samplerate !== samplerate || c.clock !== clock || c.subtune !== subtune
           || c.loadaddr !== loadaddr || c.initaddr !== initaddr || c.playaddf !== playaddf
-          || !equal(c.timermode, timermode) || !equal(c.addresses, SID_address)
+          || !equal(c.timermode, timermode) || c.repeatedSpeedBits !== repeatedSpeedBits || !equal(c.addresses, SID_address)
           || !equal(c.models, preferred_SID_model) || !equal(c.muted, voiceMuted)
           || !Array.isArray(state.voiceLowpass) || state.voiceLowpass.length !== 9 || !state.voiceLowpass.every(Number.isFinite)
           || !Array.isArray(state.voiceBandpass) || state.voiceBandpass.length !== 9 || !state.voiceBandpass.every(Number.isFinite)

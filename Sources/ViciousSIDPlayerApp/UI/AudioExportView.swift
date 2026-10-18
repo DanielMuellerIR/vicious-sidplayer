@@ -114,7 +114,7 @@ struct AudioExportView: View {
                     .onSubmit { controller.setDuration(durationText) }
                 Button("Dauer übernehmen") { controller.setDuration(durationText) }
             }
-            Text("Leer lassen für eigene Endzeit → HVSC → Cache → 6-Minuten-Fallback. Eine manuelle Dauer gilt für alle Einträge.")
+            Text("Leer lassen für eigene Endzeit → HVSC → SID-Datei → Cache → 6-Minuten-Fallback. Eine manuelle Dauer gilt für alle Einträge.")
                 .font(.caption).foregroundStyle(.secondary)
             Toggle("A/B-Ausschnitt exportieren", isOn: Binding(get: { controller.isUsingSlice },
                 set: { controller.setSlice($0 ? choice?.slice : nil) }))
@@ -166,6 +166,7 @@ struct AudioExportView: View {
             switch item.durationSource {
             case .personal: source = String(localized: "Eigene Endzeit")
             case .database: source = "HVSC"
+            case .embedded: source = String(localized: "SID-Datei")
             case .computed: source = String(localized: "Berechnet")
             case .fallback: source = String(localized: "Fallback")
             }

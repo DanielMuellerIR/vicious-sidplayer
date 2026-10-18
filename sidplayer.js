@@ -1,3 +1,4 @@
+import { inspectSIDFile } from './sid-format.js';
 // Standalone C64 SID Player Wrapper
 // SID-Header-Parser, abgeleitet aus einer TypeScript-Implementierung.
 
@@ -5,49 +6,8 @@
  * Parse SID file header WITHOUT needing an AudioContext.
  * Works on the raw Uint8Array from a fetch or file upload.
  */
-export function parseSidHeader(data) {
-  if (data.length < 0x76) return null;
-  const version = (data[4] << 8) | data[5];
-  if (version < 1 || version > 4) return null;
-  const headerSize = version === 1 ? 0x76 : 0x7C;
-  const offset = (data[6] << 8) | data[7];
-  if (data.length < headerSize || offset < headerSize || offset >= data.length) return null;
-  const loadAddress = (data[8] << 8) | data[9];
-  if (!loadAddress && offset + 2 >= data.length) return null;
-
-  // Check magic: "PSID" or "RSID"
-  const magic = String.fromCharCode(data[0], data[1], data[2], data[3]);
-  if (magic !== 'PSID' && magic !== 'RSID') return null;
-  if (magic === 'RSID' && version === 1) return null;
-
-  const readString = (offset, len) => {
-    let s = '';
-    for (let i = 0; i < len; i++) {
-      const ch = data[offset + i];
-      if (ch === 0) break;
-      s += String.fromCharCode(ch);
-    }
-    return s.trim();
-  };
-
-  const title = readString(0x16, 32);
-  const author = readString(0x36, 32);
-  const info = readString(0x56, 32);
-  // PSID-songs-Feld ist 16-bit Big-Endian bei 0x0E; vorher wurde nur das untere
-  // Byte (0x0F) gelesen, was bei genau 256 Subtunes 0 statt 256 ergab. Jetzt beide
-  // Bytes kombinieren, damit JS mit der Swift-Seite und der PSID-Spec uebereinstimmt.
-  const subtunesCount = Math.min(256, Math.max(1, (data[0x0E] << 8) | data[0x0F]));
-  const prefModel = version >= 2 && (data[0x77] & 0x30) >= 0x20 ? 8580 : 6581;
-
-  const clockPreference = ['unknown', 'pal', 'ntsc', 'both'][version >= 2 ? (data[0x77] >> 2) & 3 : 0];
-  const sidAddress = value => value >= 0x42 && (value < 0x80 || value >= 0xe0) ? 0xd000 + value * 16 : 0;
-  const addresses = [0xd400, version >= 3 ? sidAddress(data[0x7a]) : 0, version >= 4 ? sidAddress(data[0x7b]) : 0];
-  const model = bits => bits >= 2 ? 8580 : bits === 1 ? 6581 : prefModel;
-  const chipModels = [prefModel, version >= 3 ? model((data[0x77] >> 6) & 3) : prefModel,
-    version >= 4 ? model(data[0x76] & 3) : prefModel];
-  return { title, author, info, subtunesCount, prefModel, clockPreference, chipModels,
-    activeSIDChips: [0, 1, 2].filter(chip => addresses[chip] !== 0) };
-}
+export function parseSidHeader(data) { return inspectSIDFile(data).header; }
+export function sidFileDiagnostic(data) { return inspectSIDFile(data).error; }
 
 export class SidPlayer {
   constructor() {
@@ -192,7 +152,7 @@ export class SidPlayer {
     if (myGen !== this.loadGen) return; // stale
 
     const meta = parseSidHeader(uint8);
-    if (!meta) throw new Error('Invalid SID file (bad header)');
+    if (!meta) throw new Error(sidFileDiagnostic(uint8)?.message || 'Invalid SID file (bad header)');
 
     this.setLoopRange(null);
     this.loopData = uint8.slice();
@@ -227,7 +187,7 @@ export class SidPlayer {
     this.pendingData = null;
 
     const meta = parseSidHeader(uint8);
-    if (!meta) throw new Error('Invalid SID file (bad header)');
+    if (!meta) throw new Error(sidFileDiagnostic(uint8)?.message || 'Invalid SID file (bad header)');
 
     this.setLoopRange(null);
     this.loopData = uint8.slice();

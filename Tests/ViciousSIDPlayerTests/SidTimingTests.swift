@@ -3,7 +3,7 @@ import XCTest
 
 final class SidTimingTests: XCTestCase {
     private func sid(flags: UInt8, cia: Bool = false, version: UInt16 = 2,
-                     initCode: [UInt8] = [0x60], play: [UInt8] = [0xEE,0x00,0xD4,0x60]) throws -> SidFileData {
+                     initCode: [UInt8] = [0x60], play: [UInt8] = [0xEE,0x00,0xD4,0x60], songs: UInt16 = 1) throws -> SidFileData {
         var data = Data(count: version == 1 ? 0x76 : 0x7C)
         data.replaceSubrange(0..<4, with: "PSID".utf8)
         func put(_ value: UInt16, at offset: Int) {
@@ -12,7 +12,7 @@ final class SidTimingTests: XCTestCase {
         put(version, at: 4); put(UInt16(data.count), at: 6)
         put(0x1000, at: 8); put(0x1000, at: 10)
         put(0x1000 + UInt16(initCode.count), at: 12)
-        put(1, at: 14); put(1, at: 16)
+        put(songs, at: 14); put(1, at: 16)
         if cia { data[0x15] = 1 }
         if version > 1 { data[0x77] = flags | 0x20 }
         return try SidParser.parse(data: data + Data(initCode + play))
@@ -34,6 +34,19 @@ final class SidTimingTests: XCTestCase {
         }
     }
 
+    func testSpeedBitsRepeatOnlyForVersionOneAndPlaySIDSpecificFiles() throws {
+        for (version, flags, count): (UInt16, UInt8, Int) in [(1, 4, 60), (2, 4, 50), (2, 6, 60), (3, 4, 50), (4, 4, 50), (5, 4, 50)] {
+            let p = ViciousProcessor(sampleRate: 44100)
+            _ = p.loadSID(sidFile: try sid(flags: flags, cia: true, version: version, songs: 33)); p.initSubtune(sub: 32)
+            for _ in 0..<44100 { _ = p.play() }
+            XCTAssertEqual(p.getChannelsData().frequencies.0, count, "v\(version), flags \(flags)")
+        }
+        let normal = try sid(flags: 4, cia: true, songs: 33), specific = try sid(flags: 6, cia: true, songs: 33)
+        let loop = try ViciousProcessor.prepareLoop(sid: normal, subtune: 32, sampleRate: 44100, range: 0.2...0.45)
+        let p = ViciousProcessor(sampleRate: 44100); _ = p.loadSID(sidFile: specific); p.initSubtune(sub: 32)
+        XCTAssertFalse(p.installLoop(loop))
+    }
+
     func testOverrideAndCIAUseTheSelectedMachineClock() throws {
         for mode in [SidClockMode.pal, .ntsc] {
             let p = ViciousProcessor(sampleRate: 44100, clockMode: mode)
@@ -46,6 +59,24 @@ final class SidTimingTests: XCTestCase {
             _ = cia.loadSID(sidFile: try sid(flags: 0, cia: true)); cia.initSubtune(sub: 0)
             for _ in 0..<44100 { _ = cia.play() }
             XCTAssertEqual(cia.getChannelsData().frequencies.0, 60)
+        }
+    }
+
+    func testRSIDStartsWithCIAInterruptTimingDespiteReservedZeroSpeedBits() throws {
+        for version in [2, 5] {
+            for flags in [0x14, 0x18] {
+                var data = Data(count: 0x7C)
+                data.replaceSubrange(0..<4, with: "RSID".utf8)
+                func put(_ value: Int, _ offset: Int) { data[offset] = UInt8(value >> 8); data[offset + 1] = UInt8(value & 255) }
+                put(version, 4); put(0x7C, 6); put(0x1000, 10); put(1, 14); put(1, 16); put(flags, 0x76)
+                var code: [UInt8] = [0xA9,0x20,0x8D,0x14,3,0xA9,0x10,0x8D,0x15,3,0x60]
+                while code.count < 0x20 { code.append(0xEA) }
+                data.append(contentsOf: [0, 0x10] + code + [0xEE,0,0xD4,0x40])
+                let p = ViciousProcessor(sampleRate: 44100)
+                _ = p.loadSID(sidFile: try SidParser.parse(data: data)); p.initSubtune(sub: 0)
+                for _ in 0..<44100 { _ = p.play() }
+                XCTAssertEqual(p.getChannelsData().frequencies.0, 60, "RSID v\(version), flags \(flags)")
+            }
         }
     }
 

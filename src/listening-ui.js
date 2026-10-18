@@ -46,7 +46,7 @@ async function initializeListeningUI() {
     ++webQueueGeneration;
     observeWebHistory(false, true);
     player.unload(); bindWebPlayerCallbacks(); currentIdx = -1; trackList = []; listeningQueue = null; pendingWebRestore = false;
-    currentMetadata = null; applyWebAnalysisMix();
+    currentMetadata = null; refreshWebDuration(); applyWebAnalysisMix();
     webListeningStore.document.libraryIDs = []; webListeningStore.document.session = null;
     playBtn.disabled = true; positionScrubber.disabled = true; setPlayingUI(false);
     persistWebListening(); renderListeningUI();

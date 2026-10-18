@@ -144,7 +144,7 @@ final class AppModel: ObservableObject {
     }
 
     /// Effektive Dauer des laufenden Subtunes. Reihenfolge wie auf dem Mac:
-    /// HVSC-Datenbank, dann berechneter Cache, sonst das Fallback-Limit.
+    /// Persönliche Endzeit, HVSC, eingebettete Dateilänge, Cache und Fallback.
     /// Steuert Scrubber, Auto-Next, Sperrbildschirm und WAV-Export.
     ///
     /// Die Leiter selbst steht im Core (`SongLengthSelection`) — genau deshalb
@@ -153,7 +153,7 @@ final class AppModel: ObservableObject {
         return SongLengthSelection.duration(databaseLengths: currentTrackLengths,
                                             subtune: coordinator.currentSubtune,
                                             computed: computedLength,
-                                            fallback: Self.fallbackDurationSeconds, personalDuration: personalDuration)
+                                            fallback: Self.fallbackDurationSeconds, personalDuration: personalDuration, embeddedLengths: currentEmbeddedLengths)
     }
 
     /// Fallback, wenn weder HVSC-Eintrag noch berechnete Laenge vorliegen —
@@ -225,6 +225,7 @@ final class AppModel: ObservableObject {
     /// HVSC-STIL, sofern der Nutzer eine importiert hat. Siehe `AppModel+STIL`.
     var stilDB: STILDatabase?
     /// Laengen des aktuellen Titels je Subtune (aus der HVSC-Datenbank).
+    var currentEmbeddedLengths: [Double]?
     @Published var currentTrackLengths: [Double]? { didSet { applyPlaybackOptions() } }
     /// Im Hintergrund berechnete Laenge des aktuellen Subtunes.
     @Published var computedLength: Double? { didSet { applyPlaybackOptions() } }

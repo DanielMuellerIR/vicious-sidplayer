@@ -38,7 +38,7 @@ final class CollectionAuditTests: XCTestCase {
         let bytes = sid(), other = sid(1)
         try write(bytes, "A/Tune.sid", context); try write(other, "B/Tune.sid", context)
         try write(bytes, "Duplicate.sid", context); try write(Data([1, 2, 3]), "Broken.sid", context)
-        var future = bytes; future[5] = 5; try write(future, "Future.sid", context)
+        var future = bytes; future[5] = 6; try write(future, "Future.sid", context)
         _ = try context.library.refresh()
         let indexURL = context.library.supportDirectory.appendingPathComponent(context.library.indexFileName)
         let index = try Data(contentsOf: indexURL), source = try snapshot(bytes: bytes)

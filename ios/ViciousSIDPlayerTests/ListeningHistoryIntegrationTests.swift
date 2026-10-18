@@ -53,6 +53,43 @@ final class ListeningHistoryIntegrationTests: XCTestCase {
         return model
     }
 
+    func testEmbeddedVersion5LengthsReachPlaybackAndExportWithoutStartingAnEstimate() async throws {
+        let model = try await makeModel()
+        var data = fixture(); data[5] = 5; data[0x76] = 4; data[0x77] = 0x14
+        data.append(contentsOf: [0, 2, 0, 0, 0, 3, 0x02, 0x50, 0, 0, 0, 0])
+        try data.write(to: directory.appendingPathComponent("Documents/Tune.sid"))
+        model.select(trackID: "Tune.sid")
+        XCTAssertEqual(model.currentEmbeddedLengths, [2, 3.25, 0])
+        XCTAssertEqual(model.currentDuration, 2); XCTAssertNil(model.lengthEstimateTask)
+        model.setSubtune(1)
+        XCTAssertEqual(model.currentDuration, 3.25); XCTAssertNil(model.lengthEstimateTask)
+        let presentation = try XCTUnwrap(model.makeAudioExportPresentation())
+        let sources = try XCTUnwrap(presentation.choices.first { $0.id == 0 }?.sources)
+        let items = try await Task.detached {
+            try AudioExportPlanner.prepare(sources: sources, durations: presentation.durations)
+        }.value
+        XCTAssertEqual(items.first?.seconds, 3.25); XCTAssertEqual(items.first?.durationSource, .embedded)
+        model.currentTrackLengths = [5, 6, 7]
+        XCTAssertEqual(model.currentDuration, 6)
+        try model.playbackOptions.setEndTime("1.5", target: .init(md5: try XCTUnwrap(model.currentMD5), subtune: 1, title: "Tune"))
+        XCTAssertEqual(model.currentDuration, 1.5)
+        XCTAssertFalse(model.coordinator.isPlaying)
+    }
+
+    func testUnsupportedVersion5ConfigurationKeepsThePreparedTrackAndQueue() async throws {
+        let model = try await makeModel()
+        model.select(trackID: "Tune.sid"); model.setSubtune(1); model.seek(to: 0.4)
+        let queue = model.listening.queue, history = model.history.document
+        var data = fixture(); data[5] = 5; data[0x7A] = 4
+        try data.write(to: directory.appendingPathComponent("Documents/Unsupported.sid"))
+        XCTAssertFalse(model.loadTrack(id: "Unsupported.sid", autoplay: false))
+        XCTAssertTrue(try XCTUnwrap(model.errorMessage).contains("3"))
+        XCTAssertEqual(model.currentTrackID, "Tune.sid"); XCTAssertEqual(model.coordinator.currentSubtune, 1)
+        XCTAssertEqual(model.coordinator.elapsedSeconds, 0.4)
+        XCTAssertEqual(model.listening.queue, queue); XCTAssertEqual(model.history.document, history)
+        XCTAssertFalse(model.coordinator.isPlaying)
+    }
+
     func testLoopMarkersSurviveStopAndInsideSeekButNewSubtuneClearsThem() async throws {
         let model = try await makeModel()
         model.select(trackID: "Tune.sid")

@@ -19,7 +19,7 @@ Dieser Plan setzt die [Erweiterungsanalyse](feature-opportunities.md) um. Jede S
 | 09 | Batch-WAV-Export und Mixwahl | 6–10 h | In v1.9.40 auf Mac und iPhone abgenommen ([Prüfstand](validation-1.9.40.md)) |
 | 10 | Weitere Exportformate | 4–8 h | M4A und FLAC in v1.9.41 auf Mac und iPhone abgenommen ([Prüfstand](validation-1.9.41.md)) |
 | 11 | Sammlungsprüfung und Wiederfinden | 6–10 h | In v1.9.42 auf Mac, iPhone und HTML5 abgenommen ([Prüfstand](validation-1.9.42.md)) |
-| 12 | Formatkompatibilität und klare Grenzen | 6–12 h | Geplant |
+| 12 | Formatkompatibilität und klare Grenzen | 6–12 h | In v1.9.44 auf Mac, iPhone-Simulator und HTML5 abgenommen ([Grenzen](sid-compatibility.md), [Prüfstand](validation-1.9.44.md)) |
 | 13 | Tastatur, VoiceOver und anpassungsfähiges Layout | 4–8 h | Geplant |
 | 14 | Energie und Zeichenlast | 4–8 h | Geplant |
 | 15 | Gezieltes 6581-Filter-Tuning | 6–10 h | Geplant |

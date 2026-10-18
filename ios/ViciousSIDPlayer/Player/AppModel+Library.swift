@@ -415,6 +415,7 @@ extension AppModel {
                     self.services.nowPlaying.clear()
                     self.setCurrentTrackID(nil)
                     self.currentMD5 = nil
+                    self.currentEmbeddedLengths = nil
                     self.currentTrackLengths = nil
                     self.computedLength = nil
                     self.clearSessionState()

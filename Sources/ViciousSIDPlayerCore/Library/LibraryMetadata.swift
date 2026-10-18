@@ -13,6 +13,7 @@ public struct LibraryMetadata: Codable, Equatable, Sendable {
     public let chipModels: [LibraryChipModel]
     public let subtunes: Int
     public let md5: String
+    public let embeddedSongLengths: [Double]?
     let normalizedTitle: String
     let normalizedAuthor: String
     let normalizedReleased: String
@@ -21,19 +22,12 @@ public struct LibraryMetadata: Codable, Equatable, Sendable {
     public init(data: Data) throws {
         let bytes = data.startIndex == 0 ? data : Data(data)
         let sid = try SidParser.parse(data: bytes)
-        func text(_ range: Range<Int>, parsed: String) -> String? {
-            let raw = bytes[range].prefix { $0 != 0 }
-            return raw.allSatisfy { $0 == 32 || $0 == 9 } ? nil : parsed.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        title = text(0x16..<0x36, parsed: sid.metadata.title)
-        author = text(0x36..<0x56, parsed: sid.metadata.author)
-        released = text(0x56..<0x76, parsed: sid.metadata.info)
-        let flags = bytes.count >= 0x7C && bytes[5] >= 2 ? Int(bytes[0x76]) << 8 | Int(bytes[0x77]) : 0
-        var models = [LibraryChipModel(rawValue: (flags >> 4) & 3)!]
-        if sid.secondSidAddress != 0 { models.append(LibraryChipModel(rawValue: (flags >> 6) & 3)!) }
-        if sid.thirdSidAddress != 0 { models.append(LibraryChipModel(rawValue: (flags >> 8) & 3)!) }
-        chipModels = models
+        title = sid.metadata.hasTitle ? sid.metadata.title : nil
+        author = sid.metadata.hasAuthor ? sid.metadata.author : nil
+        released = sid.metadata.info.isEmpty ? nil : sid.metadata.info
+        chipModels = sid.declaredModelBits.map { LibraryChipModel(rawValue: $0)! }
         subtunes = sid.subtuneAmount
+        embeddedSongLengths = sid.embeddedSongLengths
         md5 = SonglengthDB.md5Hex(of: bytes)
         normalizedTitle = LibrarySearchText.normalize(title ?? "")
         normalizedAuthor = LibrarySearchText.normalize(author ?? "")
@@ -43,7 +37,7 @@ public struct LibraryMetadata: Codable, Equatable, Sendable {
     /// Dauer von Subtune 1. Das Fallback ist keine bekannte Musiklaenge.
     public func firstSubtuneDuration(database: SonglengthDB?, cache: SongLengthCache?, clockMode: SidClockMode = .auto, personalDuration: Double? = nil) -> Double? {
         SongLengthSelection.knownDuration(databaseLengths: database?.lengths(forMD5: md5), subtune: 0,
-            computed: cache?.length(md5: md5, subtune: 0, clockMode: clockMode), personalDuration: personalDuration)
+            computed: cache?.length(md5: md5, subtune: 0, clockMode: clockMode), personalDuration: personalDuration, embeddedLengths: embeddedSongLengths)
     }
 
     public var modelDescription: String {
@@ -85,7 +79,7 @@ public struct LibraryMetadataRecord: Codable, Equatable, Sendable {
 /// Die Dateiliste bleibt sofort verfuegbar, waehrend dieser Cache ergaenzt wird.
 public actor LibraryMetadataCache {
     private struct Document: Codable {
-        var version = 1
+        var version = 2
         var records: [String: LibraryMetadataRecord]
     }
     public let root: URL
@@ -105,7 +99,7 @@ public actor LibraryMetadataCache {
     public func cachedRecords(for entries: [MusicLibraryEntry]) -> [String: LibraryMetadataRecord] {
         if records == nil {
             let document = (try? Data(contentsOf: fileURL)).flatMap { try? JSONDecoder().decode(Document.self, from: $0) }
-            records = document?.version == 1 ? document?.records : [:]
+            records = document?.version == 2 ? document?.records : [:]
         }
         let source = records ?? [:]
         return Dictionary(entries.compactMap { entry in

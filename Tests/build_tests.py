@@ -19,7 +19,7 @@ class JavaScriptBuildTests(unittest.TestCase):
     def test_complete_single_file_javascript_parses_with_and_without_minification(self):
         with tempfile.TemporaryDirectory(prefix='vicious-build-test-') as temporary:
             stage = Path(temporary)
-            for name in ['sid-player-worklet.js', 'sid-loop-worker.js', 'sidplayer.js', 'VERSION']:
+            for name in ['sid-format.js', 'sid-player-worklet.js', 'sid-loop-worker.js', 'sidplayer.js', 'VERSION']:
                 shutil.copyfile(builder.HERE / name, stage / name)
             with patch.object(builder, 'HERE', stage):
                 for minify in [False, True]:

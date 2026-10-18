@@ -15,10 +15,11 @@ import Foundation
 //
 //   1. Persoenliche Endzeit fuer Dateiinhalt und Subtune.
 //   2. HVSC-`Songlengths.md5` — von Menschen kuratiert.
-//   3. Positiver berechneter Cache; ein negativer Eintrag verhindert eine
+//   3. Eingebettete bekannte Länge aus einer SID-v5-Datei.
+//   4. Positiver berechneter Cache; ein negativer Eintrag verhindert eine
 //      erneute erfolglose Hintergrundanalyse.
-//   4. Hintergrund-Berechnung mit mindestens drei Sekunden Stille.
-//   5. Fallback-Limit der App (360 Sekunden), falls keine Laenge bekannt ist.
+//   5. Hintergrund-Berechnung mit mindestens drei Sekunden Stille.
+//   6. Fallback-Limit der App (360 Sekunden), falls keine Laenge bekannt ist.
 //
 // Diese Reihenfolge steuert Scrubber, Auto-Next, Now Playing und den WAV-Export.
 
@@ -43,6 +44,7 @@ public enum SongLengthPlan: Equatable, Sendable {
     case databaseProvidesLength
     /// Eine ausdrueckliche persoenliche Endzeit ersetzt alle anderen Quellen.
     case personalProvidesLength
+    case embeddedProvidesLength
     /// Frueher berechnete Laenge aus dem Cache, sofort verwendbar.
     case cached(Double)
     /// Der Cache weiss bereits, dass dieser Tune kein erkennbares Ende hat
@@ -105,15 +107,15 @@ public final class SongLengthResolver: @unchecked Sendable {
         return activeKey != nil
     }
 
-    public func knownDuration(md5: String, subtune: Int, databaseLengths: [Double]?, clockMode: SidClockMode = .auto, personalDuration: Double? = nil) -> Double? {
+    public func knownDuration(md5: String, subtune: Int, databaseLengths: [Double]?, clockMode: SidClockMode = .auto, personalDuration: Double? = nil, embeddedLengths: [Double]? = nil) -> Double? {
         SongLengthSelection.knownDuration(databaseLengths: databaseLengths, subtune: subtune,
-            computed: cache.length(md5: md5, subtune: subtune, clockMode: clockMode), personalDuration: personalDuration)
+            computed: cache.length(md5: md5, subtune: subtune, clockMode: clockMode), personalDuration: personalDuration, embeddedLengths: embeddedLengths)
     }
 
     public func durationResolution(md5: String, subtune: Int, databaseLengths: [Double]?,
-                                   clockMode: SidClockMode = .auto, personalDuration: Double? = nil) -> SongLengthSelection.Resolution {
+                                   clockMode: SidClockMode = .auto, personalDuration: Double? = nil, embeddedLengths: [Double]? = nil) -> SongLengthSelection.Resolution {
         SongLengthSelection.resolve(databaseLengths: databaseLengths, subtune: subtune,
-            computed: cache.length(md5: md5, subtune: subtune, clockMode: clockMode), personalDuration: personalDuration)
+            computed: cache.length(md5: md5, subtune: subtune, clockMode: clockMode), personalDuration: personalDuration, embeddedLengths: embeddedLengths)
     }
 
     // MARK: - Schritt 1: entscheiden
@@ -130,7 +132,7 @@ public final class SongLengthResolver: @unchecked Sendable {
     public func plan(md5: String?,
                      subtune: Int,
                      databaseLengths: [Double]?,
-                     fileURL: URL?, clockMode: SidClockMode = .auto, personalDuration: Double? = nil) -> SongLengthPlan {
+                     fileURL: URL?, clockMode: SidClockMode = .auto, personalDuration: Double? = nil, embeddedLengths: [Double]? = nil) -> SongLengthPlan {
         lock.lock()
         defer { lock.unlock() }
 
@@ -143,6 +145,11 @@ public final class SongLengthResolver: @unchecked Sendable {
         if let lengths = databaseLengths, subtune >= 0, subtune < lengths.count {
             cancelLocked()
             return .databaseProvidesLength
+        }
+
+        if SongLengthSelection.validEmbeddedDuration(embeddedLengths, subtune: subtune) != nil {
+            cancelLocked()
+            return .embeddedProvidesLength
         }
 
         // Ohne MD5 oder ohne erreichbare Datei laesst sich nichts berechnen.
@@ -287,7 +294,7 @@ public final class SongLengthResolver: @unchecked Sendable {
 /// Scrubber-Laenge, Auto-Next-Schwelle, die Restzeit auf dem Sperrbildschirm
 /// und die Dauer des WAV-Exports.
 public enum SongLengthSelection {
-    public enum Source: String, Equatable, Sendable { case personal, database, computed, fallback }
+    public enum Source: String, Equatable, Sendable { case personal, database, embedded, computed, fallback }
     public struct Resolution: Equatable, Sendable {
         public let seconds: Double
         public let source: Source
@@ -298,20 +305,26 @@ public enum SongLengthSelection {
         return seconds
     }
 
+    static func validEmbeddedDuration(_ lengths: [Double]?, subtune: Int) -> Double? {
+        guard let lengths, lengths.indices.contains(subtune), lengths[subtune].isFinite, lengths[subtune] > 0 else { return nil }
+        return lengths[subtune]
+    }
+
     /// Fuer Suchfilter: ein Fallback oder ein negativer Loop-Cache ist keine
     /// bekannte Dauer. Die Quellreihenfolge bleibt dieselbe wie im Player.
-    public static func knownDuration(databaseLengths: [Double]?, subtune: Int, computed: Double?, personalDuration: Double? = nil) -> Double? {
+    public static func knownDuration(databaseLengths: [Double]?, subtune: Int, computed: Double?, personalDuration: Double? = nil, embeddedLengths: [Double]? = nil) -> Double? {
         let resolution = resolve(databaseLengths: databaseLengths, subtune: subtune,
-                                 computed: computed, personalDuration: personalDuration)
+                                 computed: computed, personalDuration: personalDuration, embeddedLengths: embeddedLengths)
         return resolution.source == .fallback ? nil : resolution.seconds
     }
 
     public static func resolve(databaseLengths: [Double]?, subtune: Int, computed: Double?,
-                               personalDuration: Double? = nil, fallback: Double = fallbackSeconds) -> Resolution {
+                               personalDuration: Double? = nil, fallback: Double = fallbackSeconds, embeddedLengths: [Double]? = nil) -> Resolution {
         if let personal = validPersonalDuration(personalDuration) { return Resolution(seconds: personal, source: .personal) }
         if let lengths = databaseLengths, lengths.indices.contains(subtune), lengths[subtune].isFinite, lengths[subtune] >= 0 {
             return Resolution(seconds: lengths[subtune], source: .database)
         }
+        if let seconds = validEmbeddedDuration(embeddedLengths, subtune: subtune) { return Resolution(seconds: seconds, source: .embedded) }
         if let computed, computed.isFinite, computed > 0 { return Resolution(seconds: computed, source: .computed) }
         return Resolution(seconds: fallback, source: .fallback)
     }
@@ -324,12 +337,8 @@ public enum SongLengthSelection {
     public static func duration(databaseLengths: [Double]?,
                                 subtune: Int,
                                 computed: Double?,
-                                fallback: Double = fallbackSeconds, personalDuration: Double? = nil) -> Double {
-        if let personal = validPersonalDuration(personalDuration) { return personal }
-        if let lengths = databaseLengths, subtune >= 0, subtune < lengths.count {
-            return lengths[subtune]
-        }
-        if let computed { return computed }
-        return fallback
+                                fallback: Double = fallbackSeconds, personalDuration: Double? = nil, embeddedLengths: [Double]? = nil) -> Double {
+        resolve(databaseLengths: databaseLengths, subtune: subtune, computed: computed,
+                personalDuration: personalDuration, fallback: fallback, embeddedLengths: embeddedLengths).seconds
     }
 }

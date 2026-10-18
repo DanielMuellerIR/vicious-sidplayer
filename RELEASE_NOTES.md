@@ -1,3 +1,12 @@
+Vicious SID Player 1.9.44 adds SID v5 parsing and explicit compatibility limits.
+
+- Decode Windows-1252 metadata in all supported versions. V5 accepts longer shared metadata, all seven multi-SID address layouts with up to three chips, and a common SID model.
+- Use valid embedded v5 lengths for playback, subtune changes, search, audits and native export. Strip the length trailer from the C64 program; zero remains unknown. Personal end times and HVSC retain native priority.
+- Report unsupported MUS, BASIC-start RSID, OPL and larger chip configurations clearly. Validate RSID header fields; simple machine-code IRQ cases start with CIA timing. V1 and PlaySID-specific files repeat the 32 speed bits for higher subtunes.
+- Rebuild the derived metadata cache with the new interpretation while retaining the music index and personal data.
+
+See [compatibility limits](docs/sid-compatibility.md) and [validation](docs/validation-1.9.44.md).
+
 Vicious SID Player 1.9.43 keeps filtered voices warm while muted.
 
 - Voice and chip mutes now remove filtered contributions at the output, preserving the continuously emulated shared filter state. Unmuting no longer introduces a filter transient caused by missing input while muted.

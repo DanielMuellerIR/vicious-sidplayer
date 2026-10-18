@@ -45,7 +45,13 @@ function wfName(wf) {
   return '---';
 }
 
-const SCRUB_MAX = 360; // 6 minutes limit
+const SCRUB_MAX = 360; // Fallback ohne bekannte Dateilänge.
+function currentWebDuration() { return listeningSIDDuration(currentMetadata, currentSubtune) ?? SCRUB_MAX; }
+function refreshWebDuration() {
+  positionScrubber.max = String(currentWebDuration());
+  timeTotal.textContent = fmtTime(currentWebDuration());
+  timeTotal.title = listeningSIDDuration(currentMetadata, currentSubtune) === null ? 'Fallback duration' : 'Duration embedded in the SID file';
+}
 
 // ─── DOM References ─────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
@@ -227,7 +233,7 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     if (currentIdx === -1) return;
     const diff = e.key === 'ArrowLeft' ? -5 : 5;
-    const pt = Math.max(0, Math.min(SCRUB_MAX, lastVisuals.playtime + diff));
+    const pt = Math.max(0, Math.min(currentWebDuration(), lastVisuals.playtime + diff));
     seekWebPlayback(pt);
     lastVisuals.playtime = pt;
     positionScrubber.value = pt;
@@ -460,6 +466,7 @@ async function loadTrack(index, autoplay, subtune = 0, updateListeningQueue = tr
   }
   if (generation !== trackLoadGeneration) return false;
   currentSubtune = subtune;
+  refreshWebDuration();
   subtuneLabel.textContent = `SUBTUNE: ${subtune + 1}/${totalSubtunesCount}`;
   if (updateListeningQueue) { makeDefaultWebQueue(index); pendingWebRestore = false; }
   persistWebListening(); refreshPlaylistUI();
@@ -499,6 +506,7 @@ function setSubtune(sub) {
   if (!Number.isInteger(sub) || sub < 0 || sub >= totalSubtunesCount) return;
   observeWebHistory(false, true);
   currentSubtune = sub;
+  refreshWebDuration();
   player.setSubtune(sub);
   lastVisuals.playtime = 0;
   listeningQueue?.updateSubtune(sub, trackList[currentIdx]?.id);
@@ -537,6 +545,7 @@ player.watchLoaded((meta) => {
   updateClockLabel();
   currentSubtune = 0;
   totalSubtunesCount = meta.subtunesCount || 1;
+  refreshWebDuration();
 
   metaTitle.textContent = meta.title || trackList[currentIdx].name;
   metaAuthor.textContent = meta.author || 'Unknown Composer';
@@ -571,7 +580,7 @@ player.watchVisuals((visuals) => {
 bindWebPlayerCallbacks();
 
 async function checkWebAutoNext(playtime) {
-  if (webPlaybackLoop.enabled || webAdvanceInProgress || !playingState || !autoNextCheck.checked || playtime < SCRUB_MAX) return;
+  if (webPlaybackLoop.enabled || webAdvanceInProgress || !playingState || !autoNextCheck.checked || playtime < currentWebDuration()) return;
   webAdvanceInProgress = true;
   try {
     if (listeningQueue?.current?.subtune == null && currentSubtune + 1 < totalSubtunesCount) {
@@ -637,7 +646,7 @@ function draw() {
 
   // Sync scrubber value and text
   if (!isSeeking && positionScrubber) {
-    positionScrubber.value = String(Math.min(playtime, SCRUB_MAX));
+    positionScrubber.value = String(Math.min(playtime, currentWebDuration()));
     timeCurrent.textContent = fmtTime(playtime);
   }
 

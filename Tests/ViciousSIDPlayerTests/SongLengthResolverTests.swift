@@ -48,6 +48,21 @@ final class SongLengthResolverTests: XCTestCase {
         return SongLengthResolver(cache: cache)
     }
 
+    func testEmbeddedLengthPriorityAndZeroDoNotStartAnUnnecessaryEstimate() {
+        cache.store(md5: md5, subtune: 0, seconds: 12)
+        let resolver = makeResolver(), embedded = [55.125, 0.0]
+        XCTAssertEqual(resolver.plan(md5: md5, subtune: 0, databaseLengths: nil, fileURL: file,
+                                     embeddedLengths: embedded), .embeddedProvidesLength)
+        XCTAssertFalse(resolver.isEstimating)
+        XCTAssertEqual(resolver.durationResolution(md5: md5, subtune: 0, databaseLengths: nil,
+                                                  embeddedLengths: embedded), .init(seconds: 55.125, source: .embedded))
+        XCTAssertEqual(resolver.knownDuration(md5: md5, subtune: 0, databaseLengths: [88],
+                                             personalDuration: 99, embeddedLengths: embedded), 99)
+        XCTAssertEqual(resolver.knownDuration(md5: md5, subtune: 0, databaseLengths: [88], embeddedLengths: embedded), 88)
+        XCTAssertNil(resolver.knownDuration(md5: md5, subtune: 1, databaseLengths: nil, embeddedLengths: embedded))
+        XCTAssertEqual(resolver.knownDuration(md5: md5, subtune: 0, databaseLengths: nil, embeddedLengths: [0]), 12)
+    }
+
     // MARK: - Die Reihenfolge
 
     /// Stufe 1: Steht die Laenge in der HVSC-Datenbank, wird nichts gerechnet.

@@ -7,8 +7,8 @@ function initializeWebAnalysisUI() {
   $('scope-chip').addEventListener('change', () => { webAnalysisChip = Number($('scope-chip').value); phases.fill(0); renderWebAnalysisUI(); renderWebAnalysisValues(true); });
   $('analysis-clear-solo').addEventListener('click', () => { webAnalysisMix.clearSolos(); applyWebAnalysisMix(); });
   $('analysis-view').addEventListener('change', () => { renderWebAnalysisValues(true); resizeCanvas(); });
-  $('loop-a').addEventListener('click', () => { webPlaybackLoop.setStart(lastVisuals.playtime, Math.min(1200, SCRUB_MAX)); applyWebLoop(); });
-  $('loop-b').addEventListener('click', () => { webPlaybackLoop.setEnd(lastVisuals.playtime, SCRUB_MAX); applyWebLoop(); });
+  $('loop-a').addEventListener('click', () => { webPlaybackLoop.setStart(lastVisuals.playtime, Math.min(1200, currentWebDuration())); applyWebLoop(); });
+  $('loop-b').addEventListener('click', () => { webPlaybackLoop.setEnd(lastVisuals.playtime, currentWebDuration()); applyWebLoop(); });
   $('loop-enabled').addEventListener('change', () => { webPlaybackLoop.setEnabled($('loop-enabled').checked); applyWebLoop(); });
   $('loop-clear').addEventListener('click', clearWebLoopMarkers);
   player.loopStateCallback = status => {

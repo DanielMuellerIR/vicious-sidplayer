@@ -38,15 +38,15 @@ async function auditWebCollection(documents, loaded, { signal = null, progress =
       subtunesCount: header?.subtunesCount || null, valid: !!header };
     tracks.push(track);
     if (!header) {
-      const version = bytes.length >= 6 ? (bytes[4] << 8) | bytes[5] : 0;
-      const magic = String.fromCharCode(...bytes.slice(0, 4));
-      const unsupported = bytes.byteLength > auditMaximumFileBytes || ['PSID', 'RSID'].includes(magic) && (version < 1 || version > 4 || magic === 'RSID' && version === 1);
+      const diagnostic = bytes.byteLength <= auditMaximumFileBytes ? sidFileDiagnostic(bytes) : null;
+      const unsupported = bytes.byteLength > auditMaximumFileBytes || diagnostic?.unsupported;
       issues.push({ id: 'file:' + file.id, kind: unsupported ? 'unsupported' : 'damaged', paths: [path],
-        detail: unsupported ? 'This SID version or a file larger than 32 MiB is unsupported.' : 'The selected file has no readable SID header.', canRepair: false });
+        detail: bytes.byteLength > auditMaximumFileBytes ? 'SID files larger than 32 MiB are unsupported.' : diagnostic?.message || 'The selected file has no readable SID header.', canRepair: false });
     } else {
       if (!byMD5.has(digest)) byMD5.set(digest, []); byMD5.get(digest).push(track);
-      issues.push({ id: 'length:' + file.id, kind: 'missingLength', paths: [path],
-        detail: 'The web player uses its fallback duration; native song-length databases are unavailable here.', canRepair: false });
+      const unknown = Array.from({ length: header.subtunesCount }, (_, sub) => listeningSIDDuration(header, sub)).filter(value => value === null).length;
+      if (unknown) issues.push({ id: 'length:' + file.id, kind: 'missingLength', paths: [path],
+        detail: `Only the fallback duration is known for ${unknown} of ${header.subtunesCount} subtunes. Native databases are unavailable here.`, canRepair: false });
     }
     progress(i + 1, loaded.length);
   }

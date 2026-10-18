@@ -205,6 +205,7 @@ public struct MainView: View {
     // berechnete Laenge des aktuellen Subtunes (Tunes, die in Stille enden).
     @State private var songlengthDB: SonglengthDB? = nil
     @State private var currentTrackLengths: [Double]? = nil
+    @State private var currentEmbeddedLengths: [Double]? = nil
     @State private var computedLength: Double? = nil
     @State private var currentMD5: String? = nil
     // Genau je ein verwalteter DB-Lade- und Schaetz-Task. Generationen verhindern,
@@ -268,13 +269,21 @@ public struct MainView: View {
     }
 
     // Effektive Dauer des aktuellen Subtunes — bestimmt Scrubber, Auto-Next,
-    // Now-Playing und Audio-Export-Dauer. Die Leiter aus den drei Quellen steht im
+    // Now-Playing und Audio-Export-Dauer. Die Leiter aus den bekannten Quellen steht im
     // Core, damit Mac und iPhone nicht auseinanderlaufen.
-    private var currentDuration: Double {
-        return SongLengthSelection.duration(databaseLengths: currentTrackLengths,
-                                            subtune: coordinator.currentSubtune,
-                                            computed: computedLength,
-                                            fallback: SCRUB_MAX, personalDuration: personalDuration)
+    private var currentDurationResolution: SongLengthSelection.Resolution {
+        SongLengthSelection.resolve(databaseLengths: currentTrackLengths, subtune: coordinator.currentSubtune,
+            computed: computedLength, personalDuration: personalDuration, fallback: SCRUB_MAX, embeddedLengths: currentEmbeddedLengths)
+    }
+    private var currentDuration: Double { currentDurationResolution.seconds }
+    private var currentDurationHelp: String {
+        switch currentDurationResolution.source {
+        case .personal: return "Persönliche Endzeit"
+        case .database: return "Songlänge aus der HVSC-Datenbank"
+        case .embedded: return "Songlänge aus der SID-Datei"
+        case .computed: return "Songlänge berechnet (Tune endet in Stille)"
+        case .fallback: return "Keine Songlänge bekannt — Standard-Limit"
+        }
     }
     
     private var personalDuration: Double? { playbackOptions.document.endTime(md5: currentMD5, subtune: coordinator.currentSubtune) }
@@ -683,16 +692,14 @@ public struct MainView: View {
                         .accentColor(accentCol)
                         .help("Position — auch im pausierten oder gestoppten Zustand nutzbar; Play startet dann von hier")
 
-                        // Echte Songlaenge (HVSC-DB oder berechnet), sonst Fallback 6:00.
+                        // Bekannte Songlänge aus persönlicher Vorgabe, HVSC, Datei oder Berechnung.
                         Text(formatTime(currentDuration))
                             .font(.system(size: 12, design: .monospaced))
                             .foregroundColor(textSecCol)
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
                             .frame(minWidth: 44)
-                            .help(currentTrackLengths != nil
-                                  ? "Songlänge aus der HVSC-Datenbank"
-                                  : (computedLength != nil ? "Songlänge berechnet (Tune endet in Stille)" : "Keine Songlänge bekannt — Standard-Limit"))
+                            .help(currentDurationHelp)
                         
                         Text("VOL:")
                             .font(.system(size: 12, weight: .semibold))
@@ -955,9 +962,8 @@ public struct MainView: View {
             md5: currentMD5, subtune: coordinator.currentSubtune)
     }
     private func observeHistory(force: Bool = false, playing: Bool? = nil) {
-        let known = personalDuration ?? currentTrackLengths.flatMap {
-            $0.indices.contains(coordinator.currentSubtune) && $0[coordinator.currentSubtune] > 0 ? $0[coordinator.currentSubtune] : nil
-        } ?? computedLength
+        let known = SongLengthSelection.knownDuration(databaseLengths: currentTrackLengths, subtune: coordinator.currentSubtune,
+            computed: computedLength, personalDuration: personalDuration, embeddedLengths: currentEmbeddedLengths)
         history.observe(reference: currentHistoryReference, title: coordinator.trackName,
             position: coordinator.elapsedSeconds, knownDuration: known,
             isPlaying: (playing ?? coordinator.isPlaying) && !coordinator.isPreparingSeek, force: force)
@@ -1412,7 +1418,7 @@ public struct MainView: View {
 
     private func knownLibraryDuration(_ metadata: LibraryMetadata) -> Double? {
         lengthResolver.knownDuration(md5: metadata.md5, subtune: 0,
-            databaseLengths: songlengthDB?.lengths(forMD5: metadata.md5), clockMode: coordinator.clockMode, personalDuration: playbackOptions.document.endTime(md5: metadata.md5, subtune: 0))
+            databaseLengths: songlengthDB?.lengths(forMD5: metadata.md5), clockMode: coordinator.clockMode, personalDuration: playbackOptions.document.endTime(md5: metadata.md5, subtune: 0), embeddedLengths: metadata.embeddedSongLengths)
     }
 
     private func startListeningScope(_ scope: ListeningScope, name: String) {
@@ -1637,6 +1643,7 @@ public struct MainView: View {
             // Ohne DB-Eintrag wird die Laenge im Hintergrund berechnet/gecacht.
             let md5 = SonglengthDB.md5Hex(of: data)
             currentMD5 = md5
+            currentEmbeddedLengths = sidFile.embeddedSongLengths
             currentTrackLengths = songlengthDB?.lengths(forMD5: md5)
             resolveComputedLengthIfNeeded()
             loadLog.info("loadTrack[\(index, privacy: .public)] geparst: \(fileURL.lastPathComponent, privacy: .public), autoplay=\(autoplay, privacy: .public)")
@@ -1836,6 +1843,7 @@ public struct MainView: View {
         errorMessage = nil
         // Songlaengen-Zustand des (nicht mehr vorhandenen) Tracks zuruecksetzen.
         currentMD5 = nil
+        currentEmbeddedLengths = nil
         currentTrackLengths = nil
         computedLength = nil
     }
@@ -2209,8 +2217,8 @@ public struct MainView: View {
                                    subtune: coordinator.currentSubtune,
                                    databaseLengths: currentTrackLengths,
                                    fileURL: playlist.track(at: currentTrackIdx)?.url,
-                                   clockMode: coordinator.clockMode, personalDuration: personalDuration) {
-        case .databaseProvidesLength, .personalProvidesLength, .noLengthKnown:
+                                   clockMode: coordinator.clockMode, personalDuration: personalDuration, embeddedLengths: currentEmbeddedLengths) {
+        case .databaseProvidesLength, .personalProvidesLength, .embeddedProvidesLength, .noLengthKnown:
             // Nichts zu rechnen. Eine ueberfluessig gewordene Rechnung hat der
             // Resolver bereits entwertet — der Task hier gehoert noch abgeraeumt.
             lengthEstimateTask?.cancel()
@@ -2615,7 +2623,7 @@ struct TrackListView: View {
     private var visibleIndices: [Int] {
         LibrarySearchSelection.indices(in: playlist, query: LibrarySearchQuery(searchText), records: metadataRecords,
             favoritesOnly: favoritesOnly, favorites: favorites, duration: {
-                lengthResolver.knownDuration(md5: $0.md5, subtune: 0, databaseLengths: database?.lengths(forMD5: $0.md5), clockMode: clockMode, personalDuration: playbackSettings.endTime(md5: $0.md5, subtune: 0))
+                lengthResolver.knownDuration(md5: $0.md5, subtune: 0, databaseLengths: database?.lengths(forMD5: $0.md5), clockMode: clockMode, personalDuration: playbackSettings.endTime(md5: $0.md5, subtune: 0), embeddedLengths: $0.embeddedSongLengths)
             }, heard: { metadata in heardMD5s.map { $0.contains(metadata.md5) } })
     }
 
@@ -2725,7 +2733,7 @@ struct TrackListView: View {
         let path = track.folderPath.isEmpty ? track.name : "\(track.folderPath)/\(track.name)"
         guard let metadata = metadataRecords[track.id]?.metadata else { return path + "\nMetadaten unbekannt" }
         let seconds = lengthResolver.knownDuration(md5: metadata.md5, subtune: 0,
-            databaseLengths: database?.lengths(forMD5: metadata.md5), clockMode: clockMode, personalDuration: playbackSettings.endTime(md5: metadata.md5, subtune: 0))
+            databaseLengths: database?.lengths(forMD5: metadata.md5), clockMode: clockMode, personalDuration: playbackSettings.endTime(md5: metadata.md5, subtune: 0), embeddedLengths: metadata.embeddedSongLengths)
         let duration = LibraryMetadata.durationDescription(seconds)
         return "\(path)\n\(metadata.author ?? "Autor unbekannt")\n\(metadata.released ?? "Veröffentlichung unbekannt")\n\(metadata.chipCount) SID · \(metadata.modelDescription)\nDauer von Subtune 1: \(duration)"
     }

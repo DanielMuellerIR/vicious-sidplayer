@@ -138,3 +138,8 @@ class ListeningDataStore {
     } catch (_) { this.error = 'Changes could not be saved. They remain available in this session.'; return false; }
   }
 }
+
+function listeningSIDDuration(metadata, subtune) {
+  const seconds = metadata?.embeddedSongLengths?.[subtune];
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+}

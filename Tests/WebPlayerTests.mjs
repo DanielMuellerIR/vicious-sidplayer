@@ -1,10 +1,11 @@
+import { sidSource } from './WebSourceSupport.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
-const wrapper = await readFile(new URL('../sidplayer.js', import.meta.url), 'utf8');
+const wrapper = await sidSource('sidplayer.js');
 const { SidPlayer, parseSidHeader } = await import(`data:text/javascript;base64,${Buffer.from(wrapper).toString('base64')}`);
-const source = await readFile(new URL('../sid-player-worklet.js', import.meta.url), 'utf8');
+const source = await sidSource('sid-player-worklet.js');
 const listeningSource = await readFile(new URL('../src/listening.js', import.meta.url), 'utf8');
 const historySource = await readFile(new URL('../src/history.js', import.meta.url), 'utf8');
 const collectionSource = await readFile(new URL('../src/collection.js', import.meta.url), 'utf8');
@@ -264,7 +265,7 @@ test('a failed UI selection cannot play the previously loaded title', async () =
   assert.equal(page.elements.get('play-btn').disabled, true);
   assert.equal(page.run('player.loaded'), false);
   assert.equal(page.run('player.playing'), false);
-  assert.match(page.elements.get('error-display').textContent, /bad header/);
+  assert.match(page.elements.get('error-display').textContent, /SID header is incomplete/);
 });
 
 test('Stop during initial autoplay setup leaves the UI idle after setup completes', async () => {

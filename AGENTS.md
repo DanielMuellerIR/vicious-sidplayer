@@ -1,6 +1,6 @@
 # Vicious SID Player — dauerhafte Projektregeln
 
-Stand: 2026-07-14. C64-SID-Musikplayer als native SwiftUI-macOS-App mit Quick
+Stand: 2026-10-18. C64-SID-Musikplayer als native SwiftUI-macOS-App mit Quick
 Look und als Single-File-HTML5-App. Keine SID-Musikdateien bündeln oder committen.
 
 ## Zweck und Struktur
@@ -34,6 +34,11 @@ Releaseartefakte bleiben unversioniert.
   trennen, z. B. über `split(whereSeparator: \.isNewline)`. In Swift ist `"\r\n"` ein
   einzelnes `Character`; `split(separator: "\n")` liefert bei Windows-Zeilenenden
   deshalb eine einzige Zeile. Solche Parser immer mit LF- und CRLF-Eingaben testen.
+- SID-Header verwenden Windows-1252. V5 liest zuerst drei variable Texte im
+  gemeinsamen 96-Byte-Bereich und benötigt den festen 32-Byte-Fallback. V5 hat
+  ein gemeinsames SID-Modell; Bits 6–9 sind räumliche Hinweise. Eingebettete
+  Längen gehören nie zum C64-Programm. Bis zu drei SID-Chips sind unterstützt;
+  MUS, BASIC-Start und OPL benötigen andere Emulation und bleiben konkrete Fehler.
 - Binärparser dürfen nicht voraussetzen, dass `Data` bei Index 0 beginnt: Ein
   `Data`-Ausschnitt hat einen eigenen `startIndex`. Offsets relativ zu
   `data.startIndex` rechnen oder die Eingabe an der Parsergrenze bewusst in ein
@@ -68,7 +73,7 @@ Releaseartefakte bleiben unversioniert.
   bei GENAU EINEM passenden Eintrag etwas — eine falsch zugeordnete Anmerkung
   ist schlechter als gar keine. Subtunes zählt die Datei ab 1, der Player ab 0;
   `STILDatabase.info(forHVSCPath:subtune:)` rechnet das um.
-- Songlänge: persönliche Endzeit je Datei-MD5/Subtune → HVSC `Songlengths.md5` → berechneter Cache → 360-s-Fallback. Der
+- Songlänge: persönliche Endzeit je Datei-MD5/Subtune → HVSC `Songlengths.md5` → positive eingebettete SID-v5-Länge → berechneter Cache → 360-s-Fallback. Der
   Hintergrund-Estimator erkennt Ende erst nach mindestens drei Sekunden Stille und
   cached auch Loop-/Negativergebnisse. Diese Reihenfolge steuert Scrubber, Auto-Next,
   Now Playing und Export. Sie steht seit v1.9.9 im Core in `SongLengthResolver`

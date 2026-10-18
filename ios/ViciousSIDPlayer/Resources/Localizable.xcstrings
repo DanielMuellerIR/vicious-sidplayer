@@ -5264,6 +5264,262 @@
           }
         }
       }
+    },
+    "Der SID-Header ist unvollständig.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der SID-Header ist unvollständig."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The SID header is incomplete."
+          }
+        }
+      }
+    },
+    "Die Datei hat keine PSID- oder RSID-Kennung.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Datei hat keine PSID- oder RSID-Kennung."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The file has no PSID or RSID signature."
+          }
+        }
+      }
+    },
+    "Unterstützt werden PSID v1–v5 und RSID v2–v5.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unterstützt werden PSID v1–v5 und RSID v2–v5."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PSID v1–v5 and RSID v2–v5 are supported."
+          }
+        }
+      }
+    },
+    "Der Datenoffset des SID-Headers ist ungültig.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Datenoffset des SID-Headers ist ungültig."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The SID header data offset is invalid."
+          }
+        }
+      }
+    },
+    "Die SID-Datei enthält kein C64-Programm.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die SID-Datei enthält kein C64-Programm."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The SID file contains no C64 program."
+          }
+        }
+      }
+    },
+    "SID v5 benötigt 1 bis 256 Subtunes.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SID v5 benötigt 1 bis 256 Subtunes."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SID v5 requires 1 to 256 subtunes."
+          }
+        }
+      }
+    },
+    "Die eingebetteten SID-Längen sind unvollständig oder ungültig.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die eingebetteten SID-Längen sind unvollständig oder ungültig."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The embedded SID lengths are incomplete or invalid."
+          }
+        }
+      }
+    },
+    "Die SID-Adresskonfiguration ist ungültig.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die SID-Adresskonfiguration ist ungültig."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The SID address configuration is invalid."
+          }
+        }
+      }
+    },
+    "Der RSID-Header verletzt die Vorgaben für Ladeadresse, Startadresse, Play-Adresse oder Timer.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der RSID-Header verletzt die Vorgaben für Ladeadresse, Startadresse, Play-Adresse oder Timer."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The RSID header violates the load, init, play address or timer requirements."
+          }
+        }
+      }
+    },
+    "Die SID-Startadresse liegt außerhalb des geladenen C64-Programms.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die SID-Startadresse liegt außerhalb des geladenen C64-Programms."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The SID init address is outside the loaded C64 program."
+          }
+        }
+      }
+    },
+    "MUS-Daten benötigen einen externen Player und werden nicht unterstützt.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MUS-Daten benötigen einen externen Player und werden nicht unterstützt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MUS data requires an external player and is unsupported."
+          }
+        }
+      }
+    },
+    "RSID mit BASIC-Start benötigt ein C64-BASIC-ROM und wird nicht unterstützt.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RSID mit BASIC-Start benötigt ein C64-BASIC-ROM und wird nicht unterstützt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RSID with a BASIC start requires a C64 BASIC ROM and is unsupported."
+          }
+        }
+      }
+    },
+    "FM-OPL-Chips werden nicht unterstützt.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FM-OPL-Chips werden nicht unterstützt."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FM OPL chips are unsupported."
+          }
+        }
+      }
+    },
+    "Diese Datei benötigt %d SID-Chips; der Player unterstützt höchstens 3.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Datei benötigt %d SID-Chips; der Player unterstützt höchstens 3."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file requires %d SID chips; the player supports at most 3."
+          }
+        }
+      }
+    },
+    "SID-Datei": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SID-Datei"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SID file"
+          }
+        }
+      }
+    },
+    "Leer lassen für eigene Endzeit → HVSC → SID-Datei → Cache → 6-Minuten-Fallback. Eine manuelle Dauer gilt für alle Einträge.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leer lassen für eigene Endzeit → HVSC → SID-Datei → Cache → 6-Minuten-Fallback. Eine manuelle Dauer gilt für alle Einträge."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Leave blank for custom end time → HVSC → SID file → cache → 6-minute fallback. A manual duration applies to all entries."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

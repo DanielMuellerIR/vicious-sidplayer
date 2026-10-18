@@ -1,14 +1,15 @@
+import { sidSource } from './WebSourceSupport.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
-const source = await readFile(new URL('../sid-player-worklet.js', import.meta.url), 'utf8');
+const source = await sidSource('sid-player-worklet.js');
 const engineSource = source.slice(0, source.indexOf('class SidPlayerWorklet'));
 const workerSource = await readFile(new URL('../sid-loop-worker.js', import.meta.url), 'utf8');
 const Engine = new Function('sampleRate', engineSource + ';return SidPlayerProcessor;')(44100);
 const analysis = await readFile(new URL('../src/analysis.js', import.meta.url), 'utf8');
 const { Loop, pitch } = new Function(analysis + ';return {Loop:WebPlaybackLoop,pitch:sidPitch};')();
-const wrapper = await readFile(new URL('../sidplayer.js', import.meta.url), 'utf8');
+const wrapper = await sidSource('sidplayer.js');
 const { SidPlayer } = await import(`data:text/javascript;base64,${Buffer.from(wrapper).toString('base64')}`);
 function fixture(model = 6581) {
   const code = [], store = (value, address) => code.push(0xa9, value, 0x8d, address & 255, address >> 8);

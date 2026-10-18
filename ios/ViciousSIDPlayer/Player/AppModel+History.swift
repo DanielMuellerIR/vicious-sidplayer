@@ -11,9 +11,8 @@ extension AppModel {
 
     func observeHistory(force: Bool = false, playing: Bool? = nil,
                         uptime: Double = ProcessInfo.processInfo.systemUptime) {
-        let known = personalDuration ?? currentTrackLengths.flatMap {
-            $0.indices.contains(coordinator.currentSubtune) && $0[coordinator.currentSubtune] > 0 ? $0[coordinator.currentSubtune] : nil
-        } ?? computedLength
+        let known = SongLengthSelection.knownDuration(databaseLengths: currentTrackLengths, subtune: coordinator.currentSubtune,
+            computed: computedLength, personalDuration: personalDuration, embeddedLengths: currentEmbeddedLengths)
         history.observe(reference: currentHistoryReference, title: coordinator.trackName,
             position: coordinator.elapsedSeconds, knownDuration: known,
             isPlaying: (playing ?? coordinator.isPlaying) && !coordinator.isPreparingSeek, force: force, uptime: uptime)

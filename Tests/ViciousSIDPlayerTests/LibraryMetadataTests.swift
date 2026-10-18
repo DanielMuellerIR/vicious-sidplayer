@@ -2,6 +2,28 @@ import XCTest
 @testable import ViciousSIDPlayerCore
 
 final class LibraryMetadataTests: XCTestCase, @unchecked Sendable {
+    func testOldMetadataCacheIsRebuiltForTheNewHeaderInterpretation() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let root = directory.appendingPathComponent("Music"), support = directory.appendingPathComponent("Support")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        let bytes = fixture(); try bytes.write(to: root.appendingPathComponent("Tune.sid"))
+        let library = MusicLibrary(root: root, supportDirectory: support); _ = try library.refresh()
+        let entry = try XCTUnwrap(library.entries.first)
+        let record = LibraryMetadataRecord(fileSize: entry.fileSize, modificationDate: entry.modificationDate,
+            metadata: try LibraryMetadata(data: bytes))
+        let records = try JSONSerialization.jsonObject(with: JSONEncoder().encode([entry.id: record]))
+        let cache = LibraryMetadataCache(root: root, supportDirectory: support), file = await cache.fileURL
+        try JSONSerialization.data(withJSONObject: ["version": 1, "records": records]).write(to: file)
+        let old = await cache.cachedRecords(for: library.entries)
+        XCTAssertTrue(old.isEmpty)
+        let rebuilt = try await cache.refresh(entries: library.entries)
+        XCTAssertEqual(rebuilt[entry.id]?.metadata?.title, "Cyber Noid")
+        let saved = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        XCTAssertEqual(saved["version"] as? Int, 2)
+        XCTAssertEqual(try Data(contentsOf: entry.url(relativeTo: root)), bytes)
+    }
     private func fixture(title: String = "Cyber Noid", author: String = "Jérôme", flags: UInt16 = 0x20, chips: Int = 1) -> Data {
         var bytes = Data(repeating: 0, count: 0x7C)
         bytes.replaceSubrange(0..<4, with: "PSID".utf8)

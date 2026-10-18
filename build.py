@@ -3,7 +3,8 @@
 build.py — bündelt alle Quellen zu einer einzigen, minifizierten vicious-sid-player.html.
 
 Quelldateien:
-    sidplayer.js                SID-Parser + Client-Wrapper (ES-Modul)
+    sid-format.js              Gemeinsamer Headerparser
+    sidplayer.js                Client-Wrapper (ES-Modul)
     sid-player-worklet.js       AudioWorklet-CPU- & SID-Emulator
     src/styles.css              UI-Styles
     src/body.html               Body-Markup
@@ -193,9 +194,16 @@ def strip_module_keywords(src: str) -> str:
 
 def build(minify: bool = True) -> Path:
     """Baut die finale sidplayer.html."""
-    worklet_src = (HERE / 'sid-player-worklet.js').read_text()
+    format_src = strip_module_keywords((HERE / 'sid-format.js').read_text())
+    def inline_format(name: str) -> str:
+        source = (HERE / name).read_text()
+        statement = "import { inspectSIDFile } from './sid-format.js';\n"
+        if source.count(statement) != 1:
+            raise ValueError(f"{name}: gemeinsamer SID-Parser-Import fehlt oder ist mehrfach vorhanden")
+        return format_src + '\n' + source.replace(statement, '', 1)
+    worklet_src = inline_format('sid-player-worklet.js')
     loop_worker_src = 'let sampleRate=44100;\n' + worklet_src.split('\nclass SidPlayerWorklet')[0] + (HERE / 'sid-loop-worker.js').read_text()
-    sidplayer_src = (HERE / 'sidplayer.js').read_text()
+    sidplayer_src = inline_format('sidplayer.js')
     css_src = (SRC_DIR / 'styles.css').read_text()
     body_src = (SRC_DIR / 'body.html').read_text()
     app_src = '\n'.join((SRC_DIR / name).read_text() for name in (

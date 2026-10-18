@@ -136,18 +136,18 @@ public enum CollectionAudit {
                     let unknown = (0..<parsed.subtunes).filter { subtune in
                         let personal = snapshot.playback.endTime(md5: digest, subtune: subtune)
                         return (metadata.resolver?.knownDuration(md5: digest, subtune: subtune,
-                            databaseLengths: metadata.lengths?.lengths(forMD5: digest), clockMode: metadata.clockMode, personalDuration: personal)
+                            databaseLengths: metadata.lengths?.lengths(forMD5: digest), clockMode: metadata.clockMode, personalDuration: personal, embeddedLengths: parsed.embeddedSongLengths)
                             ?? SongLengthSelection.knownDuration(databaseLengths: metadata.lengths?.lengths(forMD5: digest), subtune: subtune,
                             computed: metadata.cache?.length(md5: digest, subtune: subtune, clockMode: metadata.clockMode),
-                            personalDuration: personal)) == nil
+                            personalDuration: personal, embeddedLengths: parsed.embeddedSongLengths)) == nil
                     }
                     if !unknown.isEmpty {
                         issue(.missingLength, [entry.id], String(format: NSLocalizedString("Für %d von %d Subtunes ist nur die Fallback-Dauer verfügbar.", comment: ""), unknown.count, parsed.subtunes))
                     }
                 }
             } catch is CancellationError { throw CancellationError() }
-            catch SidParser.ParserError.invalidVersion {
-                issue(.unsupported, [entry.id], NSLocalizedString("Diese PSID-/RSID-Version wird vom Player nicht unterstützt.", comment: ""))
+            catch let error as SidParser.ParserError where error.isUnsupported {
+                issue(.unsupported, [entry.id], error.localizedDescription)
             } catch PersonalCollectionError.capacityExceeded {
                 issue(.unsupported, [entry.id], NSLocalizedString("SID-Dateien über 32 MiB werden nicht eingelesen.", comment: ""))
             } catch {

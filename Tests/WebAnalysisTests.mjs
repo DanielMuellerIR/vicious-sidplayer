@@ -1,11 +1,12 @@
+import { sidSource } from './WebSourceSupport.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 const analysis = await readFile(new URL('../src/analysis.js', import.meta.url), 'utf8');
 const Mix = new Function(analysis + ';return WebAnalysisMix')();
-const source = await readFile(new URL('../sid-player-worklet.js', import.meta.url), 'utf8');
+const source = await sidSource('sid-player-worklet.js');
 const Engine = new Function('sampleRate', source.slice(0, source.indexOf('class SidPlayerWorklet')) + ';return SidPlayerProcessor;')(44100);
-const wrapper = await readFile(new URL('../sidplayer.js', import.meta.url), 'utf8');
+const wrapper = await sidSource('sidplayer.js');
 const { parseSidHeader } = await import(`data:text/javascript;base64,${Buffer.from(wrapper).toString('base64')}`);
 function sid(chips, filtered = false, changingRouting = false) {
   const code = [], store = (value, address) => code.push(0xa9, value, 0x8d, address & 255, address >> 8);

@@ -107,9 +107,9 @@ public struct AudioExportDurationContext: Sendable {
                 clockMode: SidClockMode) {
         self.resolver = resolver; self.database = database; self.settings = settings; self.clockMode = clockMode
     }
-    func resolve(md5: String, subtune: Int) -> SongLengthSelection.Resolution {
+    func resolve(md5: String, subtune: Int, embeddedLengths: [Double]?) -> SongLengthSelection.Resolution {
         resolver.durationResolution(md5: md5, subtune: subtune, databaseLengths: database?.lengths(forMD5: md5),
-            clockMode: clockMode, personalDuration: settings.endTime(md5: md5, subtune: subtune))
+            clockMode: clockMode, personalDuration: settings.endTime(md5: md5, subtune: subtune), embeddedLengths: embeddedLengths)
     }
 }
 
@@ -131,7 +131,7 @@ public enum AudioExportPlanner {
             } else { subs = Array(0..<sid.subtuneAmount) }
             guard items.count + subs.count <= maximumItems else { throw AudioExportError.selectionTooLarge }
             for sub in subs {
-                let duration = durations.resolve(md5: md5, subtune: sub)
+                let duration = durations.resolve(md5: md5, subtune: sub, embeddedLengths: sid.embeddedSongLengths)
                 let title = source.url.deletingPathExtension().lastPathComponent + " (Subtune \(sub + 1))"
                 items.append(AudioExportItem(id: items.count, sourceURL: source.url, md5: md5,
                     subtune: sub, title: title, channels: sid.secondSidAddress != 0 || sid.thirdSidAddress != 0 ? 2 : 1,

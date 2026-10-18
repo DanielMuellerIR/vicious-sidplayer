@@ -1,8 +1,9 @@
+import { sidSource } from './WebSourceSupport.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 const files = ['sidplayer.js', 'src/listening.js', 'src/history.js', 'src/collection.js', 'src/personal-storage.js', 'src/collection-audit.js'];
-const source = (await Promise.all(files.map(f => readFile(new URL('../' + f, import.meta.url), 'utf8')))).join('\n').replace(/^export /gm, '');
+const source = (await Promise.all(files.map(f => f === 'sidplayer.js' ? sidSource(f) : readFile(new URL('../' + f, import.meta.url), 'utf8')))).join('\n').replace(/^export /gm, '');
 const { auditWebCollection: audit, repairWebAudit: repair, collectionMD5: md5, listeningFileFingerprint: fingerprint,
   emptyListeningDocument: emptyListening, emptyHistoryDocument: emptyHistory } = new Function(source + ';return {auditWebCollection,repairWebAudit,collectionMD5,listeningFileFingerprint,emptyListeningDocument,emptyHistoryDocument};')();
 function sid(marker = 0) {
@@ -40,7 +41,7 @@ test('complete-content matches require explicit selection and keep names, order,
 });
 test('ambiguous content, different contents with equal file names, unsupported and damaged files are reported without repair', async () => {
   const { documents, moved } = fixture();
-  const damaged = file('Broken.sid', new Uint8Array([1,2,3])), futureBytes = sid(); futureBytes[5] = 5;
+  const damaged = file('Broken.sid', new Uint8Array([1,2,3])), futureBytes = sid(); futureBytes[5] = 6;
   const report = await audit(documents, [moved, file('Copy.sid'), file('Other/Tune.sid', sid(1)), damaged, file('Future.sid', futureBytes)]);
   assert.equal(report.validCount, 3); assert.equal(report.fileCount, 5);
   assert.equal(report.issues.filter(i => i.kind === 'duplicate').length, 1);
