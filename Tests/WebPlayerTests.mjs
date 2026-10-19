@@ -292,6 +292,37 @@ test('Stop during initial autoplay setup leaves the UI idle after setup complete
   assert.equal(page.elements.get('footer-state').textContent, '■ IDLE');
 });
 
+test('audit repair cancels autoplay still waiting for a track buffer', async () => {
+  for (const finishDuringWrite of [true, false]) {
+    const page = await ui(); page.release();
+    page.run(`
+      let finishBuffer, finishWrite, writeStarted;
+      const bufferGate = new Promise(resolve => { finishBuffer = resolve; });
+      const writeGate = new Promise(resolve => { finishWrite = resolve; });
+      const writing = new Promise(resolve => { writeStarted = resolve; });
+      const originalLoadBuffer = player.loadBuffer.bind(player);
+      player.loadBuffer = async (...args) => { await bufferGate; return originalLoadBuffer(...args); };
+      auditUI.report = { tracks: [] }; auditUI.selected.add('selected');
+      auditWebCollection = async () => ({ tracks: [] });
+      repairWebAudit = before => { const result = collectionClone(before); result[0].favorites = ['repaired']; return result; };
+      webPersonalStorage.apply = async () => { writeStarted(); await writeGate; };
+    `);
+    const loading = page.run('loadTrack(0, true)');
+    const applying = page.run('applyWebAudit()');
+    await page.run('writing');
+    if (finishDuringWrite) { page.run('finishBuffer()'); await loading; }
+    page.run('finishWrite()'); await applying;
+    if (!finishDuringWrite) { page.run('finishBuffer()'); await loading; }
+    assert.equal(page.run('player.loaded'), true);
+    assert.equal(page.run('player.playing'), false);
+    assert.equal(page.run('playingState'), false);
+    assert.equal(page.elements.get('play-btn').disabled, false);
+    assert.equal(page.run('webCollectionBusy'), false);
+    await page.elements.get('play-btn').listeners.click();
+    assert.equal(page.run('player.playing'), true);
+  }
+});
+
 test('the first theme click switches a dark system default to light', async () => {
   const page = await ui();
   assert.equal(page.elements.get('theme-btn').textContent, 'LIGHT');

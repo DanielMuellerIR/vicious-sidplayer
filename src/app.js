@@ -425,7 +425,7 @@ async function loadTrack(index, autoplay, subtune = 0, updateListeningQueue = tr
   if (webCollectionBusy) return false;
   if (index < 0 || index >= trackList.length) return;
   const generation = ++trackLoadGeneration;
-  ++playbackGeneration;
+  const playbackIntent = ++playbackGeneration;
   
   observeWebHistory(false, true);
   currentIdx = index;
@@ -482,7 +482,7 @@ async function loadTrack(index, autoplay, subtune = 0, updateListeningQueue = tr
   playBtn.disabled = false;
   positionScrubber.disabled = false;
 
-  if (autoplay) {
+  if (autoplay && playbackIntent === playbackGeneration) {
     const playGeneration = ++playbackGeneration;
     try {
       player.resumeContext();

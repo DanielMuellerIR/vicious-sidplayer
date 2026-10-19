@@ -67,7 +67,9 @@ function renderAuditUI() {
 }
 async function applyWebAudit() {
   if (!auditUI.report || !auditUI.selected.size || auditUI.controller || auditUI.applying || webCollectionBusy || webPersonalStorage.readOnly) return;
-  const shown = auditUI.report, selected = new Set(auditUI.selected); auditUI.applying = true; renderAuditUI();
+  const shown = auditUI.report, selected = new Set(auditUI.selected); auditUI.applying = true;
+  // Auch ein noch ladender Titel darf seinen früheren Autoplay-Auftrag nach der Reparatur nicht fortsetzen.
+  ++playbackGeneration; renderAuditUI();
   let wasPlaying = false, paused = false;
   try {
     await fileImportQueue; observeWebHistory(false, true); await persistWebListening(); await saveWebHistory();
