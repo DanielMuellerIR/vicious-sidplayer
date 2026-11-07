@@ -18,6 +18,7 @@
 # Letzte Zeile bei Erfolg: INSTALL OK: /Applications/Vicious SID Player.app (<version>)
 set -euo pipefail
 cd "$(dirname "$0")"
+if [[ "$(uname -s)" == Linux ]]; then exec bash linux/install.sh "$@"; fi
 source ./notarize-lib.sh
 
 require_notary_profile

@@ -1,6 +1,7 @@
-#if canImport(Combine)
 import Foundation
+#if canImport(Combine)
 import Combine
+#endif
 
 @MainActor
 public final class LibraryMetadataController: ObservableObject {
@@ -161,4 +162,3 @@ public final class SavedLibrarySearchController: ObservableObject {
 private extension Result {
     var failure: Failure? { if case .failure(let error) = self { return error }; return nil }
 }
-#endif

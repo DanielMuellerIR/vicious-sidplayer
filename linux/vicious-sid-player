@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Der Menü-Starter verweist über zwei Symlinks auf die aktive App-Version.
+HERE="$(python3 -c 'from pathlib import Path; import sys; print(Path(sys.argv[1]).resolve().parent)' "${BASH_SOURCE[0]}")"
+export PYTHONPATH="$HERE/python:$HERE/ui${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONNOUSERSITE=1
+export QT_PLUGIN_PATH="$HERE/python/PySide6/Qt/plugins"
+exec python3 -m vicious_sid.app --engine "$HERE/bin/vicious-sid-desktop-engine" "$@"

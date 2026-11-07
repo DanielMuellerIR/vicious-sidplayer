@@ -1,6 +1,7 @@
-#if canImport(Combine)
 import Foundation
+#if canImport(Combine)
 import Combine
+#endif
 
 public enum PersonalCollectionImportError: Error, LocalizedError {
     case unavailable, changedPreview, skippedEntries, restartRequired
@@ -228,8 +229,10 @@ public final class PersonalCollectionController: ObservableObject {
         reset(); isBusy = true; generation += 1; let current = generation
         do {
             let document = try await Task.detached(priority: .utility) {
+                #if !os(Linux)
                 let access = url.startAccessingSecurityScopedResource()
                 defer { if access { url.stopAccessingSecurityScopedResource() } }
+                #endif
                 let values = try url.resourceValues(forKeys: [.fileSizeKey])
                 guard let size = values.fileSize, size <= PersonalCollectionCodec.maximumBytes else { throw PersonalCollectionError.capacityExceeded }
                 return try PersonalCollectionCodec.decode(Data(contentsOf: url))
@@ -362,4 +365,3 @@ public final class PersonalCollectionController: ObservableObject {
             && (!areas.contains(.endTimes) || lhs.playback.endTimes == rhs.playback.endTimes)
     }
 }
-#endif

@@ -40,3 +40,10 @@ ios/Config/Local.xcconfig
 
 # CodeQA-Kampagnenstand: bleibt lokal, gehoert nicht ins oeffentliche Repo.
 .codeqa/
+
+# Python-Frontend für Linux
+__pycache__/
+*.pyc
+
+# Xcode erzeugt neben der zentralen SwiftPM-Pin-Datei eine weitere Kopie.
+ios/ViciousSIDPlayer.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved

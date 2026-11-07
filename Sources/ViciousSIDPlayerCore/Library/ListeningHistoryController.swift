@@ -1,6 +1,7 @@
-#if canImport(Combine)
 import Foundation
+#if canImport(Combine)
 import Combine
+#endif
 
 @MainActor
 public final class ListeningHistoryController: ObservableObject {
@@ -155,4 +156,3 @@ public final class ListeningHistoryController: ObservableObject {
         storageError = NSLocalizedString("Verlauf, Lesezeichen und Notizen sind schreibgeschützt. Die vorhandene Datei bleibt erhalten; sie konnte nicht gelesen oder sicher gespeichert werden.", comment: "")
     }
 }
-#endif

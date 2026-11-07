@@ -1336,7 +1336,7 @@ public final class ViciousProcessor: Sendable {
         try? seekCancellable(seconds: seconds, cancellationCheck: {})
     }
 
-    func seekCancellable(seconds: Double, cancellationCheck: () throws -> Void) throws {
+    public func seekCancellable(seconds: Double, cancellationCheck: () throws -> Void) throws {
         lock.lock()
         defer { lock.unlock() }
         guard loaded else { return }

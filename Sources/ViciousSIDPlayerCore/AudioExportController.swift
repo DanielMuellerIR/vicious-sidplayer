@@ -1,6 +1,7 @@
-#if canImport(Combine)
 import Foundation
+#if canImport(Combine)
 import Combine
+#endif
 
 @MainActor
 public final class AudioExportController: ObservableObject {
@@ -175,4 +176,3 @@ private final class AudioExportProgressGate: @unchecked Sendable {
         return true
     }
 }
-#endif

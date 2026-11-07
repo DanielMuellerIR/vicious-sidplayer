@@ -2,14 +2,35 @@ import Foundation
 
 @MainActor
 public final class PersonalCollectionFavoritesStore {
-    private let defaults: UserDefaults
+    private let defaults: UserDefaults?
     private let key: String
+    private var file: PersonalDataFile?
+    private var values: Set<String> = []
+    public private(set) var storageError: String?
     public init(defaults: UserDefaults, key: String) { self.defaults = defaults; self.key = key }
-    public func read() -> Set<String> { Set(defaults.stringArray(forKey: key) ?? []) }
-    public func write(_ values: Set<String>) { defaults.set(values.sorted(), forKey: key) }
+    /// Linux benötigt keine CFPreferences. Die Datei hat denselben Schutz vor
+    /// beschädigten oder zwischenzeitlich extern veränderten Daten wie Listen.
+    public init(fileURL: URL) {
+        defaults = nil; key = ""; file = PersonalDataFile(url: fileURL)
+        do { values = try file!.load { data in Set(try data.map { try JSONDecoder().decode([String].self, from: $0) } ?? []) } }
+        catch { storageError = error.localizedDescription }
+    }
+    public func read() -> Set<String> {
+        if let defaults { return Set(defaults.stringArray(forKey: key) ?? []) }
+        return values
+    }
+    public func write(_ values: Set<String>) {
+        do { try persist(values) } catch { storageError = error.localizedDescription }
+    }
+    public func persist(_ values: Set<String>) throws {
+        if let defaults { defaults.set(values.sorted(), forKey: key); return }
+        guard storageError == nil, let file else { throw PersonalDataFileError.readOnly }
+        try file.write(JSONEncoder().encode(values.sorted()))
+        self.values = values
+    }
     public func replace(_ expected: Set<String>, with values: Set<String>) throws {
         guard read() == expected || read() == values else { throw PersonalCollectionTransactionError.externalChange }
-        write(values)
+        try persist(values)
     }
 }
 

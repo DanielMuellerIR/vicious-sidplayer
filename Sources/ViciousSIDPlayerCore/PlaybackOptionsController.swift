@@ -1,6 +1,7 @@
-#if canImport(Combine)
 import Foundation
+#if canImport(Combine)
 import Combine
+#endif
 
 public struct PlaybackEndTimeTarget: Equatable, Sendable {
     public let md5: String
@@ -171,4 +172,3 @@ public final class PlaybackOptionsController: ObservableObject {
     }
     public func resumeAfterImport() { isPersistenceSuspended = false }
 }
-#endif

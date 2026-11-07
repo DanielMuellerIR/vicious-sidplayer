@@ -12,6 +12,8 @@ Look und als Single-File-HTML5-App. Keine SID-Musikdateien bündeln oder committ
 - `Sources/ViciousSIDPlayerApp/`: SwiftUI-App, Einstellungen, Playlist,
   Oszilloskop, Media-Tasten und Sessionzustand.
 - `Sources/ViciousSIDQuickLook/`: Quick-Look-Extension.
+- `linux/`: Qt-Widgets-Desktop-App; `Sources/ViciousSIDDesktop/` verbindet sie über
+  lokale stdin/stdout-Pipes mit Core und ALSA. Keine HTTP-/Browser-Abhängigkeit.
 - `ios/`: native iPhone-App (eingechecktes `.xcodeproj`, iOS 17 Minimum).
   `ViciousSIDPlayer/Player/` ist das App-Modell samt Audio-Session und Now
   Playing, `UI/` und `Library/` sind SwiftUI, `ViciousSIDPlayerTests/` sind die

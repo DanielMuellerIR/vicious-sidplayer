@@ -7,7 +7,7 @@
 <h1 align="center">Vicious SID Player</h1>
 
 <p align="center">
-  <strong>Commodore 64 SID chiptune player: a single-file HTML5 version, native SwiftUI apps for macOS and iPhone, and a command-line player for Linux.</strong>
+  <strong>Commodore 64 SID chiptune player: a single-file HTML5 version, native SwiftUI apps for macOS and iPhone, and desktop and command-line players for Linux.</strong>
 </p>
 
 <p align="center">
@@ -16,11 +16,13 @@
   <img src="src/Screenshot-light.png" width="760" alt="Vicious SID Player in light mode – the appearance follows the system setting automatically">
 </p>
 
-A self-contained Commodore 64 SID music player in three variants:
+A self-contained Commodore 64 SID music player in four variants:
 
 1. **HTML5 (`vicious-sid-player.html`)** — a single HTML file that runs straight from the file system via double click, no web server required.
 2. **Native macOS app (`Vicious SID Player.app`)** — SwiftUI desktop application with `AVAudioEngine` and a real-time oscilloscope.
 3. **Native iOS app (`ios/`)** — SwiftUI iPhone app with background playback, lock-screen controls, and folder import. Built from source with your own developer team; see [iOS app](#ios-app-iphone).
+
+4. **Linux desktop app (`linux/`)** — Qt Widgets interface with the same Swift core, ALSA audio and MPRIS media controls; see [Linux](#linux-desktop-app-and-cli).
 
 None of the variants ship any SID files. Tunes are loaded via drag & drop, file dialog, (macOS app) by double-clicking a `.sid` file in Finder, or (iOS app) by importing a folder.
 
@@ -246,9 +248,31 @@ swift build -c release          # builds .build/release/sidcheck
 
 ---
 
-## Linux (CLI player)
+## Linux (desktop app and CLI)
 
-The emulation core is platform-neutral, so the player also runs on Linux — as a command-line player named `vicious-sid`. There is no native Linux GUI; the HTML5 player covers that need.
+[Verification 1.9.52](docs/validation-1.9.52.md).
+
+The Linux desktop app uses Qt and the same Swift core as the Apple apps.
+It follows the Mac layout and colors: library, search, favorites, listening
+lists, history, mini-player, oscilloscope, piano/Hz, registers, 3SID mixing,
+playback options, A/B loops and WAV export.
+
+```bash
+./build.sh
+./install.sh --from-build "$PWD/build/vicious-sid-player-linux"
+vicious-sid-player
+```
+
+The app appears in the application menu and the file manager's Open With menu.
+Installation is per user; no Swift toolchain is needed on the target machine.
+Linux window decorations, file dialogs, free replacement fonts and independent
+vector icons replace the Apple-specific parts. AudioToolbox encoders and
+Sparkle updates are unavailable on Linux.
+[Build requirements and platform differences](linux/README.md).
+
+### CLI player
+
+The command-line player `vicious-sid` is available alongside the desktop app. Both use the same platform-neutral emulation core.
 
 **Requirements:** Swift 6.0 plus `libasound2-dev` and `libdbus-1-dev` to build; `libasound2` and `libdbus-1-3` are needed at runtime. The binary uses ALSA for audio and D-Bus for MPRIS2 media controls.
 

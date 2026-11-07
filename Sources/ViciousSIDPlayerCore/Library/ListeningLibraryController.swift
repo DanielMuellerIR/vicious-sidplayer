@@ -1,6 +1,7 @@
-#if canImport(Combine)
 import Foundation
+#if canImport(Combine)
 import Combine
+#endif
 
 /// Gemeinsamer Zustand der nativen Oberflaechen. Lesen, Kodieren und Schreiben
 /// laufen neben dem Hauptthread; die fachlichen Regeln bleiben reine Core-Werte.
@@ -272,4 +273,3 @@ public final class ListeningLibraryController: ObservableObject {
     }
     public func resumeAfterImport() { isPersistenceSuspended = false }
 }
-#endif

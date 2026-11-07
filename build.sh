@@ -14,4 +14,5 @@
 # Letzte Zeile bei Erfolg: BUILD OK: <pfad>/Vicious SID Player.app
 set -euo pipefail
 cd "$(dirname "$0")"
+if [[ "$(uname -s)" == Linux ]]; then exec bash linux/build.sh "$@"; fi
 exec bash build_app.sh "$@"

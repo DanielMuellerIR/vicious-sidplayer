@@ -22,6 +22,7 @@
 # Letzte Zeile bei Erfolg: RELEASE OK: <pfad-zum-dmg> (<version>)
 set -euo pipefail
 cd "$(dirname "$0")"
+if [[ "$(uname -s)" == Linux ]]; then exec bash linux/release.sh "$@"; fi
 source ./notarize-lib.sh
 
 require_notary_profile

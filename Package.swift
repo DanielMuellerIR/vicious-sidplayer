@@ -23,7 +23,8 @@ var products: [Product] = [
     // Plattformuebergreifendes CLI (macOS + Linux). Der Produktname ist zugleich
     // der Name des fertigen Binaries.
     .executable(name: "vicious-sid", targets: ["ViciousSIDPlayerCLI"]),
-    .library(name: "ViciousSIDPlayerCore", targets: ["ViciousSIDPlayerCore"])
+    .library(name: "ViciousSIDPlayerCore", targets: ["ViciousSIDPlayerCore"]),
+    .executable(name: "vicious-sid-desktop-engine", targets: ["ViciousSIDDesktop"])
 ]
 
 var dependencies: [Package.Dependency] = []
@@ -69,6 +70,11 @@ var targets: [Target] = [
                 .target(name: "CDBus", condition: .when(platforms: [.linux]))
             ],
             path: "Sources/ViciousSIDPlayerCLI"
+        ),
+        .executableTarget(
+            name: "ViciousSIDDesktop",
+            dependencies: ["ViciousSIDPlayerCore"],
+            path: "Sources/ViciousSIDDesktop"
         ),
         // Headless-Crash-Checker (siehe Tools/sidcheck/main.swift) — findet harte
         // Traps in der Emulation, ohne die GUI zu starten.
