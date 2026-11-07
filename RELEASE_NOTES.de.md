@@ -1,3 +1,15 @@
+Vicious SID Player 1.9.52 ergänzt die Linux-Desktop-App.
+
+- Qt Widgets folgt Layout, Controlgruppen und Themes der Mac-App und verwendet den bestehenden Swift-Kern für Audio und Bibliothek. Mini-Player, drei Analyseansichten, Metadatensuche, Favoriten, Hörlisten, Verlauf, Sammlungsübertragung, A/B-Schleifen und WAV-Export sind verfügbar.
+- ALSA und MPRIS binden Audio und Mediensteuerung an den Desktop an. Die isolierte Laufzeit wird je Benutzer mit Startmenü-Eintrag, Dateiöffnen in einer einzelnen Instanz und Rückabwicklung bei gescheiterter Aktivierung installiert.
+- Plattformbedingt unterscheiden sich Fensterrahmen, Menüs, Dialoge, freie Ersatzschriften und eigenständig gezeichnete Symbole. Linux exportiert WAV und verwendet den Installer für Updates; Apple-AudioToolbox-Encoder und Sparkle stehen dort nicht zur Verfügung.
+
+Siehe [Prüfstand und Grenzen](docs/validation-1.9.52.md) sowie [Linux-Einrichtung](linux/README.md).
+
+Vicious SID Player 1.9.51 korrigiert ausstehendes Autoplay bei der HTML5-Sammlungsreparatur.
+
+- Ein Titel, der noch auf seinen Audiopuffer wartet, startet nach der Reparatur nicht mehr aufgrund des vorherigen Wiedergabeauftrags. Bewusstes Play bleibt danach möglich.
+
 Vicious SID Player 1.9.50 vereinfacht die Stimmenbedienung auf dem iPhone.
 
 - Die höheren Oszilloskopkurven nutzen die volle Breite. Tippen auf eine Kurve schaltet die jeweilige Stimme stumm oder wieder ein; die Emulation läuft weiter.
