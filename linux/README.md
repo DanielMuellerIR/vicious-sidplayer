@@ -19,7 +19,8 @@ sudo apt install libasound2-dev libdbus-1-dev libxcb-cursor0
 ```
 
 `build.sh` downloads the pinned Qt/PySide runtime from PyPI into the build
-folder. It does not change system Python. `install.sh` installs the complete
+folder. It does not change system Python. The signature runtime uses an abi3
+cryptography wheel and includes CFFI extensions for Python 3.10–3.15. `install.sh` installs the complete
 application under `~/.local/share/vicious-sid-player/`, with a launcher at
 `~/.local/bin/vicious-sid-player` and an application-menu entry. An installed
 copy requires neither Swift nor Docker. Standard desktop ALSA and graphics

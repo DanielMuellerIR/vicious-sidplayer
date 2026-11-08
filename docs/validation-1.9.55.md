@@ -47,6 +47,11 @@ Die Änderungen aus 1.9.53 und [1.9.54](validation-1.9.54.md) sind enthalten.
   während einer laufenden Prüfung bestanden. Netzwerkantworten waren eigene
   Fixtures. Update-Dialog hell/dunkel und scrollbare Einstellungen bei 480 × 560
   visuell geprüft; Schließen bleibt außerhalb des Scrollbereichs erreichbar.
+- Portable Python-Laufzeit: `cryptography` verwendet das abi3-Artefakt ab Python
+  3.9; CFFI-Erweiterungen für Python 3.10–3.15 liegen nebeneinander. Die tatsächliche
+  Signaturprüfung samt Qt und CFFI wurde unter Python 3.12 und 3.14 geprüft,
+  jeweils ohne Rückfall auf System-Site-Packages. Die übrigen Python-Versionen
+  sind über passende Wheels abgedeckt, aber nicht jeweils ausgeführt.
 - Linux-GUI-Smoke einschließlich Autoplay, Pause/Seek, Modell/Takt, Subtune,
   Favorit/Suche, 3SID, Mute/Solo, Hörlisten, Verlauf und Mini-Player bestanden.
 - Unveränderter Swift-Stand: Core-/App-Suite mit 413 Tests, vier übersprungen,
