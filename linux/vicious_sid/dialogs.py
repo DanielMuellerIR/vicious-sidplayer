@@ -1,6 +1,7 @@
 from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -11,9 +12,11 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QProgressBar,
+    QScrollArea,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
+    QWidget,
 )
 from .widgets import Segments, icon, label, tool
 from .window import clock, line, row_widget
@@ -48,6 +51,19 @@ class PlayerDialog(QDialog):
 class SettingsDialog(PlayerDialog):
     def __init__(self, window):
         super().__init__(window, "Einstellungen", 460)
+        outer = self.layout
+        content = QWidget()
+        self.layout = QVBoxLayout(content)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(12)
+        scroll = QScrollArea()
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
+        self.setMinimumHeight(400)
+        self.resize(480, min(740, QApplication.primaryScreen().availableGeometry().height() - 80))
         self.layout.addWidget(label("Erscheinungsbild", 13, True))
         modes = ["auto", "light", "dark"]
         theme = Segments(
@@ -78,6 +94,13 @@ class SettingsDialog(PlayerDialog):
             "Sparsam reduziert Bildrate und Datenabfragen. Aus stoppt die Kurvenzeichnung. "
             "Piano und Register bleiben unabhängig davon verfügbar."
         )
+        self.layout.addWidget(line())
+        self.layout.addWidget(label("Softwareupdates", 13, True))
+        automatic = QCheckBox("Automatisch nach Updates suchen")
+        automatic.setChecked(window.settings.get("automaticUpdates", True))
+        automatic.toggled.connect(lambda value: window.change_setting("automaticUpdates", value))
+        self.layout.addWidget(automatic)
+        self.text("Prüft höchstens einmal täglich über GitHub Pages. Installiert wird erst nach deiner Bestätigung.")
         for key, title, description, directory in [
             (
                 "root",
@@ -124,6 +147,8 @@ class SettingsDialog(PlayerDialog):
                 r.addWidget(rescan)
             r.addStretch()
             self.layout.addWidget(row)
+        self.layout.addStretch()
+        self.layout = outer
         self.done_button()
 
     def change_theme(self, value):

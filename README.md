@@ -270,7 +270,9 @@ The app appears in the application menu and the file manager's Open With menu.
 Installation is per user; no Swift toolchain is needed on the target machine.
 Linux window decorations, file dialogs, free replacement fonts and independent
 vector icons replace the Apple-specific parts. AudioToolbox encoders and
-Sparkle updates are unavailable on Linux.
+the Sparkle interface is unavailable on Linux. Signed GitHub updates are available
+from **Help → Check for updates**; Settings controls automatic checks. Versions
+1.9.52 and earlier need one manual upgrade to gain the Linux updater.
 [Build requirements and platform differences](linux/README.md).
 
 ### CLI player

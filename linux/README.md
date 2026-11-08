@@ -41,6 +41,34 @@ separate from the installed program, under
 `./release.sh` creates a local tar archive in `build/`; it does not publish or
 install it. The existing `build_deb.sh` still packages the CLI separately.
 
+## GitHub updates
+
+The installed player checks the signed GitHub Pages update feed when it starts
+and while it stays open, at most once a day. Disable **Automatisch nach Updates suchen** in Settings to
+stop these background checks. **Hilfe → Nach Updates suchen …** checks manually.
+A newer version is shown with release notes. Only **Herunterladen und installieren**
+downloads and installs it. Playback continues, and the new version is used on the
+next launch; the app does not force a restart.
+
+The update manifest is verified against the public Ed25519 key shipped with the
+app. The downloaded archive must match its signed SHA256 digest and size. Updates
+are limited to this application's active per-user installation, reject unsafe
+archive paths, preserve the old version and keep music and personal data separate.
+The existing installer checks the runtime before atomically activating the new
+version. A local build or an inactive older app cannot replace another installation.
+
+**Bootstrap:** 1.9.52 and earlier have no Linux updater. Download and extract the
+new Linux archive once, then run:
+
+```sh
+python3 vicious-sid-player-linux/install.py vicious-sid-player-linux
+```
+
+Quit the old player and start it from the application menu. Subsequent higher
+releases can be installed from the player. Update checks contact GitHub Pages;
+confirmed package downloads contact GitHub Releases. No music or library content
+is sent. macOS retains its separate Sparkle updater.
+
 ## Interface parity
 
 The macOS SwiftUI application supplies the reference layout, spacing, colors,
@@ -64,8 +92,8 @@ Platform differences:
 - Liberation Sans/Mono replace Apple's system fonts. Independently drawn
   vector icons replace SF Symbols; the original application icon is shared.
 - AudioToolbox and Sparkle are Apple frameworks. Linux currently exports WAV
-  and uses the installer for updates; M4A/FLAC system encoding and Sparkle
-  updates are unavailable.
+  and uses its own signed GitHub updater; M4A/FLAC system encoding and the
+  Sparkle interface are unavailable.
 - Linux media controls use MPRIS on the session D-Bus. Audio uses ALSA and
   therefore the desktop's PipeWire/PulseAudio routing.
 

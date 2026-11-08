@@ -1,4 +1,5 @@
 from pathlib import Path
+import time
 from PySide6.QtCore import QEvent, QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QIcon, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
@@ -80,6 +81,8 @@ class PlayerWindow(QMainWindow):
         self.full_size = QSize(1200, 700)
         self.dialogs = []
         self.shutting_down = False
+        self.update_dialog = None
+        self.close_after_update = False
         self.setWindowTitle("Vicious SID Player")
         self.setWindowIcon(QIcon(str(self.resources / "AppIcon.png")))
         self.setMinimumSize(800, 560)
@@ -106,6 +109,10 @@ class PlayerWindow(QMainWindow):
         self.search_timer.setSingleShot(True)
         self.search_timer.setInterval(180)
         self.search_timer.timeout.connect(self.search_now)
+        self.update_timer = QTimer(self)
+        self.update_timer.setInterval(24 * 60 * 60 * 1000)
+        self.update_timer.timeout.connect(self.automatic_update_check)
+        self.update_timer.start()
         self.apply_appearance()
 
     def send(self, op, **values):
@@ -687,6 +694,7 @@ class PlayerWindow(QMainWindow):
         action(view, "Hell / Dunkel", self.toggle_theme, "Ctrl+T")
         action(view, "Bibliothek abgleichen", lambda: self.send("rescan"), "F5")
         action(view, "Suchen", self.focus_search, "Ctrl+F")
+        action(help_menu, "Nach Updates suchen …", self.show_updates)
         action(
             help_menu,
             "Über Vicious SID Player",
@@ -714,6 +722,28 @@ class PlayerWindow(QMainWindow):
                 ]
             )
         self.send("snapshot")
+        QTimer.singleShot(3000, self.automatic_update_check)
+
+    def show_updates(self):
+        if self.update_dialog is None:
+            from .update_dialog import UpdateDialog
+            self.update_dialog = UpdateDialog(self)
+        self.update_dialog.check()
+
+    def automatic_update_check(self):
+        from .update import Updater, UpdateError
+        if (self.shutting_down or not self.settings.get("automaticUpdates", True)
+                or time.time() - self.settings.get("lastUpdateCheck", 0) < 86400):
+            return
+        try:
+            Updater(self.resources.parent).installation()
+        except (OSError, UpdateError):
+            return
+        self.change_setting("lastUpdateCheck", time.time())
+        if self.update_dialog is None:
+            from .update_dialog import UpdateDialog
+            self.update_dialog = UpdateDialog(self)
+        self.update_dialog.check(automatic=True)
 
     def apply_appearance(self):
         mode = self.settings.get("theme", "auto")
@@ -1398,6 +1428,11 @@ class PlayerWindow(QMainWindow):
         super().changeEvent(event)
 
     def closeEvent(self, event):
+        if self.update_dialog is not None and self.update_dialog.busy:
+            self.close_after_update = True
+            self.update_dialog.cancel()
+            event.ignore()
+            return
         if self.shutting_down:
             event.accept()
             return

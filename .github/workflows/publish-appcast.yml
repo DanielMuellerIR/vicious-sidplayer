@@ -97,6 +97,17 @@ jobs:
           # Gleicher Basisname ordnet die eingebetteten Release Notes dem DMG zu.
           gh release view "$RELEASE_TAG" --json body --jq .body > "${dmg%.dmg}.md"
 
+      - name: Prepare Linux update manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="vicious-sid-player-${RELEASE_TAG#v}-linux-x86_64.tar.gz"
+          gh release download "$RELEASE_TAG" --pattern "$archive" --dir update
+          gh release view "$RELEASE_TAG" --json body --jq .body > update/linux-notes.txt
+          python3 scripts/linux-update-manifest.py "update/$archive" site/linux/stable.json --notes update/linux-notes.txt
+          python3 -m venv update/verify-env
+          update/verify-env/bin/pip install --only-binary=:all: cryptography==50.0.2 cffi==2.1.1 pycparser==3.12
+
       # Paketmanifeste und Drittanbieter-Actions erhalten keinen Signierschlüssel.
       - name: Resolve pinned Sparkle package
         run: swift package resolve
@@ -120,7 +131,12 @@ jobs:
             --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/" \
             --link "https://github.com/${GITHUB_REPOSITORY}" \
             -o "$PWD/site/appcast.xml" "$PWD/update"
+          signer="$(find .build/artifacts/sparkle -type f -path '*/bin/sign_update' -print -quit)"
+          [[ -n "$signer" ]] || fail 'Sparkle signing tool is missing.'
+          printf '%s' "$sparkle_private_key" | "$signer" --ed-key-file - -p site/linux/stable.json > site/linux/stable.json.sig
           unset sparkle_private_key
+          update/verify-env/bin/python scripts/linux-update-manifest.py \
+            "update/vicious-sid-player-${RELEASE_TAG#v}-linux-x86_64.tar.gz" site/linux/stable.json --verify
           xmllint --noout site/appcast.xml
           shopt -s nullglob
           dmgs=(update/*.dmg)

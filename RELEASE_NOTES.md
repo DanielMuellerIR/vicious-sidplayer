@@ -1,3 +1,7 @@
+Vicious SID Player 1.9.55 adds signed GitHub updates to the Linux desktop app. Automatic checks can be disabled in Settings; Help → Check for updates checks immediately. Download and installation require confirmation, preserve the running session and take effect on the next launch. Version 1.9.52 needs one manual upgrade to gain this feature. The release also includes the smoother oscilloscope and resource modes from 1.9.54 and the playback fixes from 1.9.53.
+
+See [Linux updates](linux/README.md) and [validation](docs/validation-1.9.55.md).
+
 Vicious SID Player 1.9.54 makes the Linux oscilloscope animate independently of audio-engine replies at about 60 FPS. Settings offers a 15 FPS economy mode and Off; piano and registers remain available. Hidden/minimized windows and the mini-player suspend scope animation and SID analysis snapshots. Unchanged icons are cached.
 
 See [validation](docs/validation-1.9.54.md).

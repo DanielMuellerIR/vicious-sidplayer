@@ -274,7 +274,10 @@ vicious-sid-player
 Die App erscheint im Anwendungsmenü und unter „Öffnen mit“. Installation pro
 Benutzer, ohne Swift-Laufzeit auf dem Zielrechner. Linux-Fensterrahmen,
 Dateidialoge, freie Ersatzschriften und eigene Vektor-Icons ersetzen die
-Apple-spezifischen Teile; AudioToolbox-Encoder und Sparkle fehlen unter Linux.
+Apple-spezifischen Teile; AudioToolbox-Encoder und die Sparkle-Oberfläche fehlen unter Linux.
+Signierte GitHub-Updates gibt es unter **Hilfe → Nach Updates suchen …**; die
+Einstellungen steuern automatische Prüfungen. Version 1.9.52 und früher benötigen
+einmalig ein manuelles Upgrade, um den Linux-Updater zu erhalten.
 [Build, Voraussetzungen und Plattformgrenzen](linux/README.md).
 
 ### CLI-Player

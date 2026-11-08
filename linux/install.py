@@ -37,7 +37,7 @@ def install(source, prefix):
         [
             "python3",
             "-c",
-            "from vicious_sid.window import PlayerWindow; from PySide6.QtDBus import QDBusConnection",
+            "from vicious_sid.window import PlayerWindow; from PySide6.QtDBus import QDBusConnection; from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey",
         ],
         env=env,
         check=True,

@@ -17,3 +17,8 @@ retained; the LGPLv3, GPLv2, GPLv3 and Qt exception texts are included here.
 The original SID/6502 emulation is based on jsSID 0.9.1 by Hermit
 (Mihály Horváth), licensed under WTFPL. The root `LICENSE` applies to the
 player. No music files are included.
+
+The Linux updater verifies Ed25519 signatures with [cryptography 50.0.2](https://pypi.org/project/cryptography/50.0.2/)
+by the Python Cryptographic Authority (Apache-2.0 OR BSD-3-Clause). The binary
+wheel and its dependencies retain their license notices under `python/`. No
+cryptographic implementation is copied into the player.
