@@ -105,6 +105,8 @@ public final class AudioExportController: ObservableObject {
         }
     }
 
+    public func waitForPreparation() async { await task?.value }
+
     public func toggleSelection(_ id: Int) {
         guard state == .ready, items.contains(where: { $0.id == id }) else { return }
         if !selectedIDs.insert(id).inserted { selectedIDs.remove(id) }

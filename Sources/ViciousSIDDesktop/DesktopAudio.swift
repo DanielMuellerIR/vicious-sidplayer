@@ -8,6 +8,10 @@ final class DesktopAudio {
   private(set) var sid: SidFileData?
   private(set) var processor: ViciousProcessor?
   private var sink: PCMSink?
+  private let makeSink: (PCMFormat) -> PCMSink
+  init(makeSink: @escaping (PCMFormat) -> PCMSink = PCMSinkFactory.makeDefault) {
+    self.makeSink = makeSink
+  }
   private let visuals = RealtimeVisualsBuffer()
   private(set) var state = "Stopped"
   private(set) var subtune = 0
@@ -64,7 +68,7 @@ final class DesktopAudio {
       processor.seek(seconds: pendingPosition)
       if loop.isEnabled, let preparedLoop { _ = processor.installLoop(preparedLoop) }
     }
-    let sink = PCMSinkFactory.makeDefault(format: format)
+    let sink = makeSink(format)
     let buffer = visuals
     try sink.start { samples, frames in
       for frame in 0..<frames {
@@ -165,13 +169,29 @@ final class DesktopAudio {
       return processor
     }
     seekWorker = worker
-    let prepared = try await worker.value
+    defer {
+      if generation == ticket { isSeeking = false; seekWorker = nil }
+    }
+    let prepared: ViciousProcessor
+    do { prepared = try await worker.value }
+    catch {
+      if generation == ticket { stop() }
+      throw error
+    }
     guard generation == ticket else { return }
     seekWorker = nil
     configure(prepared)
     processor = prepared
     visuals.write(prepared.getChannelsData())
-    if loop.isEnabled { try await installLoop() }
+    if loop.isEnabled {
+      do { try await installLoop() }
+      catch is CancellationError {
+        guard generation == ticket else { return }
+      } catch {
+        if generation == ticket { stop() }
+        throw error
+      }
+    }
     guard generation == ticket else { return }
     let desiredState = state
     isSeeking = false

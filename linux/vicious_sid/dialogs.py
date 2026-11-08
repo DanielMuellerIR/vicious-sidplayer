@@ -162,13 +162,15 @@ class PlaybackDialog(PlayerDialog):
         self.end_time.setPlaceholderText("Sekunden oder m:ss")
         self.end_time.setAccessibleName("Eigene Endzeit")
         r.addWidget(self.end_time)
+        target = dict(window.state.get("personalReference") or {})
+        title = window.state.get("title", "")
         apply = QPushButton("Übernehmen")
-        apply.clicked.connect(lambda: self.send("endTime", value=self.end_time.text()))
+        apply.clicked.connect(lambda: self.send("endTime", value=self.end_time.text(), reference=target, title=title))
         r.addWidget(apply)
         self.layout.addWidget(row)
         default = QPushButton("Vorgabe verwenden")
         default.clicked.connect(
-            lambda: (self.end_time.clear(), self.send("endTime", value=""))
+            lambda: (self.end_time.clear(), self.send("endTime", value="", reference=target, title=title))
         )
         self.layout.addWidget(default, alignment=Qt.AlignmentFlag.AlignLeft)
         self.text(

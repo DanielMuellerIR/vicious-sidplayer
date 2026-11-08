@@ -1,3 +1,5 @@
+Vicious SID Player 1.9.53 korrigiert Wiedergabe und persönliche Daten der Linux-App. Endzeiten, Notizen und Lesezeichen bleiben an den beim Öffnen erfassten Titel und Zeitpunkt gebunden. Abgebrochene A/B-Vorbereitung blockiert keinen Sprung mehr; Sammlungsimporte beachten spätere Stop-/Pause-Aktionen. Gespeicherte Folgen behalten Reihenfolge und Subtunes nach Neustart, Metadaten aktualisieren Suchergebnisse, und wiederholte WAV-Exporte verwenden freie Dateinamen.
+
 Vicious SID Player 1.9.52 ergänzt die Linux-Desktop-App.
 
 - Qt Widgets folgt Layout, Controlgruppen und Themes der Mac-App und verwendet den bestehenden Swift-Kern für Audio und Bibliothek. Mini-Player, drei Analyseansichten, Metadatensuche, Favoriten, Hörlisten, Verlauf, Sammlungsübertragung, A/B-Schleifen und WAV-Export sind verfügbar.

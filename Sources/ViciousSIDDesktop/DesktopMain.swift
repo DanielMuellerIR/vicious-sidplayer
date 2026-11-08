@@ -30,7 +30,7 @@ struct DesktopMain {
 
 @MainActor
 final class DesktopEngine {
-  let audio = DesktopAudio()
+  let audio: DesktopAudio
   let support: URL
   let favoritesStore: PersonalCollectionFavoritesStore
   let listening: ListeningLibraryController
@@ -57,6 +57,8 @@ final class DesktopEngine {
   var scanGeneration = 0
   var isScanning = false
   var revision = 0
+  var playbackIntentRevision = 0
+  var collectionPlaybackIntent: Int?
   var query = ""
   var favoritesOnly = false
   var folders = false
@@ -97,7 +99,8 @@ final class DesktopEngine {
       embeddedLengths: audio.sid?.embeddedSongLengths)
   }
 
-  init(support: URL, root: String?) {
+  init(support: URL, root: String?, audio: DesktopAudio = DesktopAudio()) {
+    self.audio = audio
     self.support = support
     lengths = SongLengthResolver(
       cache: SongLengthCache(fileURL: support.appendingPathComponent("song-length-cache.json")))
@@ -159,12 +162,8 @@ final class DesktopEngine {
           library: library ?? MusicLibrary(root: root, supportDirectory: support),
           openedFiles: playlist.tracks.filter(\.isExternal))
       },
-      pause: { [unowned self] in
-        let playing = audio.state == "Playing"
-        try? audio.pause()
-        return playing
-      },
-      resume: { [unowned self] in try? audio.play() },
+      pause: { [unowned self] in pauseForCollection() },
+      resume: { [unowned self] in resumeAfterCollection() },
       didApply: { [unowned self] in
         favorites = PlaylistFavorites(ids: favoritesStore.read())
         revision += 1
@@ -190,6 +189,16 @@ final class DesktopEngine {
     else { return }
     FileHandle.standardOutput.write(data)
     FileHandle.standardOutput.write(Data([10]))
+  }
+  func pauseForCollection() -> Bool {
+    collectionPlaybackIntent = playbackIntentRevision
+    let playing = audio.state == "Playing"
+    try? audio.pause()
+    return playing
+  }
+  func resumeAfterCollection() {
+    guard collectionPlaybackIntent == playbackIntentRevision else { return }
+    try? audio.play()
   }
   func encoded<T: Encodable>(_ value: T) -> Any {
     (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(value))) ?? NSNull()
@@ -320,7 +329,11 @@ final class DesktopEngine {
   }
   func startInitialTrack(id: String?, subtune: Int, position: Double) async {
     do {
-      if !shuffle, let id, let index = playlist.index(forID: id) {
+      if let entry = listening.queue?.current, let index = playlist.index(forID: entry.trackID) {
+        try load(index, autoplay: false, updateQueue: false)
+        try setSubtune(entry.subtune ?? (entry.trackID == id ? subtune : 0))
+        if entry.trackID == id { try await audio.seek(position) }
+      } else if !shuffle, let id, let index = playlist.index(forID: id) {
         try load(index, autoplay: false)
         try setSubtune(subtune)
         try await audio.seek(position)
@@ -379,12 +392,13 @@ final class DesktopEngine {
       guard let self, !Task.isCancelled else { return }
       switch result {
       case .success(let seconds):
-        _ = lengths.accept(seconds, ticket: ticket, currentMD5: md5, currentSubtune: audio.subtune)
+        if lengths.accept(seconds, ticket: ticket, currentMD5: md5, currentSubtune: audio.subtune) != nil { revision += 1 }
       case .failure: lengths.fail(ticket: ticket)
       }
     }
   }
   func load(_ index: Int, autoplay: Bool, updateQueue: Bool = true) throws {
+    playbackIntentRevision += 1
     guard let track = playlist.track(at: index) else { return }
     let bytes = try Data(contentsOf: track.url)
     let file = try SidParser.parse(data: bytes)
@@ -566,6 +580,7 @@ final class DesktopEngine {
       "duration": duration.seconds, "durationSource": duration.source.rawValue,
       "title": title.isEmpty ? currentTrack?.name ?? "—" : title,
       "composer": audio.sid?.metadata.author ?? "—", "info": audio.sid?.metadata.info ?? "—",
+      "personalReference": reference.map { encoded($0) } ?? NSNull(),
       "trackID": currentTrack?.id ?? "", "filename": currentTrack?.name ?? "— Auswählen —",
       "path": currentTrack?.url.path ?? "", "subtune": sub,
       "subtunes": audio.sid?.subtuneAmount ?? 1,
@@ -627,6 +642,15 @@ final class DesktopEngine {
 
   func handle(_ c: [String: Any]) async -> Bool {
     let op = c["op"] as? String ?? ""
+    if ["play", "pause", "toggle", "stop", "next", "previous", "seek", "subtune", "queueEnd", "quit"].contains(op) {
+      playbackIntentRevision += 1
+    }
+    func personalTarget() -> ListeningPersonalReference? {
+      if c["reference"] == nil { return reference }
+      guard let value = c["reference"] as? [String: Any] else { return nil }
+      return try? JSONDecoder().decode(ListeningPersonalReference.self,
+        from: JSONSerialization.data(withJSONObject: value))
+    }
     func int(_ key: String) -> Int { c[key] as? Int ?? 0 }
     func number(_ key: String) -> Double {
       let n = c[key] as? Double ?? 0
@@ -664,7 +688,7 @@ final class DesktopEngine {
       case "snapshot":
         emit(snapshot())
         let signature =
-          "\(revision):\(metadata.indexedCount):\(metadata.isIndexing):\(saved.isLoaded):\(history.document.heardMD5s.count)"
+          "\(revision):\(metadata.revision):\(metadata.indexedCount):\(metadata.isIndexing):\(saved.isLoaded):\(history.document.heardMD5s.count)"
         let now = ProcessInfo.processInfo.systemUptime
         if signature != lastLibrarySignature
           && (revision != lastLibraryRevision || now - lastLibraryPublication >= 0.5)
@@ -822,10 +846,10 @@ final class DesktopEngine {
       case "repeat": playback.setRepeatMode(PlaybackRepeatMode(rawValue: string("value")) ?? .off)
       case "fade": playback.setFadeOutSeconds(number("value"))
       case "endTime":
-        if let md5 {
+        if let target = personalTarget(), !target.md5.isEmpty, let subtune = target.subtune {
           try playback.setEndTime(
             string("value"),
-            target: .init(md5: md5, subtune: audio.subtune, title: currentTrack?.name ?? ""))
+            target: .init(md5: target.md5, subtune: subtune, title: string("title")))
           planLength()
           revision += 1
         }
@@ -908,11 +932,9 @@ final class DesktopEngine {
         audio.stop()
         listening.setQueue(nil)
       case "bookmark":
-        if let reference {
-          history.saveBookmark(
-            reference: reference,
-            title: string("name").isEmpty ? currentTrack?.name ?? "" : string("name"),
-            position: audio.elapsed)
+        if let target = personalTarget() {
+          history.saveBookmark(reference: target, title: string("name"),
+            position: c["position"] == nil ? audio.elapsed : number("position"))
         }
       case "note":
         if let reference {
@@ -974,8 +996,12 @@ final class DesktopEngine {
       case "exportDuration": exporter.setDuration(string("value"))
       case "exportSlice": if let range = audio.loop.range { exporter.setSlice(range) }
       case "export":
+        let directory = URL(fileURLWithPath: string("directory"))
+        exporter.renameForDirectory(directory)
+        await exporter.waitForPreparation()
+        guard exporter.error == nil else { throw CocoaError(.fileWriteFileExists) }
         exporter.export(
-          directory: URL(fileURLWithPath: string("directory")),
+          directory: directory,
           options: .init(
             modelOverride: audio.model, clockMode: audio.clockMode, mix: .current(audio.mix),
             filterEnabled: audio.filterEnabled, fadeOutSeconds: playback.document.fadeOutSeconds))

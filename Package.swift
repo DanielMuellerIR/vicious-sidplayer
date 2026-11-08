@@ -83,6 +83,7 @@ var targets: [Target] = [
             dependencies: ["ViciousSIDPlayerCore"],
             path: "Tools/sidcheck"
         ),
+        .testTarget(name: "ViciousSIDDesktopTests", dependencies: ["ViciousSIDDesktop", "ViciousSIDPlayerCore"], path: "Tests/ViciousSIDDesktopTests"),
         .testTarget(
             name: "ViciousSIDPlayerTests",
             dependencies: ["ViciousSIDPlayerCore"],

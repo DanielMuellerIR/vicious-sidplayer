@@ -5,6 +5,7 @@ import Combine
 
 @MainActor
 public final class LibraryMetadataController: ObservableObject {
+    public private(set) var revision = 0
     @Published public private(set) var records: [String: LibraryMetadataRecord] = [:]
     @Published public private(set) var isIndexing = false
     @Published public private(set) var indexedCount = 0
@@ -90,7 +91,7 @@ public final class LibraryMetadataController: ObservableObject {
     }
     private func publishRecords() {
         let merged = libraryRecords.merging(openedRecords, uniquingKeysWith: { first, _ in first })
-        if records != merged { records = merged }
+        if records != merged { records = merged; revision &+= 1 }
     }
 }
 

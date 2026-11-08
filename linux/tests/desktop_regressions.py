@@ -115,7 +115,7 @@ with tempfile.TemporaryDirectory(prefix="vicious-desktop-regressions-") as direc
         for sub in range(3):
             window.send("subtune", value=sub)
             wait(lambda: window.state.get("subtune") == sub, "Subtune für Endzeit")
-            window.send("endTime", value="0.25")
+            window.send("endTime", value="0.25", reference=dict(window.state["personalReference"]), title=window.state["title"])
             wait(
                 lambda: (
                     len(window.state.get("playback", {}).get("endTimes", {})) == sub + 1
@@ -135,7 +135,7 @@ with tempfile.TemporaryDirectory(prefix="vicious-desktop-regressions-") as direc
         for sub in range(3):
             window.send("subtune", value=sub)
             wait(lambda: window.state.get("subtune") == sub, "Subtune für Vorgabe")
-            window.send("endTime", value="")
+            window.send("endTime", value="", reference=dict(window.state["personalReference"]), title=window.state["title"])
             wait(
                 lambda: (
                     len(window.state.get("playback", {}).get("endTimes", {})) == 2 - sub

@@ -1271,7 +1271,10 @@ class PlayerWindow(QMainWindow):
         )
 
     def edit_note(self, file=False):
-        ref_id, sub = self.state.get("trackID"), self.state.get("subtune")
+        target = dict(self.state.get("personalReference") or {})
+        if file:
+            target.pop("subtune", None)
+        ref_id, sub = target.get("trackID"), target.get("subtune")
         note = next(
             (
                 n["text"]
@@ -1285,17 +1288,19 @@ class PlayerWindow(QMainWindow):
             self, "Notiz zum Subtune", self.state.get("title", ""), note
         )
         if ok:
-            self.send("note", text=text, file=file)
+            self.send("noteReference", text=text, reference=target)
 
     def add_bookmark(self):
+        target = dict(self.state.get("personalReference") or {})
+        position = self.state.get("elapsed", 0)
         name, ok = QInputDialog.getText(
             self,
             "Lesezeichen",
-            "Position " + clock(self.state.get("elapsed")),
+            "Position " + clock(position),
             text=self.state.get("title", ""),
         )
         if ok and name.strip():
-            self.send("bookmark", name=name)
+            self.send("bookmark", name=name, reference=target, position=position)
 
     def history_menu(self, point):
         item = self.history_view.itemAt(point)
