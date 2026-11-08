@@ -49,6 +49,14 @@ resizable library sidebar, mini-player, three analysis views, multi-SID mixing,
 subtunes, search, favorites, listening lists, history and personal collection
 transfer are available on Linux.
 
+In Settings → Oszilloskop, choose **Flüssig** (about 60 FPS, the default),
+**Sparsam** (15 FPS), or **Aus**. The choice is saved. Painting uses a local
+animation timer; increasing its rate does not increase Core polling beyond
+30 Hz. The economical mode also reduces polling to 15 Hz. Off skips waveform
+painting and SID analysis snapshots; piano and registers still work at 30 Hz.
+Paused scopes freeze. Hidden/minimized windows and the mini-player suspend
+scope animation and SID analysis snapshots while playback continues.
+
 Platform differences:
 
 - Qt replaces SwiftUI/AppKit. Window decorations, the in-window Linux menu
@@ -74,6 +82,11 @@ PYTHONPATH="$PWD/build/vicious-sid-player-linux/python:$PWD/build/vicious-sid-pl
   dbus-run-session -- xvfb-run -a python3 linux/tests/gui_smoke.py \
   build/vicious-sid-player-linux /tmp/vicious-sid-gui-evidence
 ```
+
+`scope_animation.py` uses the same arguments to check actual paint events,
+resource modes, pause, hidden/minimized windows, mini-player, and persistence.
+Its CPU figures describe a synthetic tune under Xvfb, not battery life or
+monitor presentation timing.
 
 For `desktop_regressions.py`, route audio to a dedicated test sink and set
 `VICIOUS_TEST_MONITOR` to its monitor source. The test checks real MPRIS

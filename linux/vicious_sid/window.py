@@ -1010,6 +1010,8 @@ class PlayerWindow(QMainWindow):
     def change_setting(self, name, value):
         self.settings[name] = value
         self.send("settings", values={name: value})
+        if name == "scopeQuality":
+            self.analysis.scope.refresh()
 
     def toggle_shuffle(self):
         self.change_setting("shuffle", not self.settings.get("shuffle", False))
@@ -1033,7 +1035,7 @@ class PlayerWindow(QMainWindow):
             self.menuBar().hide()
             self.resize(560, 64)
         self.change_setting("mini", self.mini)
-        self.engine.timer.setInterval(100 if self.mini else 33)
+        self.analysis.scope.sync_activity()
 
     def report(self, message):
         self.error.setText(message)
@@ -1392,9 +1394,7 @@ class PlayerWindow(QMainWindow):
 
     def changeEvent(self, event):
         if event.type() == QEvent.Type.WindowStateChange:
-            self.engine.timer.setInterval(
-                1000 if self.isMinimized() else 100 if self.mini else 33
-            )
+            self.analysis.scope.sync_activity()
         super().changeEvent(event)
 
     def closeEvent(self, event):

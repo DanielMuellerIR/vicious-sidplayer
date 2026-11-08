@@ -549,7 +549,7 @@ final class DesktopEngine {
         } ?? []),
     ]
   }
-  func snapshot() -> [String: Any] {
+  func snapshot(includeVisuals: Bool = true) -> [String: Any] {
     let sub = audio.subtune
     let title = audio.sid?.metadata.title ?? "—"
     var info: [[String: String]] = []
@@ -586,7 +586,7 @@ final class DesktopEngine {
       "subtunes": audio.sid?.subtuneAmount ?? 1,
       "volume": audio.volume, "model": audio.model ?? 0, "clock": audio.clockMode.rawValue,
       "clockLabel": audio.effectiveClock.label,
-      "chips": audio.visualSnapshot(), "mixMuted": audio.mix.channelMuted,
+      "mixMuted": audio.mix.channelMuted,
       "chipMuted": audio.mix.chipMuted, "solos": audio.mix.soloChannels.sorted(),
       "effectiveMuted": audio.mix.effectiveMuted(activeChips: audio.chips),
       "filter": audio.filterEnabled, "seeking": audio.isSeeking,
@@ -603,6 +603,7 @@ final class DesktopEngine {
       "error": errorMessage ?? favoritesStore.storageError ?? listening.storageError ?? history
         .storageError ?? playback.storageError ?? saved.error ?? "", "export": export,
     ]
+    if includeVisuals { result["chips"] = audio.visualSnapshot() }
     // Große persönliche Dokumente werden nur nach Änderungen übertragen.
     // Ein Oszilloskop-Tick darf weder 2.000 Verlaufseinträge noch die gesamte
     // Exportauswahl neu kodieren und über die Pipe schicken.
@@ -686,7 +687,7 @@ final class DesktopEngine {
           }
         }
       case "snapshot":
-        emit(snapshot())
+        emit(snapshot(includeVisuals: c["visuals"] as? Bool ?? true))
         let signature =
           "\(revision):\(metadata.revision):\(metadata.indexedCount):\(metadata.isIndexing):\(saved.isLoaded):\(history.document.heardMD5s.count)"
         let now = ProcessInfo.processInfo.systemUptime

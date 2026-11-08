@@ -15,6 +15,7 @@ class Engine(QObject):
         self.stderr = bytearray()
         self.state = {}
         self.closing = False
+        self.include_visuals = True
         self.pending_poll = False
         self.pending_commands = []
         self.process.readyReadStandardOutput.connect(self.read)
@@ -52,7 +53,7 @@ class Engine(QObject):
     def poll(self):
         if not self.pending_poll:
             self.pending_poll = True
-            self.send("snapshot")
+            self.send("snapshot", visuals=self.include_visuals)
 
     def read(self):
         self.buffer.extend(bytes(self.process.readAllStandardOutput()))

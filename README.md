@@ -81,7 +81,7 @@ Track paths are relative to the autoplay folder. Absolute paths, `..` and anythi
 
 In HTML5, the collection tabs use Left/Right, Home and End; Tab enters the selected panel. Dialogs keep keyboard focus and return it when closed. Load buttons and sliders have accessible names; focus the metadata panel to read long text in full. On iPhone, transport and subtune buttons have at least 44-point targets; large accessibility text uses vertical control groups. VoiceOver and external-keyboard acceptance on iPhone require the [device checklist](ios/GERAETETEST.md).
 
-The scope uses a 30 Hz animation schedule. Hidden or minimized Mac windows pause visualization; on iPhone it pauses outside the Playback tab or active scene. Playback time uses the slower refresh rate there as well. Playback and song completion continue independently. See the [matched CPU measurements](docs/validation-1.9.46.md); battery life still requires a real-device test.
+The Apple apps use a 30 Hz scope animation schedule. Hidden or minimized Mac windows pause visualization; on iPhone it pauses outside the Playback tab or active scene. Playback time uses the slower refresh rate there as well. Playback and song completion continue independently. See the [matched CPU measurements](docs/validation-1.9.46.md); battery life still requires a real-device test.
 
 **Media keys**: Play/pause, stop, and track skipping via F7/F8/F9, the Touch Bar, and AirPods — the app registers as the system's *Now Playing* app.
 - **macOS updates**: Sparkle checks for signed updates in the background; “Nach Updates suchen…” in the app menu checks immediately. Installing an update requires your approval. The first Sparkle-enabled release needs a manual installation.
@@ -256,6 +256,9 @@ The Linux desktop app uses Qt and the same Swift core as the Apple apps.
 It follows the Mac layout and colors: library, search, favorites, listening
 lists, history, mini-player, oscilloscope, piano/Hz, registers, 3SID mixing,
 playback options, A/B loops and WAV export.
+In Settings, the Linux oscilloscope offers smooth animation (about 60 FPS, the
+default), an economical 15 FPS mode, and Off. Piano and register views remain
+available. Hidden or minimized windows and the mini-player suspend scope animation.
 
 ```bash
 ./build.sh

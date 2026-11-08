@@ -1,3 +1,7 @@
+Vicious SID Player 1.9.54 makes the Linux oscilloscope animate independently of audio-engine replies at about 60 FPS. Settings offers a 15 FPS economy mode and Off; piano and registers remain available. Hidden/minimized windows and the mini-player suspend scope animation and SID analysis snapshots. Unchanged icons are cached.
+
+See [validation](docs/validation-1.9.54.md).
+
 Vicious SID Player 1.9.53 fixes Linux desktop playback and personal-data handling. End times, notes and bookmarks keep the title and position captured when their dialog opened. Cancelling A/B preparation no longer strands a seek; collection imports respect later Stop/Pause actions. Saved queues keep their order and subtunes after restart, metadata updates refresh searches, and repeated WAV exports choose unused filenames.
 
 Vicious SID Player 1.9.52 adds the Linux desktop application.

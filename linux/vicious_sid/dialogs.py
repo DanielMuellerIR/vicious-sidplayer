@@ -58,6 +58,26 @@ class SettingsDialog(PlayerDialog):
         self.text(
             "Automatisch folgt dem Hell/Dunkel-Modus des Desktops. Strg+T schaltet fest auf Hell bzw. Dunkel um."
         )
+        self.layout.addWidget(line())
+        self.layout.addWidget(label("Oszilloskop", 13, True))
+        quality = QComboBox()
+        quality.setObjectName("scope-quality")
+        quality.setAccessibleName("Oszilloskop-Bildrate")
+        for title, value in [
+            ("Flüssig · ca. 60 FPS", "smooth"),
+            ("Sparsam · 15 FPS", "eco"),
+            ("Aus", "off"),
+        ]:
+            quality.addItem(title, value)
+        quality.setCurrentIndex(max(0, quality.findData(window.analysis.scope.quality)))
+        quality.currentIndexChanged.connect(
+            lambda: window.change_setting("scopeQuality", quality.currentData())
+        )
+        self.layout.addWidget(quality)
+        self.text(
+            "Sparsam reduziert Bildrate und Datenabfragen. Aus stoppt die Kurvenzeichnung. "
+            "Piano und Register bleiben unabhängig davon verfügbar."
+        )
         for key, title, description, directory in [
             (
                 "root",

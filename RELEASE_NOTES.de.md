@@ -1,3 +1,7 @@
+Vicious SID Player 1.9.54 zeichnet das Linux-Oszilloskop unabhängig von Antworten der Audio-Engine mit etwa 60 FPS. In den Einstellungen stehen ein Sparmodus mit 15 FPS und Aus bereit; Piano und Register bleiben verfügbar. Ausgeblendete oder minimierte Fenster und der Mini-Player halten Kurvenanimation und SID-Analyseabfragen an. Unveränderte Symbole werden wiederverwendet.
+
+Siehe [Prüfstand](docs/validation-1.9.54.md).
+
 Vicious SID Player 1.9.53 korrigiert Wiedergabe und persönliche Daten der Linux-App. Endzeiten, Notizen und Lesezeichen bleiben an den beim Öffnen erfassten Titel und Zeitpunkt gebunden. Abgebrochene A/B-Vorbereitung blockiert keinen Sprung mehr; Sammlungsimporte beachten spätere Stop-/Pause-Aktionen. Gespeicherte Folgen behalten Reihenfolge und Subtunes nach Neustart, Metadaten aktualisieren Suchergebnisse, und wiederholte WAV-Exporte verwenden freie Dateinamen.
 
 Vicious SID Player 1.9.52 ergänzt die Linux-Desktop-App.

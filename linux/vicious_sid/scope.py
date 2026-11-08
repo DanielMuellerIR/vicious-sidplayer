@@ -1,7 +1,7 @@
 import random
 import time
-from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
+from PySide6.QtCore import QLineF, QPointF, QRectF, Qt, QTimer
+from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -18,6 +18,10 @@ class Scope(QWidget):
         super().__init__()
         self.window = window
         self.phase_time = 0
+        self.control_signature = None
+        self.frame_timer = QTimer(self)
+        self.frame_timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self.frame_timer.timeout.connect(self.update)
         self.selected_chip = 0
         self.mode = 0
         self.setMinimumHeight(180)
@@ -52,35 +56,84 @@ class Scope(QWidget):
         self.filter.resize(100, 24)
         self.noise = random.Random(0)
 
+    @property
+    def quality(self):
+        value = self.window.settings.get("scopeQuality", "smooth")
+        return value if value in ("smooth", "eco", "off") else "smooth"
+
+    def sync_activity(self):
+        visible = self.isVisible() and not self.window.isMinimized()
+        playing = self.window.state.get("state") == "Playing"
+        animated = visible and self.mode == 0 and self.quality != "off" and playing
+        interval = 67 if self.quality == "eco" else 16
+        if animated:
+            if self.frame_timer.interval() != interval:
+                self.frame_timer.setInterval(interval)
+            if not self.frame_timer.isActive():
+                self.frame_timer.start()
+        else:
+            self.frame_timer.stop()
+        analysis_active = visible and (self.mode != 0 or self.quality != "off")
+        self.window.engine.include_visuals = analysis_active
+        if not self.window.isVisible() or self.window.isMinimized():
+            poll_interval = 1000
+        elif not analysis_active or not playing:
+            poll_interval = 100
+        elif self.mode == 0 and self.quality == "eco":
+            poll_interval = 67
+        else:
+            poll_interval = 33
+        if self.window.engine.timer.interval() != poll_interval:
+            self.window.engine.timer.setInterval(poll_interval)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.sync_activity()
+
+    def hideEvent(self, event):
+        self.frame_timer.stop()
+        super().hideEvent(event)
+        self.sync_activity()
+
     def refresh(self):
         s = self.window.state
-        if s.get("state") == "Playing":
-            self.phase_time = time.monotonic()
         chips = s.get("chips", [])
         if self.selected_chip >= len(chips):
             self.selected_chip = 0
-        for v in range(3):
-            channel = self.selected_chip * 3 + v
-            muted = s.get("mixMuted", [False] * 9)[channel]
-            solo = channel in s.get("solos", [])
-            self.mutes[v].setIcon(
-                icon(
-                    "mute" if muted else "sound",
-                    "#ff453a" if muted else self.window.colors["traces"][v],
-                )
-            )
-            self.solos[v].setIcon(
-                icon("solo", "#ff9f0a" if solo else self.window.colors["secondary"])
-            )
-            self.mutes[v].setVisible(self.mode == 0)
-            self.solos[v].setVisible(self.mode == 0)
-        self.filter.setVisible(self.mode == 0)
-        self.filter.setText("FILTER: " + ("ON" if s.get("filter", True) else "OFF"))
-        self.filter.setStyleSheet(
-            f"font-family: monospace; font-size: 9px; color: {self.window.colors['traces'][1] if s.get('filter', True) else '#ff453a'};"
+        signature = (
+            self.selected_chip, self.mode, tuple(s.get("mixMuted", [])),
+            tuple(s.get("solos", [])), s.get("filter", True),
+            tuple(self.window.colors["traces"]), self.window.colors["secondary"],
         )
-        if self.isVisible():
+        if signature != self.control_signature:
+            self.control_signature = signature
+            for v in range(3):
+                channel = self.selected_chip * 3 + v
+                muted = s.get("mixMuted", [False] * 9)[channel]
+                solo = channel in s.get("solos", [])
+                self.mutes[v].setIcon(
+                    icon("mute" if muted else "sound",
+                         "#ff453a" if muted else self.window.colors["traces"][v])
+                )
+                self.solos[v].setIcon(
+                    icon("solo", "#ff9f0a" if solo else self.window.colors["secondary"])
+                )
+                self.mutes[v].setVisible(self.mode == 0)
+                self.solos[v].setVisible(self.mode == 0)
+            self.filter.setVisible(self.mode == 0)
+            self.filter.setText("FILTER: " + ("ON" if s.get("filter", True) else "OFF"))
+            self.filter.setStyleSheet(
+                f"font-family: monospace; font-size: 9px; color: {self.window.colors['traces'][1] if s.get('filter', True) else '#ff453a'};"
+            )
+        self.sync_activity()
+        # Der lokale Zeichentakt läuft unabhängig von Pipe-Antworten.
+        # Unveränderte pausierte oder abgeschaltete Ansichten bleiben ruhig.
+        paint_state = (s.get("state"), chips, signature, self.quality,
+                       s.get("effectiveMuted"), s.get("clockLabel"))
+        if (self.isVisible() and not self.frame_timer.isActive()
+                and paint_state != getattr(self, "paint_state", None)):
             self.update()
+        self.paint_state = paint_state
 
     def resizeEvent(self, event):
         for v in range(3):
@@ -107,6 +160,14 @@ class Scope(QWidget):
         if self.mode == 2:
             self.paint_registers(p, chip)
             return
+        if self.quality == "off":
+            p.setPen(QColor(c["secondary"]))
+            p.setFont(QFont("Liberation Sans", 10))
+            p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter,
+                       "Oszilloskop ausgeschaltet\nEinstellungen → Oszilloskop")
+            return
+        if s.get("state") == "Playing":
+            self.phase_time = time.monotonic()
         w, h = self.width(), self.height()
         p.setPen(QPen(QColor(c["grid"]), 1))
         for x in range(10):
@@ -127,9 +188,9 @@ class Scope(QWidget):
             amplitude = env * ch * 0.38 if show else 0
             wavelength = min(300, max(10, 3000 / frequency)) if frequency > 10 else 150
             phase = (frequency * self.phase_time * 0.02) % 1 if frequency > 0 else 0
-            path = QPainterPath()
-            self.noise.seed(v + int(self.phase_time * 30))
-            for x in range(0, w + 1, 2):
+            points = []
+            self.noise.seed(v + int(self.phase_time * (15 if self.quality == "eco" else 60)))
+            for x in (range(0, w + 1, 2) if amplitude and waveform else (0, w)):
                 f = (x / wavelength - phase) % 1
                 if waveform & 0x80:
                     value = self.noise.uniform(-1, 1)
@@ -142,15 +203,16 @@ class Scope(QWidget):
                 else:
                     value = 0
                 point = QPointF(x, baseline + value * amplitude)
-                if x == 0:
-                    path.moveTo(point)
-                else:
-                    path.lineTo(point)
+                points.append(point)
             muted = s.get("effectiveMuted", [False] * 9)[self.selected_chip * 3 + v]
             color = QColor(c["traces"][v])
             color.setAlphaF(0.25 if muted else 1)
-            p.setPen(QPen(color, 2 if gate else 1))
-            p.drawPath(path)
+            pen = QPen(color, (2 if gate else 1) * self.devicePixelRatioF())
+            pen.setCosmetic(True)
+            p.setPen(pen)
+            # Einzelne Linien vermeiden Qts teure Konturberechnung für eng
+            # gefaltete, durchgehende Pfade; Linienstärke und Glättung bleiben.
+            p.drawLines([QLineF(a, b) for a, b in zip(points, points[1:])])
             p.setFont(QFont("Liberation Mono", 7))
             name = next(
                 (

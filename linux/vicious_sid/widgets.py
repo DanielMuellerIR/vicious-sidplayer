@@ -1,3 +1,4 @@
+from functools import lru_cache
 import math
 from PySide6.QtCore import QAbstractListModel, QPointF, QRect, QRectF, QSize, Qt
 from PySide6.QtGui import (
@@ -39,6 +40,7 @@ def label(text="", size=13, bold=False, secondary=False):
     return result
 
 
+@lru_cache(maxsize=128)
 def icon(name, color="#68686d", size=20):
     pix = QPixmap(size * 2, size * 2)
     pix.setDevicePixelRatio(2)
