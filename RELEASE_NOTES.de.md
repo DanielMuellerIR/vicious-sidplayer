@@ -1,3 +1,5 @@
+Vicious SID Player 1.9.56 korrigiert den Linux-Desktopstart mit Shuffle und gespeicherter Folge. Die Folge beginnt eine neue gemischte Runde bei Position null, auch wenn zufällig derselbe Titel gewählt wird. Explizite Folgen-Subtunes bleiben erhalten; ohne Shuffle werden Reihenfolge, Subtune und Sitzungsposition wie bisher wiederhergestellt.
+
 Vicious SID Player 1.9.55 ergänzt signierte GitHub-Updates für die Linux-App. Automatische Prüfungen lassen sich in den Einstellungen abschalten; Hilfe → Nach Updates suchen prüft sofort. Download und Installation benötigen eine Bestätigung, erhalten die laufende Sitzung und wirken beim nächsten Start. Version 1.9.52 braucht einmalig ein manuelles Upgrade, um diese Funktion zu erhalten. Enthalten sind auch das flüssigere Oszilloskop samt Sparoptionen aus 1.9.54 und die Wiedergabekorrekturen aus 1.9.53.
 
 Siehe [Linux-Updates](linux/README.md) und [Prüfstand](docs/validation-1.9.55.md).

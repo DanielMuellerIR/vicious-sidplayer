@@ -329,10 +329,15 @@ final class DesktopEngine {
   }
   func startInitialTrack(id: String?, subtune: Int, position: Double) async {
     do {
+      if shuffle, var queue = listening.queue {
+        // Neue Shuffle-Runde statt alter Session; explizite Listen-Subtunes bleiben erhalten.
+        queue.restart(shuffled: true)
+        listening.setQueue(queue)
+      }
       if let entry = listening.queue?.current, let index = playlist.index(forID: entry.trackID) {
         try load(index, autoplay: false, updateQueue: false)
-        try setSubtune(entry.subtune ?? (entry.trackID == id ? subtune : 0))
-        if entry.trackID == id { try await audio.seek(position) }
+        try setSubtune(entry.subtune ?? (!shuffle && entry.trackID == id ? subtune : 0))
+        if !shuffle, entry.trackID == id { try await audio.seek(position) }
       } else if !shuffle, let id, let index = playlist.index(forID: id) {
         try load(index, autoplay: false)
         try setSubtune(subtune)

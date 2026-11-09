@@ -1,3 +1,5 @@
+Vicious SID Player 1.9.56 fixes Linux desktop startup with Shuffle and a saved queue. The queue starts a fresh shuffled cycle at position zero, even if the same tune is selected again. Explicit queue subtunes remain intact; without Shuffle, queue order, subtune and session position are restored as before.
+
 Vicious SID Player 1.9.55 adds signed GitHub updates to the Linux desktop app. Automatic checks can be disabled in Settings; Help → Check for updates checks immediately. Download and installation require confirmation, preserve the running session and take effect on the next launch. Version 1.9.52 needs one manual upgrade to gain this feature. The release also includes the smoother oscilloscope and resource modes from 1.9.54 and the playback fixes from 1.9.53.
 
 See [Linux updates](linux/README.md) and [validation](docs/validation-1.9.55.md).

@@ -68,6 +68,59 @@ final class ReviewRegressionTests: XCTestCase {
         XCTAssertEqual(engine.currentTrack?.id,b);XCTAssertEqual(engine.audio.subtune,1)
         await engine.shutdown()
     }
+    @MainActor func testStartupWithPersistedQueueRespectsShuffleAndPosition() async throws {
+        // Gleicher Titel in allen regulären Einträgen: kein Zufallsergebnis kann
+        // den alten Positions-Restore verdecken. Explizite Subtunes bleiben gültig.
+        for shuffle in [false,true] {
+            for explicitSubtune: Int? in [nil,1] {
+                let area=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+                defer {try? FileManager.default.removeItem(at:area)}
+                let root=area.appendingPathComponent("library")
+                let support=area.appendingPathComponent("support")
+                try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true)
+                try FileManager.default.createDirectory(at:support,withIntermediateDirectories:true)
+                try sid().write(to:root.appendingPathComponent("A.sid"))
+                try sid(1).write(to:root.appendingPathComponent("B.sid"))
+                var queue=ListeningQueue(libraryID:MusicLibrary.indexFileName(forRoot:root),
+                    name:"Saved duplicates",kind:.savedList,
+                    entries:[.init(trackID:"A.sid",subtune:explicitSubtune),
+                             .init(trackID:"A.sid",subtune:explicitSubtune)],startingAt:1,
+                    shuffled:shuffle)
+                queue.enqueueNext(.init(trackID:"B.sid"))
+                let store=ListeningLibraryStore(fileURL:support.appendingPathComponent(ListeningLibraryStore.fileName))
+                try store.save(.init(queue:queue))
+                try JSONSerialization.data(withJSONObject:["version":1,"shuffle":shuffle,
+                    "lastTrack":"A.sid","lastSubtune":1,"lastPosition":42.0])
+                    .write(to:support.appendingPathComponent("desktop-settings.json"))
+                let engine=DesktopEngine(support:support,root:root.path,
+                    audio:DesktopAudio(makeSink:{_ in TestSink()}))
+                engine.suppressStartupAutoplay=true
+                await engine.start()
+                await engine.scanTask?.value
+                engine.ticker?.cancel()
+                engine.metadata.cancel(clear:true)
+                XCTAssertTrue(engine.initialRestoreComplete)
+                XCTAssertNil(engine.errorMessage)
+                XCTAssertEqual(engine.currentTrack?.id,"A.sid")
+                XCTAssertEqual(engine.audio.elapsed,shuffle ? 0 : 42)
+                XCTAssertEqual(engine.audio.subtune,explicitSubtune ?? (shuffle ? 0 : 1))
+                let started=try XCTUnwrap(engine.listening.queue)
+                if shuffle {
+                    XCTAssertTrue(started.shuffled)
+                    XCTAssertEqual(started.currentIndex,0)
+                    XCTAssertTrue(started.oneShotIDs.isEmpty)
+                    XCTAssertEqual(Set(started.items.map(\.id)),
+                                   Set(queue.items.filter { !queue.oneShotIDs.contains($0.id) }.map(\.id)))
+                    XCTAssertEqual(started.name,queue.name)
+                    XCTAssertEqual(started.kind,queue.kind)
+                } else {
+                    XCTAssertEqual(started,queue)
+                }
+                await engine.shutdown()
+                XCTAssertEqual(try store.load().queue,started)
+            }
+        }
+    }
     @MainActor func testCapturedPersonalTargetsSurviveTrackChange() async throws {
         let(area,engine)=try await fixture();defer {try? FileManager.default.removeItem(at:area)}
         try engine.load(0,autoplay:false)
